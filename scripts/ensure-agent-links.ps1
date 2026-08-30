@@ -30,4 +30,6 @@ foreach ($entry in $links.GetEnumerator()) {
     }
 }
 
+git -C $root update-index --assume-unchanged -- .claude/agents .claude/skills .agents/skills
+
 Write-Output 'Agent links: OK'

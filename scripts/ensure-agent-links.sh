@@ -11,4 +11,5 @@ rm -f "$root/.claude/agents" "$root/.claude/skills" "$root/.agents/skills"
 ln -s ../.spec/agents "$root/.claude/agents"
 ln -s ../.spec/skills "$root/.claude/skills"
 ln -s ../.spec/skills "$root/.agents/skills"
+git -C "$root" update-index --assume-unchanged -- .claude/agents .claude/skills .agents/skills
 printf '%s\n' 'Agent links: OK'
