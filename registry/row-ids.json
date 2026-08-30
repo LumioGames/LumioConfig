@@ -1,0 +1,14 @@
+{
+  "skills": {
+    "fireball": 40001,
+    "frostbolt": 40002
+  },
+  "effects": {
+    "burn": 50001,
+    "chill": 50002
+  },
+  "drops": {
+    "ember_cache": 60001,
+    "winter_cache": 60002
+  }
+}

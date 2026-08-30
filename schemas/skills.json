@@ -1,0 +1,51 @@
+{
+  "table": "skills",
+  "idColumn": "id",
+  "columns": [
+    {
+      "name": "id",
+      "type": "u32",
+      "required": true,
+      "visibility": "SCV"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "visibility": "SCV"
+    },
+    {
+      "name": "display_name",
+      "type": "string",
+      "required": true,
+      "visibility": "C"
+    },
+    {
+      "name": "effect_id",
+      "type": "ref",
+      "required": true,
+      "refTarget": "effects",
+      "visibility": "S"
+    },
+    {
+      "name": "damage",
+      "type": "i32",
+      "required": true,
+      "minimum": 0,
+      "visibility": "S"
+    },
+    {
+      "name": "cooldown_frames",
+      "type": "i32",
+      "required": true,
+      "minimum": 1,
+      "visibility": "S"
+    },
+    {
+      "name": "icon",
+      "type": "string",
+      "required": true,
+      "visibility": "C"
+    }
+  ]
+}

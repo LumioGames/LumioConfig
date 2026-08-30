@@ -1,0 +1,39 @@
+{
+  "table": "drops",
+  "idColumn": "id",
+  "columns": [
+    {
+      "name": "id",
+      "type": "u32",
+      "required": true,
+      "visibility": "SCV"
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "visibility": "SCV"
+    },
+    {
+      "name": "skill_id",
+      "type": "ref",
+      "required": true,
+      "refTarget": "skills",
+      "visibility": "S"
+    },
+    {
+      "name": "chance_permille",
+      "type": "i32",
+      "required": true,
+      "minimum": 0,
+      "maximum": 1000,
+      "visibility": "S"
+    },
+    {
+      "name": "display_name",
+      "type": "string",
+      "required": true,
+      "visibility": "C"
+    }
+  ]
+}
