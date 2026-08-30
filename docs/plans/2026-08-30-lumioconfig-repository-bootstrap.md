@@ -210,7 +210,7 @@ git commit -m "feat(toolchain): add deterministic config table vertical slice"
 
 - [ ] **Step 1: Write failing repository metadata tests**
 
-Assert that `repository.yaml` identifies `LumioConfig` as `tooling`, names the architecture source commit `d2a7883`, and declares `S`, `C`, and `V` output targets.
+Assert that `repository.yaml` identifies `LumioConfig` as `tooling`, names the latest architecture source commit `a7c1221`, records design commit `d2a7883`, and declares `S`, `C`, and `V` output targets.
 
 - [ ] **Step 2: Run the tests and verify they fail**
 

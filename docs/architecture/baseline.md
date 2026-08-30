@@ -5,6 +5,7 @@
 | Architecture baseline | `LGE-V1.4-2026-08-27` |
 | Architecture source | `LumioGames/LumioGameEngineArchitecture` |
 | Source design PR | `#49` |
+| Latest architecture source commit | `a7c1221d3797db696e60bf8a8c748c907975a64c` |
 | Source design commit | `d2a7883ea447d2c34b92269c1f84ac9c3c53f5eb` |
 | LumioConfig phase | Stage 1 bootstrap / text vertical slice |
 | Runtime status | No runtime implementation in this repository |

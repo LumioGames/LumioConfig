@@ -3,7 +3,7 @@
 LumioConfig 是 LumioGameEngine 的配表源和工具仓，拥有 Schema 实例、文本表、墓碑、校验器、格式化器和导出器；不拥有跨仓公共契约或运行时状态。
 
 - 架构基线：LGE-V1.4-2026-08-27。
-- 架构来源：LumioGames/LumioGameEngineArchitecture，设计来源为 PR #49 / 提交 d2a7883。
+- 架构来源：LumioGames/LumioGameEngineArchitecture，当前主线提交为 a7c1221；设计来源为 PR #49 / 提交 d2a7883。
 - 架构仓拥有公共 Envelope、Canonical/Hash、ID Namespace 授权、运行时生命周期和跨仓 Schema。
 - 本仓拥有内容与工具；实现仓只消费可重建的只读投影。
 

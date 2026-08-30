@@ -6,7 +6,8 @@
 
 - **Architecture baseline**：`LGE-V1.4-2026-08-27`
 - **设计来源**：[`LumioConfig 设计概要`](docs/architecture/lumioconfig-design.md)
-- **来源提交**：`d2a7883ea447d2c34b92269c1f84ac9c3c53f5eb`（架构仓 PR [#49](https://github.com/LumioGames/LumioGameEngineArchitecture/pull/49)）
+- **架构源最新提交**：`a7c1221d3797db696e60bf8a8c748c907975a64c`
+- **设计来源提交**：`d2a7883ea447d2c34b92269c1f84ac9c3c53f5eb`（架构仓 PR [#49](https://github.com/LumioGames/LumioGameEngineArchitecture/pull/49)）
 - **仓库元数据**：[`repository.yaml`](repository.yaml)
 - **管理定义**：[`docs/management/repository-definition.md`](docs/management/repository-definition.md)
 - **操作手册**：[`docs/management/operations.md`](docs/management/operations.md)

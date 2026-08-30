@@ -36,4 +36,4 @@ docs/          架构、管理、参考文档
 
 ## 变更归属判断
 
-如果变更只影响表内容、域内 Schema 实例、格式化器或导出实现，提交到 `LumioConfig`。如果变更影响跨仓字段、错误码、Canonical 字节、稳定 ID、运行时装载或依赖方向，先回到架构仓走 ADR -> Schema/ID/Fixture -> 镜像同步顺序。
+如果变更只影响表内容、域内 Schema 实例、格式化器或导出实现，提交到 `LumioConfig`。如果变更影响跨仓字段、错误码、Canonical 字节、稳定 ID、运行时装载或依赖方向，先回到架构仓走 ADR -> Schema/ID/Fixture -> 镜像同步顺序。架构源引用以 `repository.yaml` 的最新 `sourceCommit` 为准，设计解释以 `designCommit` 为准。
