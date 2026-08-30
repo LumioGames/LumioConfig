@@ -13,6 +13,7 @@
 - **源格式**：[`docs/reference/source-format.md`](docs/reference/source-format.md)
 - **命令行**：[`docs/reference/cli.md`](docs/reference/cli.md)
 - **验证证据清单**：[`docs/operations/validation-evidence.md`](docs/operations/validation-evidence.md)
+- **本地脚本**：[`scripts/README.md`](scripts/README.md)
 
 LumioConfig 是工具仓，不是游戏运行时仓。它保存策划表的权威文本源、表结构、行号墓碑和配表工具；实现仓只消费可重建的只读导出物。架构仓仍是跨仓 Schema、Canonical、ID Namespace、运行时装载和公共失败语义的唯一来源。
 

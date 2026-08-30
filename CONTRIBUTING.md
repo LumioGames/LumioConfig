@@ -19,3 +19,5 @@ git diff --check
 ```
 
 提交标题使用 `type(scope): subject`，例如 `feat(validator): reject hidden-column refs`。每个 Pull Request 只解决一类问题，并说明源表、Schema、工具和验证证据。
+
+Windows 普通克隆如果 Agent 链接被检出为文本文件，先运行 `powershell -ExecutionPolicy Bypass -File scripts/ensure-agent-links.ps1`；不要把 `.spec` 内容复制成第二份。
