@@ -3,7 +3,6 @@ import json
 import shutil
 import subprocess
 import sys
-import tempfile
 import unicodedata
 import unittest
 from pathlib import Path
@@ -18,8 +17,6 @@ from lumio_config.unicode_policy import STRING_NORMALIZATION_FORM
 ROOT = Path(__file__).resolve().parents[1]
 VECTORS_JSON = ROOT / "testdata" / "unicode" / "vectors.json"
 VECTORS_TSV = ROOT / "testdata" / "unicode" / "vectors.tsv"
-RUST_MANIFEST = ROOT / "testdata" / "unicode" / "rust" / "Cargo.toml"
-CSHARP_PROJECT = ROOT / "testdata" / "unicode" / "csharp" / "UnicodeGolden.csproj"
 
 
 def _digest_nfc_utf8(raw: bytes) -> str:
@@ -77,30 +74,22 @@ class UnicodeGoldenTests(unittest.TestCase):
         self.assertEqual(digests["hangul-ga-composed"], digests["hangul-ga-decomposed"])
         self.assertNotEqual(digests["latin-a-acute-composed"], digests["ascii-fireball"])
 
-    @unittest.skipUnless(
-        shutil.which("cargo") is not None and shutil.which("dotnet") is not None,
-        "cargo and dotnet required for dual-language corpus",
-    )
     def test_rust_and_csharp_runners_match_python_digests(self):
+        rust_bin = ROOT / "testdata" / "unicode" / "rust" / "target" / "debug" / "unicode-golden.exe"
+        if not rust_bin.exists():
+            rust_bin = ROOT / "testdata" / "unicode" / "rust" / "target" / "debug" / "unicode-golden"
+        csharp_dll = ROOT / "testdata" / "unicode" / "csharp" / "bin" / "Debug" / "net8.0" / "UnicodeGolden.dll"
+        if not rust_bin.exists() or not csharp_dll.exists() or shutil.which("dotnet") is None:
+            self.skipTest("prebuilt Unicode golden binaries are not present")
+        rust_cmd = [str(rust_bin), str(VECTORS_TSV)]
+        csharp_cmd = ["dotnet", "exec", str(csharp_dll), str(VECTORS_TSV)]
         payload = json.loads(VECTORS_JSON.read_text(encoding="utf-8"))
         expected = {
             item["id"]: _digest_nfc_utf8(bytes.fromhex(item["utf8_hex"]))
             for item in payload["vectors"]
         }
-        rust = subprocess.run(
-            ["cargo", "run", "--quiet", "--manifest-path", str(RUST_MANIFEST), "--", str(VECTORS_TSV)],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-        )
-        csharp = subprocess.run(
-            ["dotnet", "run", "--project", str(CSHARP_PROJECT), "--", str(VECTORS_TSV)],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-        )
+        rust = subprocess.run(rust_cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=20)
+        csharp = subprocess.run(csharp_cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=20)
         self.assertEqual(rust.returncode, 0, rust.stdout + rust.stderr)
         self.assertEqual(csharp.returncode, 0, csharp.stdout + csharp.stderr)
         rust_digests = _parse_runner_output(rust.stdout)
