@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+from .unicode_policy import normalize_string
+
 
 CELL_STATES = frozenset({"value", "missing", "empty", "null", "default"})
 
@@ -20,6 +22,8 @@ class Cell:
             raise ValueError(f"{self.state} cells cannot carry a value")
         if self.state in {"value", "empty"} and self.value is None:
             raise ValueError(f"{self.state} cells require a value")
+        if self.state in {"value", "empty"} and self.value is not None:
+            object.__setattr__(self, "value", normalize_string(self.value))
 
     @classmethod
     def from_token(cls, token: str) -> "Cell":
@@ -31,7 +35,7 @@ class Cell:
             return cls("null")
         if token == "@default":
             return cls("default")
-        return cls("value", token)
+        return cls("value", normalize_string(token))
 
     def token(self) -> str:
         if self.state == "missing":

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .export import ValidationFailure, export_repository
+from .patch import apply_patch, validate_patch
 from .text_table import format_table_text, parse_table
 from .validate import load_sources, validate_repository
 
@@ -55,6 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
     exporter = subparsers.add_parser("export", help="export deterministic target projections")
     exporter.add_argument("--out", type=Path, required=True)
     _root_argument(exporter)
+
+    patch = subparsers.add_parser("patch", help="validate or apply a name-only source patch")
+    patch.add_argument("mode", choices=["validate", "apply"])
+    patch.add_argument("patch_path", type=Path)
+    _root_argument(patch)
     return parser
 
 
@@ -80,6 +86,19 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(failure.errors, ensure_ascii=False, indent=2, sort_keys=True))
             return 1
         print(f"export: OK ({len(manifest['tables'])} table(s))")
+        return 0
+    if args.command == "patch":
+        payload = json.loads(args.patch_path.read_text(encoding="utf-8"))
+        if args.mode == "validate":
+            errors = validate_patch(root, payload)
+            label = "patch-validate"
+        else:
+            errors = apply_patch(root, payload)
+            label = "patch-apply"
+        if errors:
+            print(json.dumps(errors, ensure_ascii=False, indent=2, sort_keys=True))
+            return 1
+        print(f"{label}: OK")
         return 0
     return 2
 
