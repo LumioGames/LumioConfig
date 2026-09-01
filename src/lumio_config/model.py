@@ -22,6 +22,8 @@ class Cell:
             raise ValueError(f"{self.state} cells cannot carry a value")
         if self.state in {"value", "empty"} and self.value is None:
             raise ValueError(f"{self.state} cells require a value")
+        if self.state in {"value", "empty"} and self.value is not None:
+            object.__setattr__(self, "value", normalize_string(self.value))
 
     @classmethod
     def from_token(cls, token: str) -> "Cell":

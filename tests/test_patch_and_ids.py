@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import time
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -122,6 +123,40 @@ class PatchAndIdTests(unittest.TestCase):
             issued = _registry(root)["skills"]["ice_lance"]
             self.assertIsInstance(issued, int)
             self.assertNotIn("id", _create_skill("ice_lance")["ops"][0]["set"])
+
+    def test_nfd_patch_string_apply_passes_format_check(self):
+        decomposed = "Cafe\u0301"
+        composed = unicodedata.normalize("NFC", decomposed)
+        self.assertNotEqual(decomposed, composed)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_authority(root)
+            errors = apply_patch(
+                root,
+                {
+                    "table": "skills",
+                    "ops": [
+                        {
+                            "op": "create",
+                            "name": "cafe_bolt",
+                            "set": {
+                                "display_name": decomposed,
+                                "effect_id": "chill",
+                                "damage": 40,
+                                "cooldown_frames": 60,
+                                "icon": "fx_cafe",
+                            },
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(errors, [], errors)
+            text = (root / "tables" / "skills.txt").read_text(encoding="utf-8")
+            self.assertIn(composed, text)
+            self.assertNotIn(decomposed, text)
+            result = _run_cli("format", "--check", root=root)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("format: OK", result.stdout)
 
     def test_patch_refuses_to_let_caller_assign_permanent_id(self):
         with tempfile.TemporaryDirectory() as temp:
