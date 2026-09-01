@@ -21,9 +21,10 @@ LumioConfig 是工具仓，不是游戏运行时仓。它保存策划表的权�
 ## 职责
 
 - 管理每张配置表的 Schema、规范化文本源和删除行墓碑。
-- 提供确定性的 `validate`、`format` 和 `export` 工具入口。
+- 提供确定性的 `validate`、`format`、`patch` 和 `export` 工具入口。
 - 在导出时执行类型、引用、默认值、可见性和三端投影检查。
 - 生成服务器（`S`）、客户端（`C`）和 Voxel（`V`）的只读 JSON 投影及三重指纹。
+- 以名字补丁为唯一写入口：机器门结构化报错，发号台在合入时分配终身编号。
 - 为后续 Web 编辑器、AI 五动作接口、Rust/C# 只读生成面和发布工具提供稳定的目录边界。
 
 ## 明确不负责什么
@@ -44,6 +45,7 @@ LumioConfig 是工具仓，不是游戏运行时仓。它保存策划表的权�
 | Validator | `src/lumio_config/validate.py` | 结构化错误与机器门 |
 | Formatter | `src/lumio_config/text_table.py` | 幂等文本排版 |
 | Exporter | `src/lumio_config/export.py` | 五层合并、三端投影和指纹 |
+| Patch / ID | `src/lumio_config/patch.py`, `ids.py` | 名字补丁、机器门合入、域内发号 |
 | CLI | `tools/lumio_config.py` | 本地与 CI 统一入口 |
 | Future UI | `docs/architecture/lumioconfig-design.md` | Web 编辑器、AI 工具面和人门设计边界 |
 
@@ -65,7 +67,7 @@ LumioConfig 是工具仓，不是游戏运行时仓。它保存策划表的权�
 
 ## 当前阶段与开发节奏
 
-1. **阶段 0：立规矩**：在架构仓落地配表权威源、ID、指纹、投影、生命周期和工具面 ADR。
+1. **阶段 0：立规矩**：六条决议暂落 [`docs/decisions/`](docs/decisions/README.md)，不占架构仓 ADR 号；待并入清单见同目录。
 2. **阶段 1：垂直切片**：扩展本仓的源表、机器门、发号台、导表器和最小读取面。
 3. **阶段 2：发布与工具**：接入人门签名、模拟预演、Web 编辑器和实现仓分发。
 4. **阶段 3：性能与二进制**：完成基准测试后再选择二进制后端；没有实测不冻结格式赢家。
@@ -76,6 +78,7 @@ LumioConfig 是工具仓，不是游戏运行时仓。它保存策划表的权�
 python tools/lumio_config.py validate
 python tools/lumio_config.py format --check
 python tools/lumio_config.py export --out build/export
+python tools/lumio_config.py patch validate path/to/patch.json
 ```
 
 `build/` 是本地生成目录，不提交到 Git。请先阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md) 和 [`SECURITY.md`](SECURITY.md)。

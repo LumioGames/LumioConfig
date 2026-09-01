@@ -1,0 +1,37 @@
+{
+  "normalization": "NFC",
+  "hash": "sha256",
+  "input": "NFC UTF-8 bytes of the author string",
+  "vectors": [
+    {
+      "id": "latin-a-acute-composed",
+      "comment": "U+00E1 LATIN SMALL LETTER A WITH ACUTE",
+      "utf8_hex": "c3a1"
+    },
+    {
+      "id": "latin-a-acute-decomposed",
+      "comment": "U+0061 LATIN SMALL LETTER A + U+0301 COMBINING ACUTE ACCENT",
+      "utf8_hex": "61cc81"
+    },
+    {
+      "id": "hangul-ga-composed",
+      "comment": "U+AC00 HANGUL SYLLABLE GA",
+      "utf8_hex": "eab080"
+    },
+    {
+      "id": "hangul-ga-decomposed",
+      "comment": "U+1100 HANGUL CHOSEONG KIYEOK + U+1161 HANGUL JUNGSEONG A",
+      "utf8_hex": "e18480e185a1"
+    },
+    {
+      "id": "ascii-fireball",
+      "comment": "ASCII identity under NFC",
+      "utf8_hex": "6669726562616c6c"
+    },
+    {
+      "id": "cjk-ni",
+      "comment": "U+4F60 CJK UNIFIED IDEOGRAPH-4F60",
+      "utf8_hex": "e4bda0"
+    }
+  ]
+}

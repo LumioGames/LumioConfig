@@ -109,6 +109,9 @@ def format_table_text(table: TableSource) -> str:
         return "| " + " | ".join(value.ljust(widths[index]) for index, value in enumerate(row)) + " |"
 
     separator = render(["-" * max(3, width) for width in widths])
-    lines = [f"table: {table.name}", f"schema: {table.schema_ref}", render(list(table.columns)), separator]
-    lines.extend(render(row) for row in rendered_rows)
+    lines = [f"table: {table.name}", f"schema: {table.schema_ref}", "", render(list(table.columns)), separator]
+    for index, row in enumerate(rendered_rows):
+        if index:
+            lines.append("")
+        lines.append(render(row))
     return "\n".join(lines) + "\n"

@@ -16,6 +16,13 @@
 
 无参数时就地规范化源文本；--check 只检查是否已规范化，发现差异退出码为 1。
 
+## patch
+
+    python tools/lumio_config.py patch validate path/to/patch.json
+    python tools/lumio_config.py patch apply path/to/patch.json
+
+校验或合入名字补丁。补丁不得填写终身编号；create 在 apply 时由发号台分配。失败时 stdout 为结构化错误 JSON 数组；成功时打印 `patch-validate: OK` 或 `patch-apply: OK`。
+
 ## export
 
     python tools/lumio_config.py export --out build/export

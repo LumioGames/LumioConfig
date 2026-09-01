@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from .model import Cell, TableSource
+from .unicode_policy import normalize_string
 from .validate import _column_map, effective_value
 
 
@@ -37,6 +38,8 @@ def canonical_table_value(table: TableSource, schema: dict[str, Any]) -> dict[st
             column = columns[name]
             cell = row.get(name, Cell("missing"))
             present, value = effective_value(cell, column)
+            if present and column.get("type") == "string" and isinstance(value, str):
+                value = normalize_string(value)
             values[name] = cell.canonical(value if present else None)
         rows.append(values)
     return {
