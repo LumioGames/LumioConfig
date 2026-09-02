@@ -154,7 +154,9 @@ class VcsTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (bin_dir / "svn.cmd").write_text(f'@echo off\r\n"{sys.executable}" "{stub}" %*\r\n', encoding="utf-8")
-            (bin_dir / "svn").write_text(f"#!/bin/sh\nexec '{sys.executable}' '{stub}' \"$@\"\n", encoding="utf-8")
+            unix = bin_dir / "svn"
+            unix.write_text(f"#!{sys.executable}\n" + stub.read_text(encoding="utf-8"), encoding="utf-8")
+            unix.chmod(0o755)
             env = os.environ.copy()
             env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
             _write_settings(root, {"vcs": "svn"})
