@@ -16,6 +16,7 @@ from urllib.parse import unquote, urlparse
 from ..patch import validate_patch
 from ..summary import summarize_patch
 from .drafts import DraftStore, DraftVersionConflict, _write_json
+from .export_csv import export_tables
 from .session import Session, SessionError
 from .settings import Settings, load_settings
 from .submit import submit
@@ -184,6 +185,10 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
                         return
                     self._get_draft(table)
                     return
+                export_match = re.fullmatch(r"/api/exports/([^/]+)/(.+)", path)
+                if export_match:
+                    self._get_export_file(export_match.group(1), export_match.group(2))
+                    return
                 if path == "/api/events":
                     self._sse()
                     return
@@ -249,6 +254,9 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
             if path == "/api/patch/apply":
                 self._patch_apply()
                 return
+            if path == "/api/export":
+                self._post_export()
+                return
             rebase_match = re.fullmatch(r"/api/drafts/([^/]+)/rebase", path)
             if rebase_match:
                 table = rebase_match.group(1)
@@ -282,6 +290,71 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
             body = self._read_json()
             result = submit(host.session, body, host.settings, host.session.adapter, host.drafts)
             self._json(200, result.as_http())
+
+        def _export_dir(self, export_id: str) -> Path | None:
+            if not export_id or ".." in export_id or "/" in export_id or "\\" in export_id:
+                return None
+            out = Path(host.settings.out_dir)
+            if not out.is_absolute():
+                out = host.root / out
+            return (out / "editor" / export_id).resolve()
+
+        def _post_export(self) -> None:
+            body = self._read_json()
+            fmt = str(body.get("format") or "csv")
+            source = str(body.get("source") or "repo")
+            tables = body.get("tables") or []
+            if not isinstance(tables, list) or not tables:
+                tables = list(host.session.schemas)
+            names = [str(item) for item in tables if _valid_table(str(item))]
+            targets = body.get("targets")
+            if targets is not None and not isinstance(targets, list):
+                self._error(400, "BAD_REQUEST", "targets must be an array")
+                return
+            flags = [str(item) for item in targets] if isinstance(targets, list) else None
+            export_id = secrets.token_hex(8)
+            dest = self._export_dir(export_id)
+            if dest is None:
+                self._error(400, "BAD_REQUEST", "invalid export id")
+                return
+            dest.mkdir(parents=True, exist_ok=True)
+            try:
+                paths = export_tables(host.root, names, fmt, source, flags, dest)
+            except ValueError as exc:
+                self._error(400, "BAD_REQUEST", str(exc))
+                return
+            files = []
+            for path in paths:
+                rel = path.name
+                files.append({"table": path.stem if path.suffix in {".csv", ".tsv"} else None, "href": f"/api/exports/{export_id}/{rel}"})
+            self._json(200, {"exportId": export_id, "files": files})
+
+        def _get_export_file(self, export_id: str, filename: str) -> None:
+            dest = self._export_dir(export_id)
+            if dest is None:
+                self._error(404, "NOT_FOUND", "unknown export")
+                return
+            name = unquote(filename)
+            if ".." in name or "/" in name or "\\" in name:
+                self._error(404, "NOT_FOUND", "unknown export file")
+                return
+            path = (dest / name).resolve()
+            try:
+                path.relative_to(dest)
+            except ValueError:
+                self._error(404, "NOT_FOUND", "unknown export file")
+                return
+            if not path.is_file():
+                self._error(404, "NOT_FOUND", "unknown export file")
+                return
+            data = path.read_bytes()
+            content_type = "text/csv; charset=utf-8" if path.suffix == ".csv" else "text/plain; charset=utf-8"
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Security-Policy", CSP)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
 
         def _draft_rebase(self, table: str) -> None:
             body = self._read_json()

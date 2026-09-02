@@ -9,8 +9,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "lint": "eslint src tests scripts --max-warnings=0 && tsc --noEmit",
+    "build": "tsc --noEmit && vite build && node scripts/normalize-static.mjs",
+    "lint": "eslint src tests scripts --max-warnings=0 && tsc --noEmit && node scripts/check-deps.mjs",
     "test": "vitest run && node scripts/check-deps.mjs",
     "test:watch": "vitest",
     "e2e": "playwright test",
