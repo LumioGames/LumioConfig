@@ -31,3 +31,4 @@
 | 编号 | 决策 | 状态 |
 |------|------|------|
 | [0001](0001-adopt-lumioagentspec-plugin.md) | Agent 治理框架改用 LumioAgentSpec 插件分发 | 生效 |
+| [0002](0002-ci-spec-lint-from-upstream.md) | CI 结构校验改从 LumioAgentSpec 上游拉取 | 生效 |
