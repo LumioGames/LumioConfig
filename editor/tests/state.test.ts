@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INITIAL_EDITOR_STATE, canSave, canSubmit, reducer } from "../src/app/state";
+import { INITIAL_EDITOR_STATE, canSave, canSubmit, canValidate, reducer } from "../src/app/state";
 
 describe("editor reducer", () => {
   it("moves Opening to ReadyClean then ReadyDirty and SavingDraft", () => {
@@ -10,6 +10,8 @@ describe("editor reducer", () => {
       rowCount: 2,
     });
     expect(opened.phase).toBe("ReadyClean");
+    expect(canValidate(opened)).toBe(true);
+    expect(canSubmit(opened)).toBe(false);
     const dirty = reducer(opened, { type: "dirty", dirtyCount: 1 });
     expect(dirty.phase).toBe("ReadyDirty");
     expect(canSave(dirty)).toBe(true);

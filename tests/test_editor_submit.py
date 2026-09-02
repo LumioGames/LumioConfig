@@ -154,6 +154,47 @@ class SubmitNoneTests(unittest.TestCase):
             self.assertEqual((left / "tables" / "skills.txt").read_bytes(), (right / "tables" / "skills.txt").read_bytes())
             self.assertEqual((left / "registry" / "row-ids.json").read_bytes(), (right / "registry" / "row-ids.json").read_bytes())
 
+    def test_delete_matches_hand_patch_and_tombstones(self):
+        with tempfile.TemporaryDirectory() as temp:
+            left = Path(temp) / "a"
+            right = Path(temp) / "b"
+            for path in (left, right):
+                _copy_repo(path)
+                _write_settings(path, {"vcs": "none", "submit": {"autoCommit": False, "autoExport": False}})
+            seed = {
+                "table": "skills",
+                "ops": [
+                    {
+                        "op": "create",
+                        "name": "temp_row",
+                        "set": {
+                            "display_name": "Temp",
+                            "effect_id": "chill",
+                            "damage": 1,
+                            "cooldown_frames": 1,
+                            "icon": "fx_temp",
+                        },
+                    }
+                ],
+            }
+            seeded = apply_patch(left, seed)
+            apply_patch(right, seed)
+            assigned = seeded.assigned_ids["temp_row"]
+            patch = {
+                "table": "skills",
+                "ops": [{"op": "delete", "name": "temp_row", "expect": {"id": str(assigned)}}],
+            }
+            apply_patch(right, patch)
+            session, adapter = _session(left)
+            result = submit(session, patch, session.settings, adapter, DraftStore(left))
+            self.assertTrue(result.ok, result.errors)
+            self.assertEqual((left / "tables" / "skills.txt").read_bytes(), (right / "tables" / "skills.txt").read_bytes())
+            self.assertEqual((left / "registry" / "row-ids.json").read_bytes(), (right / "registry" / "row-ids.json").read_bytes())
+            self.assertEqual(
+                (left / "registry" / "tombstones.json").read_bytes(),
+                (right / "registry" / "tombstones.json").read_bytes(),
+            )
+
 
 class SubmitGitTests(unittest.TestCase):
     def test_empty_ops_auto_commit_leaves_head_unchanged(self):
@@ -216,6 +257,30 @@ class SubmitGitTests(unittest.TestCase):
             ]
             self.assertTrue(names)
             self.assertTrue(set(names) <= {"tables/skills.txt", "registry/row-ids.json", "registry/tombstones.json"})
+            (root / "NOTES.txt").write_text("unrelated\n", encoding="utf-8")
+            subprocess.run(["git", "add", "NOTES.txt"], cwd=root, check=True, capture_output=True)
+            fp2 = source_fingerprint(root / "tables" / "skills.txt", root / "schemas" / "skills.json")
+            result = submit(
+                session,
+                {"table": "skills", "base": {"sourceFingerprint": fp2}, "ops": [{"op": "update", "name": "fireball", "set": {"damage": 132}}]},
+                session.settings,
+                adapter,
+                DraftStore(root),
+            )
+            self.assertTrue(result.ok, result.errors)
+            names = [
+                line.replace("\\", "/")
+                for line in subprocess.run(
+                    ["git", "show", "--pretty=", "--name-only", "HEAD"],
+                    cwd=root,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                ).stdout.splitlines()
+                if line.strip()
+            ]
+            self.assertNotIn("NOTES.txt", names)
+            self.assertTrue(set(names) <= {"tables/skills.txt", "registry/row-ids.json", "registry/tombstones.json"})
 
     def test_auto_commit_false_leaves_dirty_tree(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -271,17 +336,24 @@ class SubmitGitTests(unittest.TestCase):
                 raise RuntimeError("commit failed")
 
             adapter.commit = boom  # type: ignore[method-assign]
+            drafts = DraftStore(root)
+            drafts.save(
+                "skills",
+                {"table": "skills", "baseFingerprint": "x", "rows": {"40001": {"damage": {"state": "value", "raw": "142"}}}},
+                0,
+            )
             fp = source_fingerprint(root / "tables" / "skills.txt", root / "schemas" / "skills.json")
             result = submit(
                 session,
                 {"table": "skills", "base": {"sourceFingerprint": fp}, "ops": [{"op": "update", "name": "fireball", "set": {"damage": 142}}]},
                 session.settings,
                 adapter,
-                DraftStore(root),
+                drafts,
             )
             self.assertFalse(result.ok)
             self.assertTrue(any(error.get("code") == "VCS_COMMIT_FAILED" for error in result.errors))
             self.assertIn("142", (root / "tables" / "skills.txt").read_text(encoding="utf-8"))
+            self.assertIsNone(drafts.load("skills"))
 
 
 class SubmitSvnAndExportTests(unittest.TestCase):

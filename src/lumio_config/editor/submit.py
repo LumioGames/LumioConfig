@@ -7,7 +7,6 @@ from typing import Any
 
 from ..export import export_repository
 from ..patch import apply_patch
-from ..validate import load_sources
 from .drafts import DraftStore
 from .session import Session
 from .settings import Settings
@@ -46,28 +45,22 @@ def _error(table: str, code: str, message: str, suggestion: str) -> dict[str, st
     }
 
 
-def _reload(session: Session) -> None:
-    schemas, tables, errors = load_sources(session.root)
-    if not errors:
-        session.schemas = schemas
-        session.tables = tables
-    session._fingerprints = session.fingerprints()
-
-
 def submit(session: Session, patch: dict[str, Any], settings: Settings, vcs: VcsAdapter, drafts: DraftStore) -> SubmitResult:
     table = str(patch.get("table") or "")
     session._publish("submit_started", {"table": table})
-    applied = apply_patch(session.root, patch)
-    if applied.errors:
-        session._publish("submit_failed", {"table": table, "errors": applied.errors})
-        return SubmitResult(
-            ok=False,
-            summary=applied.summary,
-            errors=list(applied.errors),
-            source_fingerprint=applied.source_fingerprint,
-            assigned_ids=dict(applied.assigned_ids),
-        )
-    _reload(session)
+    with session._source_lock:
+        applied = apply_patch(session.root, patch)
+        if applied.errors:
+            session._publish("submit_failed", {"table": table, "errors": applied.errors})
+            return SubmitResult(
+                ok=False,
+                summary=applied.summary,
+                errors=list(applied.errors),
+                source_fingerprint=applied.source_fingerprint,
+                assigned_ids=dict(applied.assigned_ids),
+            )
+        session.reload_from_disk()
+        drafts.delete(table)
     vcs_payload: dict[str, Any] | None = {"action": "none", "id": "", "branch": None}
     changed = bool(patch.get("ops"))
     should_commit = bool(
@@ -126,7 +119,6 @@ def submit(session: Session, patch: dict[str, Any], settings: Settings, vcs: Vcs
                 assigned_ids=dict(applied.assigned_ids),
                 vcs=vcs_payload,
             )
-    drafts.delete(table)
     session._publish("submit_succeeded", {"table": table, "assignedIds": applied.assigned_ids})
     return SubmitResult(
         ok=True,

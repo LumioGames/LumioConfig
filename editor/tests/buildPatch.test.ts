@@ -93,4 +93,24 @@ describe("buildPatch", () => {
     expect(created?.set).not.toHaveProperty("element");
     expect(patch.ops.some((op) => op.draftRowKey === "draft:deadbeef")).toBe(false);
   });
+
+  it("maps ref column ids to target row names on create", () => {
+    const { map } = buildWorkbook(table);
+    const tokens = tokensFromTable(table);
+    map.rowKeys.push("draft:refcopy");
+    tokens["draft:refcopy"] = {
+      id: { state: "value", raw: "", effective: null },
+      name: { state: "value", raw: "spark", effective: "spark" },
+      display_name: { state: "value", raw: "Spark", effective: "Spark" },
+      effect_id: { state: "value", raw: "50001", effective: "50001" },
+      damage: { state: "value", raw: "10", effective: 10 },
+      cooldown_frames: { state: "value", raw: "30", effective: 30 },
+      icon: { state: "missing", raw: "@missing", effective: null },
+      element: { state: "missing", raw: "@missing", effective: null },
+      enabled: { state: "missing", raw: "@missing", effective: null },
+    };
+    const patch = buildPatch(map, tokens, { refNames: { "50001": "burn", "50002": "chill" } });
+    const created = patch.ops.find((op) => op.draftRowKey === "draft:refcopy");
+    expect(created?.set?.effect_id).toBe("burn");
+  });
 });

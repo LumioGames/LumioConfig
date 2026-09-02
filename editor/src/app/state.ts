@@ -109,7 +109,7 @@ export function canRefreshOnly(state: EditorState): boolean {
 }
 
 export function canValidate(state: EditorState): boolean {
-  return state.phase === "ReadyDirty" || state.phase === "ReadyToSubmit";
+  return state.phase === "ReadyClean" || state.phase === "ReadyDirty" || state.phase === "ReadyToSubmit";
 }
 
 export function canSubmit(state: EditorState): boolean {

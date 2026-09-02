@@ -75,6 +75,7 @@ class GitAdapter:
         argv = ["git", "commit", "-m", first.strip()]
         if body:
             argv.extend(["-m", body])
+        argv.extend(["--", *paths])
         done = run_vcs(self.root, argv)
         if done.returncode != 0:
             raise RuntimeError((done.stderr or done.stdout).strip() or "git commit failed")

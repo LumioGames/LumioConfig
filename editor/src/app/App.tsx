@@ -65,6 +65,14 @@ function columnOf(table: TableResponse | null, name: string): TableColumn | unde
   return table?.columns.find((item) => item.name === name);
 }
 
+function idToName(rows: Array<{ id: number | string; name: string }>): Record<string, string> {
+  const names: Record<string, string> = {};
+  for (const row of rows) {
+    names[String(row.id)] = String(row.name);
+  }
+  return names;
+}
+
 export function App() {
   const [state, dispatch] = useReducer(reducer, INITIAL_EDITOR_STATE);
   const [tableNames, setTableNames] = useState<{ name: string; label?: string }[] | undefined>(undefined);
@@ -88,6 +96,7 @@ export function App() {
   const stateRef = useRef(state);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refOptionsRef = useRef<Record<string, string[]>>({});
+  const refNamesRef = useRef<Record<string, string>>({});
   const persistDraftRef = useRef<() => Promise<number | undefined>>(async () => undefined);
   const savingRef = useRef(false);
   const pendingHintRef = useRef("");
@@ -112,6 +121,10 @@ export function App() {
     dispatch({ type: "dirty", dirtyCount: dirty });
     setDirtyCounts((current) => ({ ...current, [map.table]: dirty }));
     if (!hostMode || dirty <= 0) {
+      return;
+    }
+    const phase = stateRef.current.phase;
+    if (phase === "Validating" || phase === "ReadyToSubmit" || phase === "Submitting") {
       return;
     }
     if (saveTimer.current) {
@@ -139,7 +152,10 @@ export function App() {
       current.phase === "Failed" ||
       current.phase === "Stale" ||
       current.phase === "Closed" ||
-      current.phase === "SavingDraft"
+      current.phase === "SavingDraft" ||
+      current.phase === "Validating" ||
+      current.phase === "ReadyToSubmit" ||
+      current.phase === "Submitting"
     ) {
       return undefined;
     }
@@ -290,16 +306,20 @@ export function App() {
         const loadedAt = performance.now();
         timingsRef.current.fixtureMs = loadedAt - loadStarted;
         const refs: Record<string, string[]> = {};
+        const names: Record<string, string> = { ...refNamesRef.current };
         for (const column of table.columns) {
           if (column.type === "ref" && column.refTarget) {
             try {
-              refs[column.refTarget] = loadFixture(column.refTarget).rows.map((row) => row.name);
+              const target = loadFixture(column.refTarget);
+              refs[column.refTarget] = target.rows.map((row) => row.name);
+              Object.assign(names, idToName(target.rows));
             } catch {
               refs[column.refTarget] = [];
             }
           }
         }
         refOptionsRef.current = refs;
+        refNamesRef.current = names;
         mountWorkbook(table, 0);
         return;
       }
@@ -309,17 +329,20 @@ export function App() {
         try {
           const loaded = await providerRef.current.load(name);
           const refs: Record<string, string[]> = {};
+          const names: Record<string, string> = { ...refNamesRef.current };
           for (const column of loaded.table.columns) {
             if (column.type === "ref" && column.refTarget && !refs[column.refTarget]) {
               try {
                 const target = await providerRef.current.load(column.refTarget);
                 refs[column.refTarget] = target.table.rows.map((row) => row.name);
+                Object.assign(names, idToName(target.table.rows));
               } catch {
                 refs[column.refTarget] = [];
               }
             }
           }
           refOptionsRef.current = refs;
+          refNamesRef.current = names;
           const applied = applyDraft(loaded.table, loaded.draft);
           if (applied.stale) {
             mountWorkbook(loaded.table, loaded.draft?.draftVersion ?? 0, "仓库已变化，草稿保留");
@@ -341,13 +364,17 @@ export function App() {
       return null;
     }
     const tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
-    return buildPatch(map, tokens);
+    return buildPatch(map, tokens, { refNames: refNamesRef.current });
   }, []);
 
   const validateNow = useCallback(async () => {
     const patch = currentPatch();
     if (!patch || !hostMode) {
       return undefined;
+    }
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
     }
     dispatch({ type: "validate" });
     try {
@@ -375,11 +402,24 @@ export function App() {
     if (!patch) {
       return undefined;
     }
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
     dispatch({ type: "submit" });
     try {
       const result = await providerRef.current.submit(patch);
       if (!result.ok) {
         setErrors(result.errors);
+        const followUp = result.errors.some(
+          (item) => item.code === "VCS_COMMIT_FAILED" || item.code === "EXPORT_FAILED",
+        );
+        if (followUp) {
+          pendingHintRef.current = result.errors[0]?.code === "EXPORT_FAILED" ? "导表失败" : "未提交";
+          dispatch({ type: "validated", ok: false, hint: pendingHintRef.current });
+          openTable(stateRef.current.table);
+          return result;
+        }
         const conflict = result.errors.some(
           (item) => item.code === "STALE_BASELINE" || item.code === "DELETED_ROW_CONFLICT",
         );
@@ -434,6 +474,10 @@ export function App() {
       });
     const stop = providerRef.current.subscribe((name) => {
       if (name === "repo_revision_changed") {
+        const phase = stateRef.current.phase;
+        if (phase === "Submitting" || phase === "Validating") {
+          return;
+        }
         dispatch({ type: "stale", hint: "仓库已变化，草稿保留" });
       }
     });
