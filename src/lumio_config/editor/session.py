@@ -37,8 +37,16 @@ class Session:
         self.tick_rate = load_tick_rate(self.root)
         self._subscribers: list[queue.Queue[dict[str, Any]]] = []
         self._lock = threading.Lock()
+        self._source_lock = threading.RLock()
         self._running = False
         self._thread: threading.Thread | None = None
+        self._fingerprints = self.fingerprints()
+
+    def reload_from_disk(self) -> None:
+        schemas, tables, errors = load_sources(self.root)
+        if not errors:
+            self.schemas = schemas
+            self.tables = tables
         self._fingerprints = self.fingerprints()
 
     def fingerprints(self) -> dict[str, dict[str, str]]:
@@ -149,12 +157,10 @@ class Session:
             pending.put(event)
 
     def check_revision(self) -> None:
-        schemas, tables, errors = load_sources(self.root)
-        if not errors:
-            self.schemas = schemas
-            self.tables = tables
-        current = self.fingerprints()
-        previous = self._fingerprints
+        with self._source_lock:
+            previous = dict(self._fingerprints)
+            self.reload_from_disk()
+            current = self._fingerprints
         for table_name, fps in current.items():
             old = previous.get(table_name, {})
             if fps.get("sourceFingerprint") and fps.get("sourceFingerprint") != old.get("sourceFingerprint"):
@@ -175,7 +181,6 @@ class Session:
                         "previousSchemaFingerprint": old.get("schemaFingerprint"),
                     },
                 )
-        self._fingerprints = current
 
     def start_watcher(self) -> None:
         self._running = True

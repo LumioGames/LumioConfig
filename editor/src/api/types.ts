@@ -82,10 +82,19 @@ export interface SessionResponse {
   capabilities: SessionCapabilities;
 }
 
+export interface PatchOp {
+  op: "update" | "rename" | "delete" | "create";
+  name: string;
+  set?: Record<string, string | number | boolean | null>;
+  expect?: Record<string, string>;
+  to?: string;
+  draftRowKey?: string;
+}
+
 export interface PatchObject {
   table: string;
   base?: { sourceFingerprint: string };
-  ops: unknown[];
+  ops: PatchOp[];
 }
 
 export interface PatchValidateResponse {
@@ -101,8 +110,8 @@ export interface PatchApplyResponse {
   result?: {
     sourceFingerprint: string;
     assignedIds: Record<string, number>;
-    vcs: { action: string; id: string; branch: string };
-    export: { outDir: string; files: number };
+    vcs: { action: string; id: string; branch: string | null } | null;
+    export: { outDir: string; files: number } | null;
   };
 }
 

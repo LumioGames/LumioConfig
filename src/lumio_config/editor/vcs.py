@@ -12,8 +12,12 @@ from .settings import Settings
 ALLOWED_COMMANDS = {
     ("git", "status"),
     ("git", "rev-parse"),
+    ("git", "add"),
+    ("git", "commit"),
     ("svn", "status"),
     ("svn", "info"),
+    ("svn", "add"),
+    ("svn", "commit"),
 }
 
 
@@ -63,7 +67,20 @@ class GitAdapter:
         return Revision(vcs="git", id=identity, branch=branch.stdout.strip() or None)
 
     def commit(self, paths: list[str], message: str) -> str | None:
-        raise NotImplementedError("commit is owned by a later editor card")
+        added = run_vcs(self.root, ["git", "add", "--", *paths])
+        if added.returncode != 0:
+            raise RuntimeError(added.stderr.strip() or "git add failed")
+        first, _, rest = message.partition("\n")
+        body = rest.lstrip("\n")
+        argv = ["git", "commit", "-m", first.strip()]
+        if body:
+            argv.extend(["-m", body])
+        argv.extend(["--", *paths])
+        done = run_vcs(self.root, argv)
+        if done.returncode != 0:
+            raise RuntimeError((done.stderr or done.stdout).strip() or "git commit failed")
+        head = run_vcs(self.root, ["git", "rev-parse", "HEAD"])
+        return head.stdout.strip() or None
 
 
 class SvnAdapter:
@@ -87,7 +104,21 @@ class SvnAdapter:
         return Revision(vcs="svn", id=identity, branch=None)
 
     def commit(self, paths: list[str], message: str) -> str | None:
-        raise NotImplementedError("commit is owned by a later editor card")
+        status = run_vcs(self.root, ["svn", "status", *paths])
+        if status.returncode not in {0, 1}:
+            raise RuntimeError(status.stderr.strip() or "svn status failed")
+        for line in status.stdout.splitlines():
+            if line.startswith("?"):
+                path = line.split()[-1] if line.split() else ""
+                if path:
+                    added = run_vcs(self.root, ["svn", "add", path])
+                    if added.returncode != 0:
+                        raise RuntimeError(added.stderr.strip() or "svn add failed")
+        done = run_vcs(self.root, ["svn", "commit", *paths, "-m", message])
+        if done.returncode != 0:
+            raise RuntimeError((done.stderr or done.stdout).strip() or "svn commit failed")
+        info = run_vcs(self.root, ["svn", "info", "--show-item", "revision"])
+        return info.stdout.strip() or None
 
 
 class NoneAdapter:
@@ -98,7 +129,7 @@ class NoneAdapter:
         return None
 
     def commit(self, paths: list[str], message: str) -> str | None:
-        raise NotImplementedError("commit is owned by a later editor card")
+        return None
 
 
 def make_adapter(root: Path, settings: Settings) -> GitAdapter | SvnAdapter | NoneAdapter:

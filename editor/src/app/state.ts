@@ -19,7 +19,11 @@ export type EditorAction =
   | { type: "saved"; draftVersion: number }
   | { type: "stale"; hint: string }
   | { type: "failed"; hint: string }
-  | { type: "online"; online: boolean };
+  | { type: "online"; online: boolean }
+  | { type: "validate" }
+  | { type: "validated"; ok: boolean; hint: string }
+  | { type: "submit" }
+  | { type: "submitted"; fingerprint: string };
 
 export const INITIAL_EDITOR_STATE: EditorState = {
   phase: "Opening",
@@ -67,13 +71,33 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, phase: "Failed", hint: action.hint };
     case "online":
       return { ...state, online: action.online };
+    case "validate":
+      return { ...state, phase: "Validating" };
+    case "validated":
+      return { ...state, phase: action.ok ? "ReadyToSubmit" : "ReadyDirty", hint: action.hint };
+    case "submit":
+      return { ...state, phase: "Submitting" };
+    case "submitted":
+      return {
+        ...state,
+        phase: "ReadyClean",
+        dirtyCount: 0,
+        draftVersion: 0,
+        fingerprint: action.fingerprint,
+        hint: "已提交",
+      };
     default:
       return state;
   }
 }
 
 export function canEdit(state: EditorState): boolean {
-  return state.phase === "ReadyClean" || state.phase === "ReadyDirty" || state.phase === "SavingDraft";
+  return (
+    state.phase === "ReadyClean" ||
+    state.phase === "ReadyDirty" ||
+    state.phase === "SavingDraft" ||
+    state.phase === "ReadyToSubmit"
+  );
 }
 
 export function canSave(state: EditorState): boolean {
@@ -84,8 +108,12 @@ export function canRefreshOnly(state: EditorState): boolean {
   return state.phase === "Failed" && state.hint.includes("标签页");
 }
 
-export function canSubmit(_state: EditorState): boolean {
-  return false;
+export function canValidate(state: EditorState): boolean {
+  return state.phase === "ReadyClean" || state.phase === "ReadyDirty" || state.phase === "ReadyToSubmit";
+}
+
+export function canSubmit(state: EditorState): boolean {
+  return state.phase === "ReadyToSubmit";
 }
 
 /** @deprecated POC alias kept so existing e2e imports keep type-checking if any remain. */
