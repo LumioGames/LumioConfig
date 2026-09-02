@@ -1,0 +1,6 @@
+table: notices
+schema: schemas/notices.json
+
+| id | name          | headline        | server_token            | voxel_tint            |
+| --- | ------------- | --------------- | ----------------------- | --------------------- |
+| 1  | launch_banner | Welcome players | SRVSECRET_ZX9QK_NOTICES | VOXTINT_NEON7_NOTICES |
