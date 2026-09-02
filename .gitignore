@@ -12,6 +12,8 @@ venv/
 /dist/
 *.egg-info/
 registry/.issue.lock
+.lumio/drafts/
+.lumio/local.json
 testdata/unicode/rust/target/
 testdata/unicode/csharp/bin/
 testdata/unicode/csharp/obj/

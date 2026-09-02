@@ -93,6 +93,11 @@ def build_parser() -> argparse.ArgumentParser:
     registry = subparsers.add_parser("registry", help="verify row-id and tombstone registries")
     registry.add_argument("mode", choices=["verify"])
     _root_argument(registry)
+
+    serve_cmd = subparsers.add_parser("serve", help="start the local loopback editor host")
+    serve_cmd.add_argument("--port", type=int, default=0, help="port (0 = ephemeral)")
+    serve_cmd.add_argument("--no-open", action="store_true", help="do not open a browser")
+    _root_argument(serve_cmd)
     return parser
 
 
@@ -182,6 +187,22 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(errors, ensure_ascii=False, indent=2, sort_keys=True))
             return 1
         print("registry-verify: OK")
+        return 0
+    if args.command == "serve":
+        from .editor.server import create_server, evaluate_open_policy
+
+        _settings, _adapter, _commit_allowed, dirty, blocked = evaluate_open_policy(root)
+        if blocked:
+            print("WORKING_TREE_DIRTY")
+            for path in dirty:
+                print(path)
+            return 3
+        host = create_server(root, args.port, not args.no_open)
+        print(host.url())
+        try:
+            host.httpd.serve_forever()
+        finally:
+            host.shutdown()
         return 0
     return 2
 

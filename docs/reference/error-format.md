@@ -20,3 +20,5 @@ CLI 的 --json 输出是错误数组；排序键为 table、row、column、code�
 导表层覆盖错误码：`LAYER_CREATE_FORBIDDEN`（`layers/` overlay 试图新增行；overlay 只能 update 既有行）。
 
 查询错误码：`UNKNOWN_ROW`（`query row` / `query card` 找不到名字或终身编号）。
+
+编辑器 Host 错误码：`UNAUTHORIZED`（缺 token）、`FORBIDDEN_ORIGIN`（错误 Origin）、`FORBIDDEN_HOST`（非 loopback Host）、`WORKING_TREE_DIRTY`（脏工作树且不允许打开）。
