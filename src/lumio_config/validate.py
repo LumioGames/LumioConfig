@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .ids import alias_conflict_errors, persisted_ordinal_errors
 from .model import Cell, TableParseError, TableSource, ValidationError
 from .text_table import parse_table
 
@@ -308,10 +309,15 @@ def validate_repository(root: Path) -> list[dict[str, str]]:
                         if target_id_schema is not None and not _target_visible(target_id_schema, consumer):
                             errors.append(_error(table_name, row_id, column_name, "HIDDEN_REF_TARGET", f"{column_name} is visible to {consumer} but {target}.{target_id_column} is hidden", "make the target id visible or remove this target projection"))
 
+    for item in (*persisted_ordinal_errors(root), *alias_conflict_errors(root)):
+        errors.append(
+            ValidationError(item["table"], item["row"], item["column"], item["code"], item["message"], item["suggestion"])
+        )
+
     row_registry = _load_registry(root, "row-ids.json")
     for table_name, table in tables.items():
         declared_ids = row_registry.get(table_name)
-        if not isinstance(declared_ids, dict) or not declared_ids:
+        if table_name == "aliases" or not isinstance(declared_ids, dict) or not declared_ids:
             continue
         schema = schemas[table_name]
         id_column = str(schema.get("idColumn", "id"))

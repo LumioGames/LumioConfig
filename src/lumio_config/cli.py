@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .export import ValidationFailure, export_repository
+from .ids import verify_registry
 from .patch import apply_patch, validate_patch
 from .text_table import format_table_text, parse_table
 from .validate import load_sources, validate_repository
@@ -64,6 +65,10 @@ def build_parser() -> argparse.ArgumentParser:
     patch.add_argument("--audit", type=Path, default=None)
     patch.add_argument("--reason", default=None)
     _root_argument(patch)
+
+    registry = subparsers.add_parser("registry", help="verify row-id and tombstone registries")
+    registry.add_argument("mode", choices=["verify"])
+    _root_argument(registry)
     return parser
 
 
@@ -123,6 +128,13 @@ def main(argv: list[str] | None = None) -> int:
             with args.audit.open("a", encoding="utf-8", newline="\n") as handle:
                 handle.write(json.dumps(line, ensure_ascii=False) + "\n")
         return 0 if not result.errors else 1
+    if args.command == "registry":
+        errors = verify_registry(root)
+        if errors:
+            print(json.dumps(errors, ensure_ascii=False, indent=2, sort_keys=True))
+            return 1
+        print("registry-verify: OK")
+        return 0
     return 2
 
 
