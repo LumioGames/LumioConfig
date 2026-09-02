@@ -37,7 +37,7 @@
 
     python tools/lumio_config.py preview path/to/patch.json
 
-在临时目录对「当前源 + 补丁」做隔离 export，输出三端是否变化与内容/底稿指纹前后值；不改权威源。成功/失败均为同一合同 JSON。
+在临时目录对「当前源 + 补丁」做隔离 export，输出三端行列 diff、内容/包裹/底稿指纹前后值、首次 C 披露列、`summarize_ops` 人话摘要、模拟 adapter 结果和影响报告；不改权威源。成功/失败均为同一合同 JSON。模拟默认 `unavailable`，不阻塞 `patch validate`。
 
 ## registry
 
