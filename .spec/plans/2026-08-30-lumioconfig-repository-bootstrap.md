@@ -1,3 +1,7 @@
+---
+status: completed
+---
+
 # LumioConfig Repository Bootstrap Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-driven-development to implement this plan task-by-task (hosts without subagents: its Inline Fallback section). Steps use checkbox (`- [ ]`) syntax for tracking.

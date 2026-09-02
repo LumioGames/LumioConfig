@@ -15,7 +15,7 @@
 ## 明确不做
 
 - 不做生产运行中热更。
-- 不在本仓实现运行时装载器或回放播放器。
+- 不在本仓实现运行时装载器或回放播放器。2026-09-02 Owner 按「如无必要勿增实体」把 Workflow R-00326 收窄为本仓侧合同：manifest 的 Revision 身份字段、指纹不匹配 / 必需表缺失 / 根混用三类负向 fixture、`docs/reference/revision-manifest.md`；装载、reload、握手、回放待运行时仓需要时在其 Room 立卡。
 - 不在本决议占用架构仓 ADR 号。
 
 ## 将来搬入架构仓
