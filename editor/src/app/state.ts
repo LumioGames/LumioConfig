@@ -23,7 +23,11 @@ export type EditorAction =
   | { type: "validate" }
   | { type: "validated"; ok: boolean; hint: string }
   | { type: "submit" }
-  | { type: "submitted"; fingerprint: string };
+  | { type: "submitted"; fingerprint: string }
+  | { type: "conflicted"; hint: string }
+  | { type: "conflictsResolved" }
+  | { type: "rebased"; merged: number; draftVersion: number }
+  | { type: "schemaChanged" };
 
 export const INITIAL_EDITOR_STATE: EditorState = {
   phase: "Opening",
@@ -52,6 +56,15 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
     case "hint":
       return { ...state, hint: action.hint };
     case "dirty":
+      if (
+        state.phase === "Conflicted" ||
+        state.phase === "Stale" ||
+        state.phase === "Failed" ||
+        state.phase === "Submitting" ||
+        state.phase === "Validating"
+      ) {
+        return { ...state, dirtyCount: action.dirtyCount };
+      }
       return {
         ...state,
         dirtyCount: action.dirtyCount,
@@ -86,6 +99,20 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         fingerprint: action.fingerprint,
         hint: "已提交",
       };
+    case "conflicted":
+      return { ...state, phase: "Conflicted", hint: action.hint };
+    case "conflictsResolved":
+      return { ...state, phase: "ReadyDirty", dirtyCount: Math.max(state.dirtyCount, 1), hint: "" };
+    case "rebased":
+      return {
+        ...state,
+        phase: "ReadyDirty",
+        dirtyCount: Math.max(state.dirtyCount, 1),
+        draftVersion: action.draftVersion,
+        hint: `已合入仓库 ${action.merged} 处改动`,
+      };
+    case "schemaChanged":
+      return { ...state, phase: "Failed", hint: "SCHEMA_CHANGED，请刷新重放" };
     default:
       return state;
   }
@@ -105,7 +132,7 @@ export function canSave(state: EditorState): boolean {
 }
 
 export function canRefreshOnly(state: EditorState): boolean {
-  return state.phase === "Failed" && state.hint.includes("标签页");
+  return state.phase === "Failed" && (state.hint.includes("标签页") || state.hint.includes("SCHEMA_CHANGED"));
 }
 
 export function canValidate(state: EditorState): boolean {

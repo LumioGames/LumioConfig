@@ -7,12 +7,14 @@ import type {
   PatchObject,
   PatchValidateResponse,
   ProjectionMap,
+  RebaseConflict,
   SessionResponse,
   SessionTableSummary,
   TableColumn,
   TableResponse,
 } from "../api/types";
 import { loadFixture } from "../fixtures/catalog";
+import { ConflictPanel } from "../panels/ConflictPanel";
 import { DiffPreview } from "../panels/DiffPreview";
 import { ErrorPanel } from "../panels/ErrorPanel";
 import { SettingsPanel } from "../panels/SettingsPanel";
@@ -22,7 +24,7 @@ import { applyEditors, editorKinds, type EditorKind } from "../spreadsheet/edito
 import { buildDraft, buildPatch, countDirty, extractTokens, mergeCurrentCells, rememberToken } from "../spreadsheet/extract";
 import { FOUR_STATE_MENU, tokenForDeleteKey, tokenForMenu, type FourStateKind } from "../spreadsheet/fourState";
 import { COMMAND, installInterceptors, newDraftRowKey } from "../spreadsheet/interceptors";
-import { applyDraft, buildCell, buildWorkbook } from "../spreadsheet/projection";
+import { applyDraft, applyRebase, buildCell, workbookFromWarehouse } from "../spreadsheet/projection";
 import { createSheetsUniver, loadWorkbook, type SheetsUniver } from "../spreadsheet/univer";
 import { applyViewState, captureViewState, load as loadView, save as saveView } from "../spreadsheet/viewState";
 import { INITIAL_EDITOR_STATE, canEdit, canRefreshOnly, canSave, canSubmit, canValidate, reducer } from "./state";
@@ -53,6 +55,7 @@ export interface PocBridge {
   buildPatch: () => PatchObject | null;
   validateNow: () => Promise<unknown>;
   submitNow: () => Promise<unknown>;
+  rebaseNow: () => Promise<unknown>;
 }
 
 declare global {
@@ -78,6 +81,7 @@ export function App() {
   const [tableNames, setTableNames] = useState<{ name: string; label?: string }[] | undefined>(undefined);
   const [dirtyCounts, setDirtyCounts] = useState<Record<string, number>>({});
   const [errors, setErrors] = useState<Array<{ code?: string; message?: string }>>([]);
+  const [conflicts, setConflicts] = useState<RebaseConflict[]>([]);
   const [patchPreview, setPatchPreview] = useState<PatchObject | null>(null);
   const [summary, setSummary] = useState("");
   const [revisionLabel, setRevisionLabel] = useState("");
@@ -100,6 +104,10 @@ export function App() {
   const persistDraftRef = useRef<() => Promise<number | undefined>>(async () => undefined);
   const savingRef = useRef(false);
   const pendingHintRef = useRef("");
+  const rebasingRef = useRef(false);
+  const conflictWriteRef = useRef(false);
+  const rebaseFlightRef = useRef<Promise<unknown> | null>(null);
+  const rebaseNowRef = useRef<() => Promise<unknown>>(async () => undefined);
   stateRef.current = state;
 
   const persistView = useCallback((table: string) => {
@@ -124,7 +132,13 @@ export function App() {
       return;
     }
     const phase = stateRef.current.phase;
-    if (phase === "Validating" || phase === "ReadyToSubmit" || phase === "Submitting") {
+    if (
+      phase === "Validating" ||
+      phase === "ReadyToSubmit" ||
+      phase === "Submitting" ||
+      phase === "Conflicted" ||
+      rebasingRef.current
+    ) {
       return;
     }
     if (saveTimer.current) {
@@ -155,7 +169,9 @@ export function App() {
       current.phase === "SavingDraft" ||
       current.phase === "Validating" ||
       current.phase === "ReadyToSubmit" ||
-      current.phase === "Submitting"
+      current.phase === "Submitting" ||
+      current.phase === "Conflicted" ||
+      rebasingRef.current
     ) {
       return undefined;
     }
@@ -178,6 +194,9 @@ export function App() {
       return version;
     } catch (error) {
       if (error instanceof HostApiError && error.code === "DRAFT_VERSION_CONFLICT") {
+        if (rebasingRef.current) {
+          return undefined;
+        }
         dispatch({ type: "failed", hint: "另一个标签页已保存，请刷新" });
         setErrors([{ code: error.code, message: "另一个标签页已保存，请刷新" }]);
         return undefined;
@@ -190,8 +209,8 @@ export function App() {
   }, [hostMode]);
   persistDraftRef.current = persistDraft;
 
-  const writeToken = useCallback(async (rowKey: string, column: string, token: CellToken) => {
-    if (!canEdit(stateRef.current)) {
+  const writeToken = useCallback(async (rowKey: string, column: string, token: CellToken, force = false) => {
+    if (!force && !canEdit(stateRef.current)) {
       dispatch({ type: "hint", hint: "另一个标签页已保存，请刷新" });
       return;
     }
@@ -210,35 +229,57 @@ export function App() {
       return;
     }
     rememberToken(map, rowKey, column, token);
-    await apiHost.executeCommand(COMMAND.setRangeValues, {
-      range: {
-        startRow: rowIndex + 1,
-        startColumn: colIndex,
-        endRow: rowIndex + 1,
-        endColumn: colIndex,
-      },
-      value: buildCell(token, desc, rowKey),
-    });
+    conflictWriteRef.current = force;
+    try {
+      await apiHost.executeCommand(COMMAND.setRangeValues, {
+        range: {
+          startRow: rowIndex + 1,
+          startColumn: colIndex,
+          endRow: rowIndex + 1,
+          endColumn: colIndex,
+        },
+        value: buildCell(token, desc, rowKey),
+      });
+    } finally {
+      conflictWriteRef.current = false;
+    }
     markDirty();
   }, [markDirty]);
 
+  const disposeSheet = useCallback(() => {
+    interceptorsRef.current?.dispose();
+    instanceRef.current?.dispose();
+    instanceRef.current = null;
+    interceptorsRef.current = null;
+    mapRef.current = null;
+    containerRef.current?.replaceChildren();
+  }, []);
+
   const mountWorkbook = useCallback(
-    (table: TableResponse, draftVersion: number, staleHint?: string) => {
+    (warehouse: TableResponse, draftVersion: number, staleHint?: string, overlay?: Draft) => {
       const container = containerRef.current;
       if (!container) {
         return;
       }
-      const { workbook, map } = buildWorkbook(table, { refOptions: refOptionsRef.current });
-      applyViewState(workbook, table.table, loadView(REPO_NAME, table.table));
+      const { workbook, map, displayed } = workbookFromWarehouse(warehouse, overlay, {
+        refOptions: refOptionsRef.current,
+      });
+      applyViewState(workbook, warehouse.table, loadView(REPO_NAME, warehouse.table));
       const projectedAt = performance.now();
       const instance = createSheetsUniver(container);
       loadWorkbook(instance.univerAPI, workbook);
-      void applyEditors(instance.univerAPI, table, refOptionsRef.current);
+      void applyEditors(instance.univerAPI, displayed, refOptionsRef.current);
       const paintedAt = performance.now();
       interceptorsRef.current = installInterceptors(instance.univerAPI, map, {
-        onHint: (hint) => dispatch({ type: "hint", hint }),
-        tableColumns: table.columns,
-        canEdit: () => canEdit(stateRef.current),
+        onHint: (hint) => {
+          if (rebasingRef.current || stateRef.current.phase === "Stale" || stateRef.current.phase === "Conflicted") {
+            return;
+          }
+          dispatch({ type: "hint", hint });
+        },
+        tableColumns: warehouse.columns,
+        canEdit: () =>
+          conflictWriteRef.current || (!rebasingRef.current && canEdit(stateRef.current)),
         onChange: markDirty,
         onViewChange: () => {
           if (mapRef.current) {
@@ -253,7 +294,7 @@ export function App() {
       });
       instanceRef.current = instance;
       mapRef.current = map;
-      tableRef.current = table;
+      tableRef.current = warehouse;
       timingsRef.current = {
         ...timingsRef.current,
         projectMs: projectedAt - (timingsRef.current.loadStarted ?? projectedAt),
@@ -262,9 +303,9 @@ export function App() {
       };
       dispatch({
         type: "open",
-        table: table.table,
-        fingerprint: table.sourceFingerprint,
-        rowCount: table.rows.length,
+        table: warehouse.table,
+        fingerprint: warehouse.sourceFingerprint,
+        rowCount: displayed.rows.length,
         draftVersion,
       });
       if (staleHint) {
@@ -273,7 +314,7 @@ export function App() {
         const tokens = extractTokens(workbook, map);
         const dirty = countDirty(map, tokens);
         dispatch({ type: "dirty", dirtyCount: dirty });
-        setDirtyCounts((current) => ({ ...current, [table.table]: dirty }));
+        setDirtyCounts((current) => ({ ...current, [warehouse.table]: dirty }));
         if (pendingHintRef.current) {
           dispatch({ type: "hint", hint: pendingHintRef.current });
           pendingHintRef.current = "";
@@ -292,12 +333,7 @@ export function App() {
       if (mapRef.current) {
         persistView(mapRef.current.table);
       }
-      interceptorsRef.current?.dispose();
-      instanceRef.current?.dispose();
-      instanceRef.current = null;
-      interceptorsRef.current = null;
-      mapRef.current = null;
-      container.replaceChildren();
+      disposeSheet();
       const loadStarted = performance.now();
       timingsRef.current = { loadStarted };
 
@@ -343,18 +379,19 @@ export function App() {
           }
           refOptionsRef.current = refs;
           refNamesRef.current = names;
-          const applied = applyDraft(loaded.table, loaded.draft);
-          if (applied.stale) {
-            mountWorkbook(loaded.table, loaded.draft?.draftVersion ?? 0, "仓库已变化，草稿保留");
+          const draft = loaded.draft;
+          if (draft && draft.baseFingerprint !== loaded.table.sourceFingerprint) {
+            mountWorkbook(loaded.table, draft.draftVersion ?? 0, "仓库已变化，草稿保留");
+            void rebaseNowRef.current();
             return;
           }
-          mountWorkbook(applied.table, loaded.draft?.draftVersion ?? 0);
+          mountWorkbook(loaded.table, draft?.draftVersion ?? 0, undefined, draft);
         } catch (error) {
           dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
         }
       })();
     },
-    [hostMode, mountWorkbook, persistView],
+    [disposeSheet, hostMode, mountWorkbook, persistView],
   );
 
   const currentPatch = useCallback((): PatchObject | null => {
@@ -420,11 +457,16 @@ export function App() {
           openTable(stateRef.current.table);
           return result;
         }
+        if (result.errors.some((item) => item.code === "SCHEMA_CHANGED")) {
+          dispatch({ type: "schemaChanged" });
+          return result;
+        }
         const conflict = result.errors.some(
           (item) => item.code === "STALE_BASELINE" || item.code === "DELETED_ROW_CONFLICT",
         );
         if (conflict) {
-          dispatch({ type: "failed", hint: result.errors[0]?.message ?? "提交冲突" });
+          setConflicts(result.errors as RebaseConflict[]);
+          dispatch({ type: "conflicted", hint: result.errors[0]?.message ?? "单元格冲突" });
         } else {
           dispatch({ type: "validated", ok: false, hint: result.errors[0]?.message ?? result.summary ?? "提交失败" });
         }
@@ -444,6 +486,88 @@ export function App() {
       return undefined;
     }
   }, [currentPatch, hostMode, openTable]);
+
+  const rebaseNow = useCallback(async () => {
+    if (!hostMode) {
+      return;
+    }
+    if (rebaseFlightRef.current) {
+      return rebaseFlightRef.current;
+    }
+    const tableName = stateRef.current.table;
+    rebasingRef.current = true;
+    const flight = (async () => {
+      try {
+        const loadedDraft = await providerRef.current.load(tableName);
+        if (stateRef.current.table !== tableName) {
+          return undefined;
+        }
+        if (!loadedDraft.draft) {
+          disposeSheet();
+          mountWorkbook(loadedDraft.table, 0);
+          return undefined;
+        }
+        const expected = loadedDraft.draft.draftVersion ?? stateRef.current.draftVersion;
+        const result = await providerRef.current.rebase(tableName, expected);
+        if (stateRef.current.table !== tableName) {
+          return result;
+        }
+        if (result.code === "SCHEMA_CHANGED") {
+          const loaded = await providerRef.current.load(tableName);
+          if (stateRef.current.table !== tableName) {
+            return result;
+          }
+          disposeSheet();
+          mountWorkbook(loaded.table, 0);
+          dispatch({ type: "schemaChanged" });
+          stateRef.current = { ...stateRef.current, phase: "Failed", hint: "SCHEMA_CHANGED，请刷新重放" };
+          return result;
+        }
+        const loaded = await providerRef.current.load(tableName);
+        if (stateRef.current.table !== tableName) {
+          return result;
+        }
+        disposeSheet();
+        const overlay = {
+          ...result.draft,
+          baseFingerprint: loaded.table.sourceFingerprint,
+          draftVersion: result.draftVersion,
+        };
+        mountWorkbook(loaded.table, result.draftVersion, undefined, overlay);
+        setConflicts(result.conflicts ?? []);
+        if (result.ok) {
+          dispatch({ type: "rebased", merged: result.merged, draftVersion: result.draftVersion });
+          stateRef.current = {
+            ...stateRef.current,
+            phase: "ReadyDirty",
+            draftVersion: result.draftVersion,
+            hint: `已合入仓库 ${result.merged} 处改动`,
+          };
+        } else {
+          const map = mapRef.current;
+          if (map) {
+            applyRebase(loaded.table, map, result);
+          }
+          dispatch({ type: "conflicted", hint: result.conflicts[0]?.message ?? "单元格冲突" });
+          stateRef.current = {
+            ...stateRef.current,
+            phase: "Conflicted",
+            hint: result.conflicts[0]?.message ?? "单元格冲突",
+          };
+        }
+        return result;
+      } catch (error) {
+        dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
+        return undefined;
+      } finally {
+        rebasingRef.current = false;
+        rebaseFlightRef.current = null;
+      }
+    })();
+    rebaseFlightRef.current = flight;
+    return flight;
+  }, [disposeSheet, hostMode, mountWorkbook]);
+  rebaseNowRef.current = rebaseNow;
 
   useEffect(() => {
     openTable("skills");
@@ -472,17 +596,35 @@ export function App() {
       .catch((error: unknown) => {
         dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
       });
-    const stop = providerRef.current.subscribe((name) => {
+    const stop = providerRef.current.subscribe((name, data) => {
+      if (name === "schema_changed") {
+        const eventTable = (data as { table?: string } | undefined)?.table;
+        if (eventTable && eventTable !== stateRef.current.table) {
+          return;
+        }
+        dispatch({ type: "schemaChanged" });
+        return;
+      }
       if (name === "repo_revision_changed") {
+        const eventTable = (data as { table?: string } | undefined)?.table;
+        if (eventTable && eventTable !== stateRef.current.table) {
+          return;
+        }
         const phase = stateRef.current.phase;
         if (phase === "Submitting" || phase === "Validating") {
           return;
         }
-        dispatch({ type: "stale", hint: "仓库已变化，草稿保留" });
+        void (async () => {
+          await persistDraftRef.current();
+          rebasingRef.current = true;
+          stateRef.current = { ...stateRef.current, phase: "Stale" };
+          dispatch({ type: "stale", hint: "仓库已变化，草稿保留" });
+          await rebaseNow();
+        })();
       }
     });
     return stop;
-  }, [hostMode]);
+  }, [hostMode, rebaseNow]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -557,10 +699,8 @@ export function App() {
           dispatch({ type: "stale", hint: "仓库已变化，草稿保留" });
           return false;
         }
-        interceptorsRef.current?.dispose();
-        instanceRef.current?.dispose();
-        container.replaceChildren();
-        mountWorkbook(applied.table, draft.draftVersion);
+        disposeSheet();
+        mountWorkbook(table, draft.draftVersion, undefined, draft);
         return true;
       },
       copyRow: async (rowKey: string) => {
@@ -634,13 +774,14 @@ export function App() {
       buildPatch: () => currentPatch(),
       validateNow: () => validateNow(),
       submitNow: () => submitNow(),
+      rebaseNow: () => rebaseNow(),
       draftVersion: () => state.draftVersion,
       phase: () => state.phase,
     };
     return () => {
       delete window.__lumioPoc;
     };
-  }, [currentPatch, markDirty, mountWorkbook, persistDraft, state.draftVersion, state.hint, state.phase, state.table, submitNow, validateNow, writeToken]);
+  }, [currentPatch, markDirty, mountWorkbook, persistDraft, rebaseNow, state.draftVersion, state.hint, state.phase, state.table, submitNow, validateNow, writeToken]);
 
   const onContextMenu = (event: MouseEvent<HTMLDivElement>) => {
     const map = mapRef.current;
@@ -707,6 +848,63 @@ export function App() {
             ))}
           </ul>
         ) : null}
+        {state.phase === "Conflicted" ? (
+          <ConflictPanel
+            conflicts={conflicts}
+            onAction={(conflict, action, value) => {
+              const finishConflicts = (next: RebaseConflict[]) => {
+                setConflicts(next);
+                if (next.length === 0) {
+                  dispatch({ type: "conflictsResolved" });
+                  stateRef.current = { ...stateRef.current, phase: "ReadyDirty" };
+                }
+              };
+              if (action === "cancel") {
+                finishConflicts([]);
+                return;
+              }
+              if (action === "drop") {
+                const map = mapRef.current;
+                if (conflict.rowId && map) {
+                  if (conflict.code === "DELETED_ROW_CONFLICT") {
+                    delete map.currentCells[conflict.rowId];
+                    map.rowKeys = map.rowKeys.filter((key) => key !== conflict.rowId);
+                  } else {
+                    map.deleted.delete(conflict.rowId);
+                  }
+                }
+                finishConflicts(conflicts.filter((item) => item.rowId !== conflict.rowId));
+                return;
+              }
+              const raw =
+                action === "warehouse"
+                  ? (conflict.current ?? "")
+                  : action === "mine"
+                    ? (conflict.draft ?? "")
+                    : action === "default"
+                      ? "@default"
+                      : action === "null"
+                        ? "null"
+                        : (value ?? "");
+              const token: CellToken =
+                raw === '""'
+                  ? { state: "empty", raw, effective: "" }
+                  : raw === "null"
+                    ? { state: "null", raw, effective: null }
+                    : raw === "@default"
+                      ? { state: "default", raw, effective: null }
+                      : raw === "@missing"
+                        ? { state: "missing", raw, effective: null }
+                        : { state: "value", raw, effective: raw };
+              if (conflict.rowId && conflict.column) {
+                void writeToken(conflict.rowId, conflict.column, token, true);
+              }
+              finishConflicts(
+                conflicts.filter((item) => !(item.rowId === conflict.rowId && item.column === conflict.column)),
+              );
+            }}
+          />
+        ) : null}
         {hostMode ? (
           <DiffPreview
             patch={patchPreview}
@@ -716,7 +914,7 @@ export function App() {
             autoExport={autoExport}
             canValidate={canValidate(state)}
             canSubmit={canSubmit(state)}
-            disabled={state.phase === "Submitting" || state.phase === "Validating"}
+            disabled={state.phase === "Submitting" || state.phase === "Validating" || state.phase === "Conflicted"}
             onValidate={() => {
               void validateNow();
             }}

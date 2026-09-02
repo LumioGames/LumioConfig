@@ -40,4 +40,22 @@ describe("editor reducer", () => {
     expect(done.phase).toBe("ReadyClean");
     expect(done.fingerprint).toBe("fp2");
   });
+
+  it("moves Stale to ReadyDirty after rebase and Conflicted on cell conflict", () => {
+    const stale = reducer(INITIAL_EDITOR_STATE, { type: "stale", hint: "仓库已变化，草稿保留" });
+    expect(stale.phase).toBe("Stale");
+    const merged = reducer(stale, { type: "rebased", merged: 2, draftVersion: 4 });
+    expect(merged.phase).toBe("ReadyDirty");
+    expect(merged.hint).toContain("已合入仓库 2 处改动");
+    const conflicted = reducer(merged, { type: "conflicted", hint: "单元格冲突" });
+    expect(conflicted.phase).toBe("Conflicted");
+    expect(canSubmit(conflicted)).toBe(false);
+    const stillConflicted = reducer(conflicted, { type: "dirty", dirtyCount: 2 });
+    expect(stillConflicted.phase).toBe("Conflicted");
+    const resolved = reducer(stillConflicted, { type: "conflictsResolved" });
+    expect(resolved.phase).toBe("ReadyDirty");
+    const schema = reducer(merged, { type: "schemaChanged" });
+    expect(schema.phase).toBe("Failed");
+    expect(schema.hint).toContain("SCHEMA_CHANGED");
+  });
 });

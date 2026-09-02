@@ -34,6 +34,29 @@ export interface TableResponse {
   rows: TableRow[];
 }
 
+export interface RebaseConflict {
+  table: string;
+  row: string;
+  column: string;
+  code: string;
+  message: string;
+  suggestion: string;
+  base?: string;
+  current?: string;
+  draft?: string;
+  rowId?: string;
+}
+
+export interface RebaseResponse {
+  ok: boolean;
+  draft: Draft;
+  conflicts: RebaseConflict[];
+  baseFingerprint: string;
+  merged: number;
+  code?: string | null;
+  draftVersion: number;
+}
+
 export interface ProjectionMap {
   table: string;
   baseFingerprint: string;
@@ -42,6 +65,7 @@ export interface ProjectionMap {
   baseCells: Record<string, Record<string, CellToken>>;
   currentCells: Record<string, Record<string, CellToken>>;
   deleted: Set<string>;
+  conflicts?: RebaseConflict[];
 }
 
 export interface SessionRevision {
