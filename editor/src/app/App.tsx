@@ -4,6 +4,8 @@ import { LocalDraftSessionProvider } from "../api/draftSession";
 import type {
   CellToken,
   Draft,
+  PatchObject,
+  PatchValidateResponse,
   ProjectionMap,
   SessionResponse,
   SessionTableSummary,
@@ -11,18 +13,19 @@ import type {
   TableResponse,
 } from "../api/types";
 import { loadFixture } from "../fixtures/catalog";
+import { DiffPreview } from "../panels/DiffPreview";
 import { ErrorPanel } from "../panels/ErrorPanel";
 import { SettingsPanel } from "../panels/SettingsPanel";
 import { StatusBar } from "../panels/StatusBar";
 import { TableList } from "../panels/TableList";
 import { applyEditors, editorKinds, type EditorKind } from "../spreadsheet/editors";
-import { buildDraft, countDirty, extractTokens, mergeCurrentCells, rememberToken } from "../spreadsheet/extract";
+import { buildDraft, buildPatch, countDirty, extractTokens, mergeCurrentCells, rememberToken } from "../spreadsheet/extract";
 import { FOUR_STATE_MENU, tokenForDeleteKey, tokenForMenu, type FourStateKind } from "../spreadsheet/fourState";
 import { COMMAND, installInterceptors, newDraftRowKey } from "../spreadsheet/interceptors";
 import { applyDraft, buildCell, buildWorkbook } from "../spreadsheet/projection";
 import { createSheetsUniver, loadWorkbook, type SheetsUniver } from "../spreadsheet/univer";
 import { applyViewState, captureViewState, load as loadView, save as saveView } from "../spreadsheet/viewState";
-import { INITIAL_EDITOR_STATE, canEdit, canRefreshOnly, canSave, reducer } from "./state";
+import { INITIAL_EDITOR_STATE, canEdit, canRefreshOnly, canSave, canSubmit, canValidate, reducer } from "./state";
 
 const REPO_NAME = "LumioConfig";
 const AUTOSAVE_MS = 2000;
@@ -47,6 +50,9 @@ export interface PocBridge {
   persistViewNow: () => void;
   draftVersion: () => number;
   phase: () => string;
+  buildPatch: () => PatchObject | null;
+  validateNow: () => Promise<unknown>;
+  submitNow: () => Promise<unknown>;
 }
 
 declare global {
@@ -64,6 +70,12 @@ export function App() {
   const [tableNames, setTableNames] = useState<{ name: string; label?: string }[] | undefined>(undefined);
   const [dirtyCounts, setDirtyCounts] = useState<Record<string, number>>({});
   const [errors, setErrors] = useState<Array<{ code?: string; message?: string }>>([]);
+  const [patchPreview, setPatchPreview] = useState<PatchObject | null>(null);
+  const [summary, setSummary] = useState("");
+  const [revisionLabel, setRevisionLabel] = useState("");
+  const [autoCommit, setAutoCommit] = useState(true);
+  const [autoExport, setAutoExport] = useState(false);
+  const patchRef = useRef<PatchObject | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; rowKey: string; column: string } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<SheetsUniver | null>(null);
@@ -78,6 +90,7 @@ export function App() {
   const refOptionsRef = useRef<Record<string, string[]>>({});
   const persistDraftRef = useRef<() => Promise<number | undefined>>(async () => undefined);
   const savingRef = useRef(false);
+  const pendingHintRef = useRef("");
   stateRef.current = state;
 
   const persistView = useCallback((table: string) => {
@@ -122,6 +135,7 @@ export function App() {
     }
     if (
       savingRef.current ||
+      current.phase === "Opening" ||
       current.phase === "Failed" ||
       current.phase === "Stale" ||
       current.phase === "Closed" ||
@@ -244,6 +258,10 @@ export function App() {
         const dirty = countDirty(map, tokens);
         dispatch({ type: "dirty", dirtyCount: dirty });
         setDirtyCounts((current) => ({ ...current, [table.table]: dirty }));
+        if (pendingHintRef.current) {
+          dispatch({ type: "hint", hint: pendingHintRef.current });
+          pendingHintRef.current = "";
+        }
       }
     },
     [markDirty],
@@ -262,6 +280,7 @@ export function App() {
       instanceRef.current?.dispose();
       instanceRef.current = null;
       interceptorsRef.current = null;
+      mapRef.current = null;
       container.replaceChildren();
       const loadStarted = performance.now();
       timingsRef.current = { loadStarted };
@@ -315,6 +334,77 @@ export function App() {
     [hostMode, mountWorkbook, persistView],
   );
 
+  const currentPatch = useCallback((): PatchObject | null => {
+    const map = mapRef.current;
+    const univerAPI = instanceRef.current?.univerAPI;
+    if (!map || !univerAPI) {
+      return null;
+    }
+    const tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
+    return buildPatch(map, tokens);
+  }, []);
+
+  const validateNow = useCallback(async () => {
+    const patch = currentPatch();
+    if (!patch || !hostMode) {
+      return undefined;
+    }
+    dispatch({ type: "validate" });
+    try {
+      const result = await api<PatchValidateResponse>("/api/patch/validate", {
+        method: "POST",
+        body: JSON.stringify(patch),
+      });
+      patchRef.current = patch;
+      setPatchPreview(patch);
+      setSummary(result.summary);
+      setErrors(result.errors);
+      dispatch({ type: "validated", ok: result.ok, hint: result.ok ? result.summary : "预检失败" });
+      return result;
+    } catch (error) {
+      dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
+      return undefined;
+    }
+  }, [currentPatch, hostMode]);
+
+  const submitNow = useCallback(async () => {
+    if (!hostMode) {
+      return undefined;
+    }
+    const patch = patchRef.current ?? currentPatch();
+    if (!patch) {
+      return undefined;
+    }
+    dispatch({ type: "submit" });
+    try {
+      const result = await providerRef.current.submit(patch);
+      if (!result.ok) {
+        setErrors(result.errors);
+        const conflict = result.errors.some(
+          (item) => item.code === "STALE_BASELINE" || item.code === "DELETED_ROW_CONFLICT",
+        );
+        if (conflict) {
+          dispatch({ type: "failed", hint: result.errors[0]?.message ?? "提交冲突" });
+        } else {
+          dispatch({ type: "validated", ok: false, hint: result.errors[0]?.message ?? result.summary ?? "提交失败" });
+        }
+        return result;
+      }
+      dispatch({ type: "submitted", fingerprint: result.result?.sourceFingerprint ?? stateRef.current.fingerprint });
+      if (result.result?.vcs?.action === "none" && patch.ops.length > 0) {
+        pendingHintRef.current = "未提交";
+        dispatch({ type: "hint", hint: "未提交" });
+      }
+      setDirtyCounts((current) => ({ ...current, [stateRef.current.table]: 0 }));
+      setErrors([]);
+      openTable(stateRef.current.table);
+      return result;
+    } catch (error) {
+      dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
+      return undefined;
+    }
+  }, [currentPatch, hostMode, openTable]);
+
   useEffect(() => {
     openTable("skills");
     return () => {
@@ -334,6 +424,9 @@ export function App() {
     void api<SessionResponse>("/api/session")
       .then((session) => {
         setTableNames(session.tables.map((item: SessionTableSummary) => ({ name: item.name, label: item.name })));
+        setRevisionLabel(`${session.revision.branch ?? session.revision.vcs}/${session.revision.id}`);
+        setAutoCommit(session.settings.submit.autoCommit);
+        setAutoExport(session.settings.submit.autoExport);
         dispatch({ type: "online", online: true });
       })
       .catch((error: unknown) => {
@@ -494,13 +587,16 @@ export function App() {
           persistView(mapRef.current.table);
         }
       },
+      buildPatch: () => currentPatch(),
+      validateNow: () => validateNow(),
+      submitNow: () => submitNow(),
       draftVersion: () => state.draftVersion,
       phase: () => state.phase,
     };
     return () => {
       delete window.__lumioPoc;
     };
-  }, [markDirty, mountWorkbook, persistDraft, state.draftVersion, state.hint, state.phase, state.table, writeToken]);
+  }, [currentPatch, markDirty, mountWorkbook, persistDraft, state.draftVersion, state.hint, state.phase, state.table, submitNow, validateNow, writeToken]);
 
   const onContextMenu = (event: MouseEvent<HTMLDivElement>) => {
     const map = mapRef.current;
@@ -566,6 +662,24 @@ export function App() {
               </li>
             ))}
           </ul>
+        ) : null}
+        {hostMode ? (
+          <DiffPreview
+            patch={patchPreview}
+            summary={summary}
+            revision={revisionLabel}
+            autoCommit={autoCommit}
+            autoExport={autoExport}
+            canValidate={canValidate(state)}
+            canSubmit={canSubmit(state)}
+            disabled={state.phase === "Submitting" || state.phase === "Validating"}
+            onValidate={() => {
+              void validateNow();
+            }}
+            onSubmit={() => {
+              void submitNow();
+            }}
+          />
         ) : null}
         <SettingsPanel enabled={hostMode} />
         {canRefreshOnly(state) ? (

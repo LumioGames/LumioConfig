@@ -24,4 +24,18 @@ describe("editor reducer", () => {
     expect(failed.phase).toBe("Failed");
     expect(canSave(failed)).toBe(false);
   });
+
+  it("moves ReadyDirty through Validating and ReadyToSubmit", () => {
+    const dirty = reducer(INITIAL_EDITOR_STATE, { type: "dirty", dirtyCount: 1 });
+    const validating = reducer(dirty, { type: "validate" });
+    expect(validating.phase).toBe("Validating");
+    const ready = reducer(validating, { type: "validated", ok: true, hint: "skills:" });
+    expect(ready.phase).toBe("ReadyToSubmit");
+    expect(canSubmit(ready)).toBe(true);
+    const submitting = reducer(ready, { type: "submit" });
+    expect(submitting.phase).toBe("Submitting");
+    const done = reducer(submitting, { type: "submitted", fingerprint: "fp2" });
+    expect(done.phase).toBe("ReadyClean");
+    expect(done.fingerprint).toBe("fp2");
+  });
 });

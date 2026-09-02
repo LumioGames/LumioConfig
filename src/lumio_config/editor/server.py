@@ -13,9 +13,12 @@ from queue import Empty
 from typing import Any, Callable
 from urllib.parse import unquote, urlparse
 
+from ..patch import validate_patch
+from ..summary import summarize_patch
 from .drafts import DraftStore, DraftVersionConflict, _write_json
 from .session import Session, SessionError
 from .settings import Settings, load_settings
+from .submit import submit
 from .vcs import make_adapter
 
 
@@ -235,6 +238,19 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
                 return
             self._error(404, "NOT_FOUND", "unknown api path")
 
+        def do_POST(self) -> None:  # noqa: N802
+            parsed = urlparse(self.path)
+            path = unquote(parsed.path)
+            if path.startswith("/api/") and not self._authorize_api():
+                return
+            if path == "/api/patch/validate":
+                self._patch_validate()
+                return
+            if path == "/api/patch/apply":
+                self._patch_apply()
+                return
+            self._error(404, "NOT_FOUND", "unknown api path")
+
         def _read_json(self) -> dict[str, Any]:
             length = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(length) if length else b"{}"
@@ -247,6 +263,17 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
                 self._error(404, "NOT_FOUND", f"no draft for {table}")
                 return
             self._json(200, draft)
+
+        def _patch_validate(self) -> None:
+            body = self._read_json()
+            errors = validate_patch(host.root, body)
+            summary = summarize_patch(host.root, body).get("text") or ""
+            self._json(200, {"ok": not errors, "summary": summary, "errors": errors})
+
+        def _patch_apply(self) -> None:
+            body = self._read_json()
+            result = submit(host.session, body, host.settings, host.session.adapter, host.drafts)
+            self._json(200, result.as_http())
 
         def _put_draft(self, table: str) -> None:
             body = self._read_json()

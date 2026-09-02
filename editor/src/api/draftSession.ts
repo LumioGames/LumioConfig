@@ -1,9 +1,7 @@
-import type { Draft, TableResponse } from "./types";
+import type { Draft, PatchApplyResponse, PatchObject, TableResponse } from "./types";
 import { api, HostApiError, subscribeEvents } from "./client";
 
-export interface SubmitResult {
-  ok: boolean;
-}
+export type SubmitResult = PatchApplyResponse;
 
 export interface DraftSessionProvider {
   load(table: string): Promise<{ table: TableResponse; draft?: Draft }>;
@@ -35,8 +33,11 @@ export class LocalDraftSessionProvider implements DraftSessionProvider {
     return result.draftVersion;
   }
 
-  async submit(_patch: unknown): Promise<SubmitResult> {
-    throw new Error("NotImplemented");
+  async submit(patch: unknown): Promise<SubmitResult> {
+    return api<PatchApplyResponse>("/api/patch/apply", {
+      method: "POST",
+      body: JSON.stringify(patch as PatchObject),
+    });
   }
 
   subscribe(handler: (name: string, data: unknown) => void): () => void {

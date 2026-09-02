@@ -75,7 +75,11 @@ function stopHost(child: ChildProcessWithoutNullStreams) {
 async function waitPoc(page: Page, url: string) {
   await page.goto(url);
   await page.getByTestId("univer-root").waitFor();
-  await page.waitForFunction(() => Boolean(window.__lumioPoc?.map?.()));
+  await page.waitForFunction(() => {
+    const poc = window.__lumioPoc;
+    const phase = poc?.phase?.();
+    return Boolean(poc?.map?.()) && (phase === "ReadyClean" || phase === "ReadyDirty");
+  });
 }
 
 test.describe("host drafts", () => {
@@ -112,8 +116,10 @@ test.describe("host drafts", () => {
       throw new Error("host missing");
     }
     await waitPoc(page, host.url);
-    await page.evaluate(() => window.__lumioPoc?.applyFourState("40001", "display_name", "null"));
-    const version = await page.evaluate(() => window.__lumioPoc?.saveDraftNow());
+    const version = await page.evaluate(async () => {
+      await window.__lumioPoc?.applyFourState("40001", "display_name", "null");
+      return window.__lumioPoc?.saveDraftNow();
+    });
     expect(version).toBeGreaterThan(0);
     await page.reload();
     await page.waitForFunction(() => Boolean(window.__lumioPoc?.map?.()));
@@ -121,8 +127,10 @@ test.describe("host drafts", () => {
     expect(restored).toBe("null");
     const shown = await page.evaluate(() => window.__lumioPoc?.draftVersion());
     expect(shown).toBe(version);
-    await page.evaluate(() => window.__lumioPoc?.applyFourState("40001", "display_name", "empty"));
-    const next = await page.evaluate(() => window.__lumioPoc?.saveDraftNow());
+    const next = await page.evaluate(async () => {
+      await window.__lumioPoc?.applyFourState("40001", "display_name", "empty");
+      return window.__lumioPoc?.saveDraftNow();
+    });
     expect(next).toBe((version ?? 0) + 1);
   });
 
@@ -133,11 +141,15 @@ test.describe("host drafts", () => {
     await waitPoc(page, host.url);
     const page2 = await context.newPage();
     await waitPoc(page2, host.url);
-    await page.evaluate(() => window.__lumioPoc?.applyFourState("40001", "icon", "null"));
-    const first = await page.evaluate(() => window.__lumioPoc?.saveDraftNow());
+    const first = await page.evaluate(async () => {
+      await window.__lumioPoc?.applyFourState("40001", "icon", "null");
+      return window.__lumioPoc?.saveDraftNow();
+    });
     expect(first).toBeGreaterThan(0);
-    await page2.evaluate(() => window.__lumioPoc?.applyFourState("40001", "icon", "empty"));
-    const second = await page2.evaluate(() => window.__lumioPoc?.saveDraftNow());
+    const second = await page2.evaluate(async () => {
+      await window.__lumioPoc?.applyFourState("40001", "icon", "empty");
+      return window.__lumioPoc?.saveDraftNow();
+    });
     expect(second).toBeUndefined();
     await expect(page2.getByTestId("status-hint")).toContainText("标签页");
     await expect(page2.getByTestId("draft-refresh")).toBeVisible();
@@ -171,8 +183,10 @@ test.describe("host drafts", () => {
       throw new Error("host missing");
     }
     await waitPoc(page, host.url);
-    await page.evaluate(() => window.__lumioPoc?.applyFourState("40001", "display_name", "default"));
-    const version = await page.evaluate(() => window.__lumioPoc?.saveDraftNow());
+    const version = await page.evaluate(async () => {
+      await window.__lumioPoc?.applyFourState("40001", "display_name", "default");
+      return window.__lumioPoc?.saveDraftNow();
+    });
     expect(version).toBeGreaterThan(0);
     await stopHost(host.child);
     host = await startHost(tmp);

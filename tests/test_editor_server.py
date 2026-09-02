@@ -133,8 +133,9 @@ class VcsTests(unittest.TestCase):
             )
             dirty = adapter.status(["tables", "registry", "schemas"])
             self.assertTrue(any("skills.txt" in path.replace("\\", "/") for path in dirty), dirty)
-            with self.assertRaises(NotImplementedError):
-                adapter.commit(["tables/skills.txt"], "nope")
+            identity = adapter.commit(["tables/skills.txt"], "config(skills): test")
+            self.assertTrue(identity)
+            self.assertEqual(adapter.status(["tables", "registry", "schemas"]), [])
 
     def test_svn_and_none_adapters(self):
         with tempfile.TemporaryDirectory() as temp:

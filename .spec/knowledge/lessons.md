@@ -23,3 +23,4 @@ metadata:
 - AI 工具面只有查/提案/预检/预演/提交；`query` 与 `preview` 不得写权威源；帮助与子命令枚举不得出现上线动作。
 - 语义摘要必须调用 `summarize_ops`；四态 token 与五层 origin 写进 structured changes，缺模拟器只能标 `unavailable`。
 - 编辑器 Host 只绑 127.0.0.1；VCS 命令必须走白名单 argv 列表，禁止 shell=True；SSE 只在指纹复核变化后发事件。
+- 空 `ops` 提交不得走 `git commit`（工作树无改动会变成 `VCS_COMMIT_FAILED`）；提交成功后重载表要先把 `mapRef` 置空，否则下一拍 `executeCommand` 会打在已 dispose 的 Univer 上。
