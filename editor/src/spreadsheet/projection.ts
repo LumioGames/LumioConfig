@@ -1,4 +1,13 @@
-import type { CellToken, Draft, DraftCell, ProjectionMap, TableColumn, TableResponse, TableRow } from "../api/types";
+import type {
+  CellToken,
+  Draft,
+  DraftCell,
+  ProjectionMap,
+  RebaseResponse,
+  TableColumn,
+  TableResponse,
+  TableRow,
+} from "../api/types";
 import {
   badgeFor,
   DRAFT_ID_LABEL,
@@ -282,4 +291,67 @@ export function applyDraft(
     rows.push({ id: key, name, cells });
   }
   return { table: { ...table, rows }, stale: false };
+}
+
+export function workbookFromWarehouse(
+  warehouse: TableResponse,
+  overlay: Draft | undefined,
+  options?: { refOptions?: Record<string, string[]> },
+): { workbook: WorkbookData; map: ProjectionMap; displayed: TableResponse } {
+  const usable = overlay
+    ? { ...overlay, baseFingerprint: warehouse.sourceFingerprint }
+    : undefined;
+  const displayed = usable ? applyDraft(warehouse, usable).table : warehouse;
+  const { workbook, map } = buildWorkbook(displayed, options);
+  map.baseCells = tokensFromTable(warehouse);
+  map.baseFingerprint = warehouse.sourceFingerprint;
+  if (usable) {
+    map.deleted = new Set(usable.deleted ?? []);
+  }
+  return { workbook, map, displayed };
+}
+
+export function applyRebase(
+  table: TableResponse,
+  map: ProjectionMap,
+  result: RebaseResponse,
+): { table: TableResponse; map: ProjectionMap } {
+  const warehouse = { ...table, sourceFingerprint: result.baseFingerprint || table.sourceFingerprint };
+  map.baseFingerprint = warehouse.sourceFingerprint;
+  map.baseCells = tokensFromTable(warehouse);
+  map.conflicts = result.conflicts ?? [];
+  const conflictKeys = new Set(map.conflicts.map((item) => `${item.rowId ?? ""}:${item.column}`));
+  const filteredRows: Draft["rows"] = {};
+  for (const [rowKey, cells] of Object.entries(result.draft?.rows ?? {})) {
+    const next: Record<string, DraftCell | string> = {};
+    for (const [column, value] of Object.entries(cells)) {
+      if (!conflictKeys.has(`${rowKey}:${column}`)) {
+        next[column] = value;
+      }
+    }
+    if (Object.keys(next).length) {
+      filteredRows[rowKey] = next;
+    }
+  }
+  const overlay: Draft = {
+    ...result.draft,
+    table: result.draft?.table ?? table.table,
+    baseFingerprint: warehouse.sourceFingerprint,
+    draftVersion: result.draftVersion,
+    rows: filteredRows,
+    renamed: result.ok ? result.draft?.renamed : {},
+    deleted: result.ok ? result.draft?.deleted : [],
+  };
+  const applied = applyDraft(warehouse, overlay);
+  map.deleted = new Set(overlay.deleted ?? []);
+  const keys = applied.table.rows.map((row) => String(row.id));
+  for (const key of keys) {
+    if (!map.rowKeys.includes(key)) {
+      map.rowKeys.push(key);
+    }
+  }
+  map.rowKeys = map.rowKeys.filter(
+    (key) => key.startsWith("draft:") || keys.includes(key) || (map.conflicts ?? []).some((item) => item.rowId === key),
+  );
+  return { table: applied.table, map };
 }

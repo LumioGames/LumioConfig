@@ -249,6 +249,14 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
             if path == "/api/patch/apply":
                 self._patch_apply()
                 return
+            rebase_match = re.fullmatch(r"/api/drafts/([^/]+)/rebase", path)
+            if rebase_match:
+                table = rebase_match.group(1)
+                if not _valid_table(table):
+                    self._error(404, "NOT_FOUND", "unknown table")
+                    return
+                self._draft_rebase(table)
+                return
             self._error(404, "NOT_FOUND", "unknown api path")
 
         def _read_json(self) -> dict[str, Any]:
@@ -273,6 +281,26 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
         def _patch_apply(self) -> None:
             body = self._read_json()
             result = submit(host.session, body, host.settings, host.session.adapter, host.drafts)
+            self._json(200, result.as_http())
+
+        def _draft_rebase(self, table: str) -> None:
+            body = self._read_json()
+            expected = int(body.get("expectedDraftVersion") or 0)
+            draft = host.drafts.load(table)
+            if draft is None:
+                self._error(404, "NOT_FOUND", f"no draft for {table}")
+                return
+            if int(draft.get("draftVersion") or 0) != expected:
+                self._error(
+                    409,
+                    "DRAFT_VERSION_CONFLICT",
+                    "another tab already saved this draft",
+                    [{"table": table, "row": "", "column": "", "code": "DRAFT_VERSION_CONFLICT", "message": "draft version mismatch", "suggestion": "reload the draft"}],
+                )
+                return
+            result = host.session.rebase_draft(table, draft, host.drafts)
+            if result.ok:
+                host.session._publish("draft_saved", {"table": table, "draftVersion": result.draft_version})
             self._json(200, result.as_http())
 
         def _put_draft(self, table: str) -> None:
