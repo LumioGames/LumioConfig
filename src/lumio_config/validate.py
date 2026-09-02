@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
 
@@ -18,8 +19,26 @@ INTEGER_TYPES = {
     "u64": (0, 2**64 - 1),
 }
 FLOAT_TYPES = {"f32", "f64"}
+UNIT_SECONDS = "seconds"
+UNIT_PERCENT = "percent"
+KNOWN_UNITS = {UNIT_SECONDS, UNIT_PERCENT}
 TARGETS = ("S", "C", "V")
 _INTEGER = re.compile(r"^-?(0|[1-9][0-9]*)$")
+_DECIMAL = re.compile(r"^-?(0|[1-9][0-9]*)(\.[0-9]+)?$")
+_TICK_RATE = re.compile(r"^\s*tickRate:\s*(\d+)\s*$")
+
+
+def load_tick_rate(root: Path) -> int:
+    path = Path(root) / "repository.yaml"
+    if not path.exists():
+        return 60
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = _TICK_RATE.match(line)
+        if match:
+            value = int(match.group(1))
+            if value > 0:
+                return value
+    return 60
 
 
 def _error(
@@ -68,7 +87,22 @@ def _default_cell(column: dict[str, Any]) -> Cell | None:
     return Cell("value", str(value))
 
 
-def _parse_scalar(cell: Cell, column: dict[str, Any]) -> tuple[bool, Any, str | None]:
+def convert_unit(raw: str, unit: str, tick_rate: int) -> int | None:
+    try:
+        number = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        return None
+    if unit == UNIT_SECONDS:
+        converted = number * Decimal(tick_rate)
+    elif unit == UNIT_PERCENT:
+        converted = number * Decimal(10)
+    else:
+        return None
+    quantized = converted.to_integral_value(rounding=ROUND_HALF_UP)
+    return int(quantized)
+
+
+def _parse_scalar(cell: Cell, column: dict[str, Any], tick_rate: int = 60) -> tuple[bool, Any, str | None]:
     """Return (present, typed value, error code)."""
     if cell.state == "missing":
         return False, None, None
@@ -76,7 +110,7 @@ def _parse_scalar(cell: Cell, column: dict[str, Any]) -> tuple[bool, Any, str | 
         default = _default_cell(column)
         if default is None:
             return False, None, "MISSING_DEFAULT"
-        return _parse_scalar(default, column)
+        return _parse_scalar(default, column, tick_rate)
     if cell.state == "null":
         return True, None, None
     assert cell.value is not None
@@ -93,9 +127,18 @@ def _parse_scalar(cell: Cell, column: dict[str, Any]) -> tuple[bool, Any, str | 
             return True, raw.lower() == "true", None
         return True, None, "TYPE_MISMATCH"
     if kind in INTEGER_TYPES:
-        if not _INTEGER.fullmatch(raw):
-            return True, None, "TYPE_MISMATCH"
-        value = int(raw)
+        unit = column.get("unit")
+        if unit in KNOWN_UNITS:
+            if not _DECIMAL.fullmatch(raw):
+                return True, None, "TYPE_MISMATCH"
+            converted = convert_unit(raw, str(unit), tick_rate)
+            if converted is None:
+                return True, None, "TYPE_MISMATCH"
+            value = converted
+        else:
+            if not _INTEGER.fullmatch(raw):
+                return True, None, "TYPE_MISMATCH"
+            value = int(raw)
         lower, upper = INTEGER_TYPES[kind]
         if not lower <= value <= upper:
             return True, None, "RANGE_OVERFLOW"
@@ -107,10 +150,8 @@ def _parse_scalar(cell: Cell, column: dict[str, Any]) -> tuple[bool, Any, str | 
             return True, None, "TYPE_MISMATCH"
         if not math.isfinite(value):
             return True, None, "NON_FINITE_FLOAT"
-        if kind == "f32":
-            # The bootstrap accepts finite decimal input; the exact bit policy is
-            # intentionally left to the architecture ADR described in PR #49.
-            value = float(value)
+        if value == 0:
+            value = 0.0
         return True, value, None
     if kind == "enum":
         values = column.get("enumValues")
@@ -183,6 +224,7 @@ def load_sources(root: Path) -> tuple[dict[str, dict[str, Any]], dict[str, Table
 def validate_repository(root: Path) -> list[dict[str, str]]:
     root = Path(root)
     schemas, tables, errors = load_sources(root)
+    tick_rate = load_tick_rate(root)
     ids_by_table: dict[str, set[str]] = {}
 
     for table_name, schema in schemas.items():
@@ -245,7 +287,7 @@ def validate_repository(root: Path) -> list[dict[str, str]]:
             ids.add(row_id)
             for column_name, column in column_map.items():
                 cell = row.get(column_name, Cell("missing"))
-                present, value, parse_error = _parse_scalar(cell, column)
+                present, value, parse_error = _parse_scalar(cell, column, tick_rate)
                 required = bool(column.get("required", False))
                 if not present:
                     if required:
@@ -296,7 +338,7 @@ def validate_repository(root: Path) -> list[dict[str, str]]:
             for column_name, column in column_map.items():
                 if column.get("type") != "ref":
                     continue
-                present, value, parse_error = _parse_scalar(row.get(column_name, Cell("missing")), column)
+                present, value, parse_error = _parse_scalar(row.get(column_name, Cell("missing")), column, tick_rate)
                 if not present or parse_error or value is None:
                     continue
                 target = str(column.get("refTarget", ""))
@@ -343,6 +385,6 @@ def validate_repository(root: Path) -> list[dict[str, str]]:
     return _sort_errors(errors)
 
 
-def effective_value(cell: Cell, column: dict[str, Any]) -> tuple[bool, Any]:
-    present, value, _ = _parse_scalar(cell, column)
+def effective_value(cell: Cell, column: dict[str, Any], tick_rate: int = 60) -> tuple[bool, Any]:
+    present, value, _ = _parse_scalar(cell, column, tick_rate)
     return present, value

@@ -19,3 +19,4 @@ metadata:
 - Schema 列 `ordinal` 是列的稳定序号（改名/重排仍识别），不是行座位号；内容指纹按 ordinal 排列表，不得把座位号写入 `tables/` 或 `registry/`。
 - 单元格三方合并比较的是四态 token（`""` / `null` / `@default` / `0` 互异），不是显示串；无 `base` 的补丁不做三方。
 - `seat` / `revisionOrdinal` 不得写入补丁或 registry；改名把旧名记入 `row-ids.json` 的 `aliases`，lookup 仍按终身编号。
+- 五层 overlay 只 update 既有行；出处标签进独立 `origins.json`，不得写进 S/C/V 投影行。权威数值列产物必须是整数：`seconds`×tickRate、`percent`×10。

@@ -26,3 +26,5 @@ security:
   productionActivation: human-only
   aiActivation: forbidden
   secretsInRepository: forbidden
+simulation:
+  tickRate: 60

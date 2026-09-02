@@ -34,4 +34,11 @@
 
     python tools/lumio_config.py export --out build/export
 
-先验证源，再生成 server/、client/、voxel/ 和 manifest.json。输出目录是生成物，默认被 Git 忽略。
+先验证源，再按 engine→platform→server→product→environment 合并 `layers/` overlay，做单位换算，生成：
+
+- `server|client|voxel/<table>.json` 三端投影（行内不含 origin）
+- `server|client|voxel/manifest.json` 分端清单（表描述 → 块描述；首版一表一块，块指纹 = 包裹指纹）
+- `origins.json` 每值出处层标签
+- `manifest.json` 发布清单，含内容/包裹/底稿三指纹与 `compilerHash` / `inputHash` / `outputHash`
+
+输出目录是生成物，默认被 Git 忽略。
