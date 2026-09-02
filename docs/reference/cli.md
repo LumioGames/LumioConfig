@@ -57,3 +57,9 @@
 - `manifest.json` 发布清单，含内容/包裹/底稿三指纹与 `compilerHash` / `inputHash` / `outputHash`
 
 输出目录是生成物，默认被 Git 忽略。
+
+## serve
+
+    python tools/lumio_config.py serve [--port 0] [--no-open] [--root <repo>]
+
+启动只绑 `127.0.0.1` 的本地编辑器 Host。`--port 0` 取随机高位端口。启动打印 `http://127.0.0.1:<port>/#token=<token>`。`tables/` `registry/` `schemas/` 有未提交改动且 `openPolicy.allowDirtyWorkingTree` 为 false 时退出码 3，打印 `WORKING_TREE_DIRTY` 与文件列表。`vcs=none` 不检查。提供 `GET /api/session`、`GET /api/tables/{table}`、`GET /api/events`、`DELETE /api/session`。本命令不提交、不导表。

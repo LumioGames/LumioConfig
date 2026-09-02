@@ -1,0 +1,13 @@
+{
+  "vcs": "",
+  "submit": {
+    "autoCommit": true,
+    "autoExport": false
+  },
+  "export": {
+    "outDir": "build/export"
+  },
+  "openPolicy": {
+    "allowDirtyWorkingTree": false
+  }
+}
