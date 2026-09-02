@@ -10,5 +10,10 @@
   "drops": {
     "ember_cache": 60001,
     "winter_cache": 60002
+  },
+  "aliases": {
+    "skills": {},
+    "effects": {},
+    "drops": {}
   }
 }

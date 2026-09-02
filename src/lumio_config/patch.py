@@ -7,7 +7,16 @@ from pathlib import Path
 from typing import Any
 
 from .fingerprint import source_fingerprint
-from .ids import allocate_permanent_id, issue_lock, load_json_object, write_json
+from .ids import (
+    alias_ids,
+    allocate_permanent_id,
+    contains_forbidden_ordinal_keys,
+    issue_lock,
+    live_ids,
+    load_json_object,
+    record_alias,
+    write_json,
+)
 from .model import Cell, TableSource, ValidationError
 from .summary import summarize_ops
 from .text_table import format_table_text
@@ -49,9 +58,12 @@ def _cell_from_patch_value(raw: Any) -> Cell:
 
 
 def _resolve_ref_name(name: str, target: str, row_ids: dict[str, Any], tables: dict[str, TableSource]) -> str | None:
-    mapping = row_ids.get(target, {})
-    if isinstance(mapping, dict) and name in mapping:
+    mapping = live_ids(row_ids, target)
+    if name in mapping:
         return str(mapping[name])
+    aliases = alias_ids(row_ids, target)
+    if name in aliases:
+        return str(aliases[name])
     table = tables.get(target)
     if table is None:
         return None
@@ -447,6 +459,8 @@ def _validate_patch_errors(root: Path, patch: dict[str, Any]) -> list[Validation
     errors: list[ValidationError] = []
     if not isinstance(patch, dict):
         return [_error("", code="PATCH_INVALID", message="patch must be a JSON object", suggestion="write an object with table and ops")]
+    if contains_forbidden_ordinal_keys(patch):
+        errors.append(_error(str(patch.get("table") or ""), code="ORDINAL_PERSISTED", message="patches must not persist seat or revisionOrdinal", suggestion="omit seat and revisionOrdinal; the issuer and compiler own those identities"))
     table_name = str(patch.get("table") or "")
     ops = patch.get("ops")
     if not table_name:
@@ -573,6 +587,7 @@ def _apply_ops(root: Path, patch: dict[str, Any]) -> None:
             mapping.pop(str(old_name), None)
             mapping.pop(name, None)
             mapping[new_name] = permanent
+            record_alias(row_ids, table_name, str(old_name), permanent)
         elif action == "delete":
             expect = op.get("expect") if isinstance(op.get("expect"), dict) else None
             row, _ = _locate_row(table, name, mapping, expect, id_column)
