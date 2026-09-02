@@ -40,6 +40,7 @@ export interface ProjectionMap {
   columns: string[];
   rowKeys: string[];
   baseCells: Record<string, Record<string, CellToken>>;
+  currentCells: Record<string, Record<string, CellToken>>;
   deleted: Set<string>;
 }
 
@@ -130,3 +131,32 @@ export interface CellDiff {
   expected: CellToken | undefined;
   actual: CellToken | undefined;
 }
+
+export interface DraftCell {
+  state: CellState;
+  raw: string;
+  effective?: unknown;
+}
+
+export interface Draft {
+  table: string;
+  baseFingerprint: string;
+  draftVersion: number;
+  savedAt?: string;
+  rows: Record<string, Record<string, DraftCell | string>>;
+  renamed?: Record<string, string>;
+  deleted?: string[];
+}
+
+export type EditorPhase =
+  | "Opening"
+  | "ReadyClean"
+  | "ReadyDirty"
+  | "SavingDraft"
+  | "Validating"
+  | "ReadyToSubmit"
+  | "Submitting"
+  | "Conflicted"
+  | "Stale"
+  | "Failed"
+  | "Closed";

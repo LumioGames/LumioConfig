@@ -1,5 +1,8 @@
-import type { ProjectionMap } from "../api/types";
-import { DRAFT_ID_LABEL, styleIdFor, writeLumioCustom } from "./cellMeta";
+import type { CellToken, ProjectionMap, TableColumn } from "../api/types";
+import { DRAFT_ID_LABEL, readLumioMeta, styleIdFor, tokenFromMeta, writeLumioCustom } from "./cellMeta";
+import { rememberToken } from "./extract";
+import { tokenForDeleteKey } from "./fourState";
+import { numberOutOfRange } from "./editors";
 
 export const HINTS = {
   formula: "公式不可用，配表不持久化公式",
@@ -40,6 +43,10 @@ export const COMMAND = {
   pasteFormula: "sheet.command.paste-formula",
   insertFunction: "formula-ui.operation.insert-function",
   moreFunctions: "formula-ui.operation.more-functions",
+  clearSelectionContent: "sheet.command.clear-selection-content",
+  clearSelectionAll: "sheet.command.clear-selection-all",
+  clearContent: "sheet.command.clear-selection",
+  autoFill: "sheet.command.auto-fill",
 } as const;
 
 const MERGE_IDS = new Set<string>([
@@ -86,6 +93,12 @@ const FORMULA_UI_IDS = new Set<string>([COMMAND.insertFunction, COMMAND.moreFunc
 
 const FORMULA_LIKE = /^=[A-Za-z]/;
 
+const CLEAR_IDS = new Set<string>([
+  COMMAND.clearSelectionContent,
+  COMMAND.clearSelectionAll,
+  COMMAND.clearContent,
+]);
+
 export interface CommandInterceptEvent {
   id: string;
   type?: unknown;
@@ -110,6 +123,10 @@ export interface InstallInterceptorsOptions {
   onHint?: (hint: string) => void;
   randomBytes?: () => Uint8Array;
   executeCommand?: (id: string, params?: unknown) => unknown;
+  tableColumns?: TableColumn[];
+  onChange?: () => void;
+  onViewChange?: () => void;
+  canEdit?: () => boolean;
 }
 
 function resolveHost(univer: unknown): InterceptorHost {
@@ -299,12 +316,16 @@ function dataInsertIndex(sheetRow: number, after: boolean): number {
 function applyInsert(map: ProjectionMap, params: unknown, after: boolean, randomBytes?: () => Uint8Array): string[] {
   const range = rowRange(params) ?? { startRow: 1, count: 1 };
   const index = Math.min(map.rowKeys.length, dataInsertIndex(range.startRow, after));
-  const keys: string[] = [];
-  for (let i = 0; i < range.count; i += 1) {
+  const rec = asRecord(params);
+  const preset = rec?.lumioDraftKeys;
+  const keys: string[] = Array.isArray(preset)
+    ? preset.filter((item): item is string => typeof item === "string")
+    : [];
+  while (keys.length < range.count) {
     keys.push(newDraftRowKey(randomBytes));
   }
-  map.rowKeys.splice(index, 0, ...keys);
-  return keys;
+  map.rowKeys.splice(index, 0, ...keys.slice(0, range.count));
+  return keys.slice(0, range.count);
 }
 
 function applyDelete(map: ProjectionMap, params: unknown): string[] {
@@ -320,7 +341,11 @@ function applyDelete(map: ProjectionMap, params: unknown): string[] {
   return removed;
 }
 
-function attachLumioFromEdit(params: unknown, map: ProjectionMap): void {
+function columnOf(options: InstallInterceptorsOptions | undefined, name: string): TableColumn | undefined {
+  return options?.tableColumns?.find((item) => item.name === name);
+}
+
+function attachLumioFromEdit(params: unknown, map: ProjectionMap, options?: InstallInterceptorsOptions): void {
   visitCells(params, (cell, row, col) => {
     if (row === undefined || col === undefined || row <= 0) {
       return;
@@ -330,12 +355,28 @@ function attachLumioFromEdit(params: unknown, map: ProjectionMap): void {
     if (!column || !rowKey) {
       return;
     }
+    const existing = readLumioMeta(cell as { custom?: Record<string, unknown> });
+    if (existing && existing.state && existing.state !== "value") {
+      const token = tokenFromMeta({ ...existing, column, rowKey });
+      cell.custom = {
+        ...asRecord(cell.custom),
+        ...writeLumioCustom({
+          ...existing,
+          column,
+          rowKey,
+        }),
+      };
+      rememberToken(map, rowKey, column, token);
+      return;
+    }
     const raw =
       cell.v === undefined || cell.v === null
         ? ""
         : typeof cell.v === "string"
           ? cell.v
           : String(cell.v);
+    const token: CellToken = { state: "value", raw, effective: cell.v ?? raw };
+    const desc = columnOf(options, column);
     cell.custom = {
       ...asRecord(cell.custom),
       ...writeLumioCustom({
@@ -346,6 +387,10 @@ function attachLumioFromEdit(params: unknown, map: ProjectionMap): void {
         rowKey,
       }),
     };
+    if (desc && numberOutOfRange(desc, raw)) {
+      cell.s = "invalid";
+    }
+    rememberToken(map, rowKey, column, token);
   });
 }
 
@@ -391,6 +436,11 @@ function writeDraftRow(
     const sheetRow = startSheetRow + offset;
     map.columns.forEach((column, colIndex) => {
       const value = column === "id" ? draftIdCell(rowKey) : missingCell(rowKey, column);
+      if (column === "id") {
+        rememberToken(map, rowKey, column, { state: "value", raw: "", effective: null });
+      } else {
+        rememberToken(map, rowKey, column, { state: "missing", raw: "@missing", effective: null });
+      }
       executeCommand(COMMAND.setRangeValues, {
         range: {
           startRow: sheetRow,
@@ -404,6 +454,21 @@ function writeDraftRow(
   });
 }
 
+function colRange(params: unknown): { startCol: number; endCol: number } {
+  const rec = asRecord(params);
+  const range = asRecord(rec?.range);
+  const startCol = numberOf(range?.startColumn) ?? numberOf(rec?.startColumn) ?? 0;
+  const endCol = numberOf(range?.endColumn) ?? numberOf(rec?.endColumn) ?? startCol;
+  return { startCol, endCol };
+}
+
+export function copyRowKey(map: ProjectionMap, sourceKey: string, randomBytes?: () => Uint8Array): string {
+  const key = newDraftRowKey(randomBytes);
+  const index = map.rowKeys.indexOf(sourceKey);
+  map.rowKeys.splice(index >= 0 ? index + 1 : map.rowKeys.length, 0, key);
+  return key;
+}
+
 export function installInterceptors(
   univer: unknown,
   map: ProjectionMap,
@@ -415,6 +480,18 @@ export function installInterceptors(
 
   const onBefore = (event: CommandInterceptEvent) => {
     const id = event.id;
+    const viewOnly =
+      id.includes("zoom") ||
+      id.includes("frozen") ||
+      id.includes("filter") ||
+      id.includes("sort") ||
+      id.includes("hide") ||
+      id.includes("width");
+    if (!viewOnly && options?.canEdit && !options.canEdit()) {
+      event.cancel = true;
+      hint("另一个标签页已保存，请刷新");
+      return;
+    }
     if (MERGE_IDS.has(id)) {
       event.cancel = true;
       hint(HINTS.merge);
@@ -443,7 +520,7 @@ export function installInterceptors(
         event.cancel = true;
         hint(HINTS.id);
       } else {
-        attachLumioFromEdit(event.params, map);
+        attachLumioFromEdit(event.params, map, options);
       }
       return;
     }
@@ -465,8 +542,55 @@ export function installInterceptors(
         return;
       }
       if (!isDraftIdWrite(event.params)) {
-        attachLumioFromEdit(event.params, map);
+        attachLumioFromEdit(event.params, map, options);
       }
+      return;
+    }
+    if (CLEAR_IDS.has(id)) {
+      const rows = rowRange(event.params);
+      if (!rows) {
+        return;
+      }
+      event.cancel = true;
+      const cols = colRange(event.params);
+      const execute = options?.executeCommand;
+      for (let sheetRow = rows.startRow; sheetRow < rows.startRow + rows.count; sheetRow += 1) {
+        if (sheetRow <= 0) {
+          continue;
+        }
+        const rowKey = map.rowKeys[sheetRow - 1];
+        if (!rowKey) {
+          continue;
+        }
+        for (let col = cols.startCol; col <= cols.endCol; col += 1) {
+          const columnName = map.columns[col];
+          if (!columnName || columnName === "id") {
+            continue;
+          }
+          const desc = columnOf(options, columnName);
+          if (!desc) {
+            continue;
+          }
+          const result = tokenForDeleteKey(desc);
+          if (!result.token) {
+            hint(result.hint ?? "required 列不能清空");
+            continue;
+          }
+          rememberToken(map, rowKey, columnName, result.token);
+          execute?.(COMMAND.setRangeValues, {
+            range: { startRow: sheetRow, startColumn: col, endRow: sheetRow, endColumn: col },
+            value: {
+              s: styleIdFor(result.token.state, false),
+              custom: writeLumioCustom({
+                ...result.token,
+                column: columnName,
+                rowKey,
+              }),
+            },
+          });
+        }
+      }
+      options?.onChange?.();
       return;
     }
     if (INSERT_ROW_IDS.has(id)) {
@@ -489,14 +613,22 @@ export function installInterceptors(
     if (event.cancel) {
       return;
     }
-    if (!INSERT_ROW_IDS.has(event.id)) {
-      return;
+    if (INSERT_ROW_IDS.has(event.id)) {
+      const next = pendingInserts.shift();
+      if (next) {
+        writeDraftRow(options?.executeCommand, map, next.keys, next.startSheetRow);
+      }
     }
-    const next = pendingInserts.shift();
-    if (!next) {
-      return;
+    if (
+      PASTE_IDS.has(event.id) ||
+      event.id === COMMAND.setRangeValues ||
+      event.id === COMMAND.setRangeValuesMutation ||
+      INSERT_ROW_IDS.has(event.id) ||
+      DELETE_ROW_IDS.has(event.id)
+    ) {
+      options?.onChange?.();
     }
-    writeDraftRow(options?.executeCommand, map, next.keys, next.startSheetRow);
+    options?.onViewChange?.();
   };
 
   const disposers: Array<{ dispose(): void }> = [];

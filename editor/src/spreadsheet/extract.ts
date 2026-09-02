@@ -1,5 +1,6 @@
-import type { CellToken, ProjectionMap } from "../api/types";
+import type { CellToken, Draft, DraftCell, ProjectionMap } from "../api/types";
 import { readLumioMeta, tokenFromMeta } from "./cellMeta";
+import { tokenEqual } from "./tokens";
 import type { WorkbookData, WorksheetData } from "./workbook-types";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -79,6 +80,24 @@ export function extractTokens(
         cells[column] = tokenFromMeta(meta);
         return;
       }
+      if (column === "id" && rowKey.startsWith("draft:")) {
+        cells[column] = { state: "value", raw: "", effective: null };
+        return;
+      }
+      const fromCurrent = map.currentCells?.[rowKey]?.[column];
+      if (fromCurrent) {
+        cells[column] = fromCurrent;
+        return;
+      }
+      const fromMap = map.baseCells[rowKey]?.[column];
+      if (fromMap) {
+        cells[column] = fromMap;
+        return;
+      }
+      if (rowKey.startsWith("draft:")) {
+        cells[column] = { state: "missing", raw: "@missing", effective: null };
+        return;
+      }
       throw new Error(
         `extractTokens: cell ${rowKey}.${column} has no lumio state metadata (refusing to guess from style)`,
       );
@@ -87,4 +106,106 @@ export function extractTokens(
   });
 
   return out;
+}
+
+export function mergeCurrentCells(
+  map: ProjectionMap,
+  tokens: Record<string, Record<string, CellToken>>,
+): Record<string, Record<string, CellToken>> {
+  const out: Record<string, Record<string, CellToken>> = { ...tokens };
+  for (const [rowKey, cells] of Object.entries(map.currentCells ?? {})) {
+    out[rowKey] = { ...out[rowKey], ...cells };
+  }
+  return out;
+}
+
+export function rememberToken(map: ProjectionMap, rowKey: string, column: string, token: CellToken): void {
+  if (!map.currentCells) {
+    map.currentCells = {};
+  }
+  if (!map.currentCells[rowKey]) {
+    map.currentCells[rowKey] = {};
+  }
+  map.currentCells[rowKey][column] = token;
+}
+
+export function countDirty(
+  map: ProjectionMap,
+  tokens: Record<string, Record<string, CellToken>>,
+): number {
+  let n = map.deleted.size;
+  for (const [rowKey, cells] of Object.entries(tokens)) {
+    if (rowKey.startsWith("draft:")) {
+      n += Object.keys(cells).length;
+      continue;
+    }
+    const base = map.baseCells[rowKey] ?? {};
+    for (const [column, token] of Object.entries(cells)) {
+      if (!tokenEqual(token, base[column])) {
+        n += 1;
+      }
+    }
+  }
+  return n;
+}
+
+function asDraftCell(token: CellToken): DraftCell {
+  return { state: token.state, raw: token.raw, effective: token.effective };
+}
+
+export function buildDraft(
+  table: string,
+  map: ProjectionMap,
+  tokens: Record<string, Record<string, CellToken>>,
+  draftVersion: number,
+): Draft {
+  const rows: Draft["rows"] = {};
+  const renamed: Record<string, string> = {};
+  for (const rowKey of map.rowKeys) {
+    if (map.deleted.has(rowKey)) {
+      continue;
+    }
+    const current = tokens[rowKey] ?? {};
+    if (rowKey.startsWith("draft:")) {
+      const patch: Record<string, DraftCell | string> = {};
+      for (const [column, token] of Object.entries(current)) {
+        if (column === "id") {
+          continue;
+        }
+        if (column === "name") {
+          patch.name = String(token.effective ?? token.raw);
+          continue;
+        }
+        patch[column] = asDraftCell(token);
+      }
+      rows[rowKey] = patch;
+      continue;
+    }
+    const base = map.baseCells[rowKey] ?? {};
+    const patch: Record<string, DraftCell | string> = {};
+    for (const [column, token] of Object.entries(current)) {
+      if (tokenEqual(token, base[column])) {
+        continue;
+      }
+      if (column === "id") {
+        continue;
+      }
+      if (column === "name") {
+        renamed[rowKey] = String(token.effective ?? token.raw);
+        continue;
+      }
+      patch[column] = asDraftCell(token);
+    }
+    if (Object.keys(patch).length) {
+      rows[rowKey] = patch;
+    }
+  }
+  return {
+    table,
+    baseFingerprint: map.baseFingerprint,
+    draftVersion,
+    rows,
+    renamed,
+    deleted: [...map.deleted],
+  };
 }

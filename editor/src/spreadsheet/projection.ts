@@ -1,10 +1,11 @@
-import type { CellToken, ProjectionMap, TableColumn, TableResponse } from "../api/types";
+import type { CellToken, Draft, DraftCell, ProjectionMap, TableColumn, TableResponse, TableRow } from "../api/types";
 import {
   badgeFor,
   DRAFT_ID_LABEL,
   styleIdFor,
   writeLumioCustom,
 } from "./cellMeta";
+import { numberOutOfRange, validationRules } from "./editors";
 import { tokensFromTable } from "./tokens";
 import type { WorkbookCell, WorkbookData, WorksheetData } from "./workbook-types";
 
@@ -55,6 +56,11 @@ const STYLES: WorkbookData["styles"] = {
     fs: 11,
     vt: 2,
   },
+  invalid: {
+    cl: { rgb: "#C5221F" },
+    fs: 11,
+    vt: 2,
+  },
 };
 
 function displayValue(
@@ -89,7 +95,7 @@ function displayFromEffective(value: unknown): {
   return { v: text, forceString };
 }
 
-function cellFor(
+export function buildCell(
   token: CellToken,
   column: TableColumn,
   rowKey: string,
@@ -121,10 +127,16 @@ function cellFor(
   } else if (typeof v === "string") {
     cell.t = 1;
   }
+  if (token.state === "value" && numberOutOfRange(column, token.raw)) {
+    cell.s = "invalid";
+  }
   return cell;
 }
 
-export function buildWorkbook(table: TableResponse): { workbook: WorkbookData; map: ProjectionMap } {
+export function buildWorkbook(
+  table: TableResponse,
+  options?: { refOptions?: Record<string, string[]> },
+): { workbook: WorkbookData; map: ProjectionMap } {
   const columns = table.columns.map((column) => column.name);
   const rowKeys = table.rows.map((row) => String(row.id));
   const baseCells = tokensFromTable(table);
@@ -134,6 +146,7 @@ export function buildWorkbook(table: TableResponse): { workbook: WorkbookData; m
     columns,
     rowKeys,
     baseCells,
+    currentCells: JSON.parse(JSON.stringify(baseCells)) as Record<string, Record<string, CellToken>>,
     deleted: new Set<string>(),
   };
 
@@ -158,7 +171,7 @@ export function buildWorkbook(table: TableResponse): { workbook: WorkbookData; m
         raw: "@missing",
         effective: null,
       };
-      line[String(colIndex)] = cellFor(token, column, rowKey);
+      line[String(colIndex)] = buildCell(token, column, rowKey);
     });
     cellData[String(sheetRow)] = line;
   });
@@ -200,7 +213,73 @@ export function buildWorkbook(table: TableResponse): { workbook: WorkbookData; m
     styles: STYLES,
     sheetOrder: [table.table],
     sheets: { [table.table]: sheet },
+    resources: [
+      {
+        name: "SHEET_DATA_VALIDATION_PLUGIN",
+        data: JSON.stringify({ [table.table]: validationRules(table, options?.refOptions ?? {}) }),
+      },
+    ],
   };
 
   return { workbook, map };
+}
+
+function asDraftCell(value: DraftCell | string | undefined): CellToken | undefined {
+  if (!value || typeof value === "string") {
+    return undefined;
+  }
+  return { state: value.state, raw: value.raw, effective: value.effective };
+}
+
+export function applyDraft(
+  table: TableResponse,
+  draft: Draft | undefined,
+): { table: TableResponse; stale: boolean } {
+  if (!draft) {
+    return { table, stale: false };
+  }
+  if (draft.baseFingerprint !== table.sourceFingerprint) {
+    return { table, stale: true };
+  }
+  const deleted = new Set(draft.deleted ?? []);
+  const renamed = draft.renamed ?? {};
+  const rows: TableRow[] = [];
+  for (const row of table.rows) {
+    const key = String(row.id);
+    if (deleted.has(key)) {
+      continue;
+    }
+    const patch = draft.rows[key] ?? {};
+    const nextName = renamed[key] ?? (typeof patch.name === "string" ? patch.name : row.name);
+    const cells = { ...row.cells };
+    for (const [column, value] of Object.entries(patch)) {
+      if (column === "name") {
+        continue;
+      }
+      const token = asDraftCell(value);
+      if (token) {
+        cells[column] = token;
+      }
+    }
+    rows.push({ id: row.id, name: nextName, cells });
+  }
+  for (const [key, patch] of Object.entries(draft.rows)) {
+    if (!key.startsWith("draft:")) {
+      continue;
+    }
+    const cells: Record<string, CellToken> = {};
+    let name = "";
+    for (const [column, value] of Object.entries(patch)) {
+      if (column === "name" && typeof value === "string") {
+        name = value;
+        continue;
+      }
+      const token = asDraftCell(value);
+      if (token) {
+        cells[column] = token;
+      }
+    }
+    rows.push({ id: key, name, cells });
+  }
+  return { table: { ...table, rows }, stale: false };
 }

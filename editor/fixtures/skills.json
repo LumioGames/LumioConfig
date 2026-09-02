@@ -8,7 +8,9 @@
     { "name": "effect_id", "type": "ref", "required": true, "refTarget": "effects", "visibility": "S" },
     { "name": "damage", "type": "i32", "required": true, "minimum": 0, "visibility": "S", "default": 0 },
     { "name": "cooldown_frames", "type": "i32", "required": true, "minimum": 1, "visibility": "S" },
-    { "name": "icon", "type": "string", "required": true, "visibility": "C", "default": "fx_none" }
+    { "name": "icon", "type": "string", "required": true, "visibility": "C", "default": "fx_none" },
+    { "name": "element", "type": "enum", "enumValues": ["fire", "ice", "none"], "required": false, "visibility": "S" },
+    { "name": "enabled", "type": "bool", "required": false, "visibility": "S", "default": true }
   ],
   "rows": [
     {
@@ -19,7 +21,9 @@
         "effect_id": { "state": "value", "raw": "50001", "effective": "50001" },
         "damage": { "state": "value", "raw": "120", "effective": 120 },
         "cooldown_frames": { "state": "value", "raw": "150", "effective": 150 },
-        "icon": { "state": "value", "raw": "fx_fireball", "effective": "fx_fireball" }
+        "icon": { "state": "value", "raw": "fx_fireball", "effective": "fx_fireball" },
+        "element": { "state": "value", "raw": "fire", "effective": "fire" },
+        "enabled": { "state": "value", "raw": "true", "effective": true }
       }
     },
     {

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+import os
 import re
 import secrets
 import threading
@@ -11,6 +13,7 @@ from queue import Empty
 from typing import Any, Callable
 from urllib.parse import unquote, urlparse
 
+from .drafts import DraftStore, DraftVersionConflict, _write_json
 from .session import Session, SessionError
 from .settings import Settings, load_settings
 from .vcs import make_adapter
@@ -20,6 +23,24 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "editor_static"
 CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
 RouteHandler = Callable[[Any, dict[str, str]], None]
 _EXTRA_ROUTES: list[tuple[str, re.Pattern[str], RouteHandler]] = []
+_TABLE_NAME = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _valid_table(name: str) -> bool:
+    return bool(_TABLE_NAME.fullmatch(name)) and ".." not in name
+
+
+def _static_root(host: EditorHost) -> Path | None:
+    candidates: list[Path] = []
+    env = os.environ.get("LUMIO_EDITOR_DIST")
+    if env:
+        candidates.append(Path(env))
+    candidates.append(STATIC_DIR)
+    candidates.append(host.root / "editor" / "dist")
+    for path in candidates:
+        if path.is_dir() and (path / "index.html").is_file():
+            return path
+    return None
 
 
 def register(method: str, path_pattern: str, handler: RouteHandler) -> None:
@@ -52,6 +73,7 @@ class EditorHost:
         self.token = secrets.token_urlsafe(32)
         self.settings = settings
         self.session = Session(self.root, settings, adapter, commit_allowed)  # type: ignore[arg-type]
+        self.drafts = DraftStore(self.root)
         self.running = True
         handler = _handler_for(self)
         self.httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
@@ -151,6 +173,14 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
                         return
                     self._json(200, table)
                     return
+                draft_match = re.fullmatch(r"/api/drafts/([^/]+)", path)
+                if draft_match:
+                    table = draft_match.group(1)
+                    if not _valid_table(table):
+                        self._error(404, "NOT_FOUND", "unknown table")
+                        return
+                    self._get_draft(table)
+                    return
                 if path == "/api/events":
                     self._sse()
                     return
@@ -174,7 +204,76 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
                 self.end_headers()
                 host.shutdown()
                 return
+            draft_match = re.fullmatch(r"/api/drafts/([^/]+)", path)
+            if draft_match:
+                table = draft_match.group(1)
+                if not _valid_table(table):
+                    self._error(404, "NOT_FOUND", "unknown table")
+                    return
+                host.drafts.delete(table)
+                self.send_response(204)
+                self.send_header("Content-Security-Policy", CSP)
+                self.end_headers()
+                return
             self._error(404, "NOT_FOUND", "unknown api path")
+
+        def do_PUT(self) -> None:  # noqa: N802
+            parsed = urlparse(self.path)
+            path = unquote(parsed.path)
+            if path.startswith("/api/") and not self._authorize_api():
+                return
+            if path == "/api/settings/local":
+                self._put_local_settings()
+                return
+            draft_match = re.fullmatch(r"/api/drafts/([^/]+)", path)
+            if draft_match:
+                table = draft_match.group(1)
+                if not _valid_table(table):
+                    self._error(404, "NOT_FOUND", "unknown table")
+                    return
+                self._put_draft(table)
+                return
+            self._error(404, "NOT_FOUND", "unknown api path")
+
+        def _read_json(self) -> dict[str, Any]:
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length else b"{}"
+            value = json.loads(raw.decode("utf-8") or "{}")
+            return value if isinstance(value, dict) else {}
+
+        def _get_draft(self, table: str) -> None:
+            draft = host.drafts.load(table)
+            if draft is None:
+                self._error(404, "NOT_FOUND", f"no draft for {table}")
+                return
+            self._json(200, draft)
+
+        def _put_draft(self, table: str) -> None:
+            body = self._read_json()
+            expected = int(body.get("expectedDraftVersion") or 0)
+            try:
+                version = host.drafts.save(table, body, expected)
+            except DraftVersionConflict as exc:
+                self._error(409, "DRAFT_VERSION_CONFLICT", "another tab already saved this draft", [{"table": table, "row": "", "column": "", "code": "DRAFT_VERSION_CONFLICT", "message": str(exc), "suggestion": "reload the draft"}])
+                return
+            host.session._publish("draft_saved", {"table": table, "draftVersion": version})
+            self._json(200, {"draftVersion": version})
+
+        def _put_local_settings(self) -> None:
+            body = self._read_json()
+            allowed = {"vcs", "submit", "export", "openPolicy"}
+            payload = {key: body[key] for key in allowed if key in body}
+            path = host.root / ".lumio" / "local.json"
+            current: dict[str, Any] = {}
+            if path.exists():
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    current = loaded
+            current.update(payload)
+            _write_json(path, current)
+            host.settings = load_settings(host.root)
+            host.session.reload_settings(host.settings)
+            self._json(200, {"ok": True, "settings": host.settings.as_public()})
 
         def _sse(self) -> None:
             self.send_response(200)
@@ -198,13 +297,30 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
                 return
 
         def _static(self, path: str) -> None:
-            if path == "/":
-                index = STATIC_DIR / "index.html"
-                if not index.exists():
+            root = _static_root(host)
+            if root is None:
+                if path == "/":
                     self._text(200, "前端未构建")
                     return
-                self._text(200, index.read_text(encoding="utf-8"), "text/html; charset=utf-8")
+                self._error(404, "NOT_FOUND", "not found")
                 return
-            self._error(404, "NOT_FOUND", "not found")
+            relative = "index.html" if path == "/" else path.lstrip("/")
+            target = (root / relative).resolve()
+            try:
+                target.relative_to(root.resolve())
+            except ValueError:
+                self._error(403, "FORBIDDEN", "path escapes static root")
+                return
+            if not target.is_file():
+                self._error(404, "NOT_FOUND", "not found")
+                return
+            content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+            data = target.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Security-Policy", CSP)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
 
     return EditorHandler
