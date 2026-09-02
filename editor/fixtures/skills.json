@@ -1,0 +1,48 @@
+{
+  "table": "skills",
+  "sourceFingerprint": "sha256:47f6f165261bffd277717d30342b6d724ffd070b8d7c223dbf1a54a496f2150e",
+  "columns": [
+    { "name": "id", "type": "u32", "required": true, "visibility": "SCV", "readOnly": true },
+    { "name": "name", "type": "string", "required": true, "visibility": "SCV" },
+    { "name": "display_name", "type": "string", "required": true, "visibility": "C" },
+    { "name": "effect_id", "type": "ref", "required": true, "refTarget": "effects", "visibility": "S" },
+    { "name": "damage", "type": "i32", "required": true, "minimum": 0, "visibility": "S", "default": 0 },
+    { "name": "cooldown_frames", "type": "i32", "required": true, "minimum": 1, "visibility": "S" },
+    { "name": "icon", "type": "string", "required": true, "visibility": "C", "default": "fx_none" }
+  ],
+  "rows": [
+    {
+      "id": 40001,
+      "name": "fireball",
+      "cells": {
+        "display_name": { "state": "value", "raw": "Fireball", "effective": "Fireball" },
+        "effect_id": { "state": "value", "raw": "50001", "effective": "50001" },
+        "damage": { "state": "value", "raw": "120", "effective": 120 },
+        "cooldown_frames": { "state": "value", "raw": "150", "effective": 150 },
+        "icon": { "state": "value", "raw": "fx_fireball", "effective": "fx_fireball" }
+      }
+    },
+    {
+      "id": 40002,
+      "name": "frostbolt",
+      "cells": {
+        "display_name": { "state": "value", "raw": "Frostbolt", "effective": "Frostbolt" },
+        "effect_id": { "state": "value", "raw": "50002", "effective": "50002" },
+        "damage": { "state": "value", "raw": "90", "effective": 90 },
+        "cooldown_frames": { "state": "value", "raw": "90", "effective": 90 },
+        "icon": { "state": "value", "raw": "fx_frostbolt", "effective": "fx_frostbolt" }
+      }
+    },
+    {
+      "id": 40090,
+      "name": "four_state_demo",
+      "cells": {
+        "display_name": { "state": "empty", "raw": "\"\"", "effective": "" },
+        "effect_id": { "state": "null", "raw": "null", "effective": null },
+        "damage": { "state": "default", "raw": "@default", "effective": 0 },
+        "cooldown_frames": { "state": "missing", "raw": "@missing", "effective": null },
+        "icon": { "state": "value", "raw": "火球🔥", "effective": "火球🔥" }
+      }
+    }
+  ]
+}
