@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const editorRoot = path.resolve(here, "../..");
 const repoRoot = path.resolve(editorRoot, "..");
-const distDir = path.join(editorRoot, "dist");
+const distDir = path.join(repoRoot, "src", "lumio_config", "editor_static");
 const python =
   process.env.PYTHON ?? "C:\\Users\\g923\\AppData\\Local\\Programs\\Python\\Python312\\python.exe";
 
@@ -90,7 +90,7 @@ test.describe("host drafts", () => {
 
   test.beforeAll(async () => {
     if (!fs.existsSync(path.join(distDir, "index.html"))) {
-      throw new Error("editor/dist missing; run pnpm build before host e2e");
+      throw new Error("editor_static missing; run pnpm build before host e2e");
     }
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lumio-r361-"));
     copyRepo(tmp);

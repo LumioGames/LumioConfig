@@ -16,6 +16,7 @@ import type {
 import { loadFixture } from "../fixtures/catalog";
 import { ConflictPanel } from "../panels/ConflictPanel";
 import { DiffPreview } from "../panels/DiffPreview";
+import { ExportPanel } from "../panels/ExportPanel";
 import { ErrorPanel } from "../panels/ErrorPanel";
 import { SettingsPanel } from "../panels/SettingsPanel";
 import { StatusBar } from "../panels/StatusBar";
@@ -922,6 +923,9 @@ export function App() {
               void submitNow();
             }}
           />
+        ) : null}
+        {hostMode ? (
+          <ExportPanel tables={tableNames?.map((item) => item.name) ?? [state.table]} selected={state.table} />
         ) : null}
         <SettingsPanel enabled={hostMode} />
         {canRefreshOnly(state) ? (

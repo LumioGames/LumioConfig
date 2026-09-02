@@ -148,6 +148,18 @@ body,
   border-bottom: 1px solid #eef2f6;
 }
 
+.export-panel {
+  margin: 8px 12px;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #d8dee6;
+}
+
+.export-panel label {
+  display: inline-block;
+  margin-right: 12px;
+}
+
 .conflict-panel {
   padding: 8px 12px;
   font-size: 12px;

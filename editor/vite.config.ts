@@ -13,8 +13,9 @@ export default defineConfig({
     port: 4173,
     strictPort: true,
   },
+  base: "./",
   build: {
-    outDir: "dist",
+    outDir: "../src/lumio_config/editor_static",
     emptyOutDir: true,
     sourcemap: false,
   },

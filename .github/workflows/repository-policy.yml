@@ -38,3 +38,57 @@ jobs:
           python tools/lumio_config.py export --out build/export
       - name: Check repository text
         run: git diff --check
+
+  editor:
+    name: Editor lint, test, and reproducible build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Check Univer deps
+        run: node scripts/check-deps.mjs
+      - name: Lint
+        run: pnpm lint
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+      - name: Reproducible editor_static
+        working-directory: .
+        run: git diff --exit-code -- src/lumio_config/editor_static
+
+  editor-e2e:
+    name: Editor Playwright e2e
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build static host
+        run: pnpm build
+      - name: E2E
+        env:
+          PYTHON: python
+        run: pnpm e2e
