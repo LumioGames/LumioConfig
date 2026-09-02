@@ -14,4 +14,4 @@ const text = fs
   .replace(/\r/g, "\n")
   .replace(/[ \t]+\n/g, "\n");
 const normalized = text.endsWith("\n") ? text : `${text}\n`;
-fs.writeFileSync(html, Buffer.from(normalized, "utf8"));
+fs.writeFileSync(html, normalized);
