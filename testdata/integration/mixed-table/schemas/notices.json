@@ -1,0 +1,41 @@
+{
+  "table": "notices",
+  "idColumn": "id",
+  "columns": [
+    {
+      "name": "id",
+      "ordinal": 0,
+      "type": "u32",
+      "required": true,
+      "visibility": "SCV"
+    },
+    {
+      "name": "name",
+      "ordinal": 1,
+      "type": "string",
+      "required": true,
+      "visibility": "SCV"
+    },
+    {
+      "name": "headline",
+      "ordinal": 2,
+      "type": "string",
+      "required": true,
+      "visibility": "C"
+    },
+    {
+      "name": "server_token",
+      "ordinal": 3,
+      "type": "string",
+      "required": true,
+      "visibility": "S"
+    },
+    {
+      "name": "voxel_tint",
+      "ordinal": 4,
+      "type": "string",
+      "required": true,
+      "visibility": "V"
+    }
+  ]
+}

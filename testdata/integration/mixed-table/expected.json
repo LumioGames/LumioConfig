@@ -1,0 +1,16 @@
+{
+  "table": "notices",
+  "rows": ["launch_banner"],
+  "serverColumns": ["id", "name", "server_token"],
+  "clientColumns": ["id", "name", "headline"],
+  "voxelColumns": ["id", "name", "voxel_tint"],
+  "serverToken": "SRVSECRET_ZX9QK_NOTICES",
+  "headline": "Welcome players",
+  "voxelTint": "VOXTINT_NEON7_NOTICES",
+  "clientForbidden": [
+    "server_token",
+    "SRVSECRET_ZX9QK_NOTICES",
+    "voxel_tint",
+    "VOXTINT_NEON7_NOTICES"
+  ]
+}

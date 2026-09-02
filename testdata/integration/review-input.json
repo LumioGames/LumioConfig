@@ -1,0 +1,21 @@
+{
+  "architectureCommit": "a7c1221d3797db696e60bf8a8c748c907975a64c",
+  "baselineId": "LGE-V1.4-2026-08-27",
+  "compilerHash": "ecd08c01fd45efe0306954d3a2fa3730b89294dc5876d9a43012d7062530dd9f",
+  "compilerHashPinned": false,
+  "consumerCommits": {},
+  "inputHash": "cc50434a50f22b5506ee4d0b998aafd8461adac2fad9829ddcaef3478f18698a",
+  "knownGaps": [
+    "reload/replay vertical chain moved out with R-00326",
+    "R-00325 typed readers and consumer-repo commits are out of this Room"
+  ],
+  "outputHash": "fae61eb65b09a6e90042207f55c9d81e6f45c10225816bcbc92db72c92936777",
+  "projectionRoots": {
+    "C": "client/manifest.json",
+    "S": "server/manifest.json",
+    "V": "voxel/manifest.json"
+  },
+  "publicRoot": "2134f4e5d5fd6ba43a5c5b37ca6fbf8af1fd5a71067238019dad1925d951fc9f",
+  "revisionId": "662edbe376a9b405907e42da3e36378af3822b67730067966ff58855e91e0bb5",
+  "tag": "integration-R-00327"
+}

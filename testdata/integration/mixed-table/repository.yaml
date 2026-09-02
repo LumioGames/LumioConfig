@@ -1,0 +1,7 @@
+architecture:
+  sourceRepository: LumioGames/LumioGameEngineArchitecture
+  sourceCommit: a7c1221d3797db696e60bf8a8c748c907975a64c
+  designCommit: d2a7883ea447d2c34b92269c1f84ac9c3c53f5eb
+  baselineId: LGE-V1.4-2026-08-27
+simulation:
+  tickRate: 60
