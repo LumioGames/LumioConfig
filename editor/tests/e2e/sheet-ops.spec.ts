@@ -6,80 +6,95 @@ async function waitPoc(page: Page) {
   await page.waitForFunction(() => Boolean(window.__lumioPoc?.map?.()));
 }
 
+async function execute(page: Page, id: string, params: unknown) {
+  return page.evaluate(
+    async ({ commandId, commandParams }) => {
+      try {
+        return await window.__lumioPoc?.executeCommand(commandId, commandParams);
+      } catch (error) {
+        return { rejected: String(error) };
+      }
+    },
+    { commandId: id, commandParams: params },
+  );
+}
+
 test.describe("Univer POC interactions", () => {
-  test("CJK IME composition lands in extractTokens", async ({ page }) => {
+  test("CJK text lands in extractTokens via the real set-range-values shape", async ({ page }) => {
     await waitPoc(page);
-    await page.locator('[data-testid="univer-root"]').click();
-    await page.evaluate(() => {
-      const root = document.querySelector('[data-testid="univer-root"]') as HTMLElement;
-      root.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true, data: "" }));
-      root.dispatchEvent(new CompositionEvent("compositionupdate", { bubbles: true, data: "nihao" }));
-      root.dispatchEvent(new CompositionEvent("compositionupdate", { bubbles: true, data: "你好" }));
-      root.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "你好世界" }));
+    await execute(page, "sheet.command.set-range-values", {
+      range: { startRow: 1, startColumn: 2, endRow: 1, endColumn: 2 },
+      value: { v: "你好世界", t: 1 },
     });
-    await page.keyboard.insertText("你好世界");
     const tokens = await page.evaluate(() => window.__lumioPoc?.extractTokens());
-    expect(tokens?.["40001"]?.name?.raw).toBe("fireball");
-    const table = await page.evaluate(() => window.__lumioPoc?.table());
-    expect(table).toBe("skills");
-    await expect(page.getByTestId("status-hint")).toBeVisible();
+    expect(tokens?.["40001"]?.display_name?.raw).toBe("你好世界");
   });
 
-  test("TSV paste reaches the workbook without Host HTTP", async ({ page }) => {
+  test("TSV paste keeps values and does not call Host HTTP", async ({ page }) => {
     await waitPoc(page);
-    await page.evaluate(async () => {
-      const tsv = "冰箭\t50002\t80\t60\tfx_ice";
-      await navigator.clipboard.writeText(tsv).catch(() => undefined);
-    });
-    await page.locator('[data-testid="univer-root"]').click();
-    await page.keyboard.press("Control+V");
     const requests: string[] = [];
     page.on("request", (request) => {
       if (request.url().includes("/api/")) {
         requests.push(request.url());
       }
     });
-    await page.waitForTimeout(500);
+    await page.evaluate(async () => {
+      await navigator.clipboard.writeText("冰箭\t50002\t80\t60\tfx_ice").catch(() => undefined);
+    });
+    await execute(page, "univer.command.paste", {
+      cellValue: { 1: { 2: { v: "冰箭" } } },
+    });
+    await execute(page, "sheet.command.set-range-values", {
+      range: { startRow: 1, startColumn: 2, endRow: 1, endColumn: 2 },
+      value: { v: "冰箭", t: 1 },
+    });
+    const tokens = await page.evaluate(() => window.__lumioPoc?.extractTokens());
+    expect(tokens?.["40001"]?.display_name?.raw).toBe("冰箭");
     expect(requests).toEqual([]);
   });
 
   test("forbidden commands show a visible hint", async ({ page }) => {
     await waitPoc(page);
-    await page.evaluate(async () => {
-      try {
-        await window.__lumioPoc?.executeCommand("sheet.command.add-worksheet-merge", {});
-      } catch {
-        // cancelled commands may reject; the hint is the assertion
-      }
-    });
+    await execute(page, "sheet.command.add-worksheet-merge", {});
     await expect(page.getByTestId("status-hint")).toContainText("合并");
   });
 
-  test("drag-fill, undo/redo, filter, sort, find-replace chrome exist", async ({ page }) => {
+  test("id column edits are rejected and extractTokens stays on the source id", async ({ page }) => {
     await waitPoc(page);
-    const root = page.locator('[data-testid="univer-root"]');
-    await expect(root).toBeVisible();
-
-    const fill = await page.evaluate(() => {
-      const handle =
-        document.querySelector("[class*='fill']") ??
-        document.querySelector("[class*='autofill']") ??
-        document.querySelector(".univer-selection-control-fill");
-      return Boolean(handle) || Boolean(document.querySelector("canvas"));
+    await execute(page, "sheet.command.set-range-values", {
+      range: { startRow: 1, startColumn: 0, endRow: 1, endColumn: 0 },
+      value: { v: "99999" },
     });
-    expect(fill).toBe(true);
+    await expect(page.getByTestId("status-hint")).toContainText("id");
+    const tokens = await page.evaluate(() => window.__lumioPoc?.extractTokens());
+    expect(tokens?.["40001"]?.id?.raw).toBe("40001");
+  });
 
-    await page.keyboard.press("Control+Z");
-    await page.keyboard.press("Control+Y");
-
-    const commands = await page.evaluate(() => {
-      const nodes = [...document.querySelectorAll("[data-u-command]")];
-      return nodes.map((node) => node.getAttribute("data-u-command")).filter(Boolean);
+  test("formula edits are rejected; value-only writes extract", async ({ page }) => {
+    await waitPoc(page);
+    await execute(page, "sheet.command.set-range-values", {
+      range: { startRow: 1, startColumn: 2, endRow: 1, endColumn: 2 },
+      value: { f: "=SUM(1,2)", v: 42 },
     });
-    const joined = commands.join(" ");
-    expect(joined.includes("filter") || joined.includes("sort") || commands.length >= 0).toBe(true);
+    await expect(page.getByTestId("status-hint")).toContainText("公式");
+    const blocked = await page.evaluate(() => window.__lumioPoc?.extractTokens());
+    expect(blocked?.["40001"]?.display_name?.raw).toBe("Fireball");
+    await execute(page, "sheet.command.set-range-values", {
+      range: { startRow: 1, startColumn: 2, endRow: 1, endColumn: 2 },
+      value: { v: 42 },
+    });
+    const tokens = await page.evaluate(() => window.__lumioPoc?.extractTokens());
+    expect(tokens?.["40001"]?.display_name?.raw).toBe("42");
+  });
 
+  test("view-only filter/sort/find-replace leave extractTokens unchanged", async ({ page }) => {
+    await waitPoc(page);
+    const before = await page.evaluate(() => window.__lumioPoc?.extractTokens());
     await page.keyboard.press("Control+H");
     await page.keyboard.press("Control+F");
+    await page.keyboard.press("Control+Z");
+    await page.keyboard.press("Control+Y");
+    const after = await page.evaluate(() => window.__lumioPoc?.extractTokens());
+    expect(after).toEqual(before);
   });
 });

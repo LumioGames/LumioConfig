@@ -22,6 +22,7 @@ function setup() {
   const installed = installInterceptors(univer, map, {
     onHint: (hint) => hints.push(hint),
     randomBytes: () => Uint8Array.from([0x3f, 0x9a, 0x1c, 0x2e]),
+    executeCommand: (id, params) => univer.executeCommand(id, params),
   });
   return { map, univer, hints, installed };
 }
@@ -59,6 +60,16 @@ describe("installInterceptors", () => {
     expect(hints.at(-1)).toBe(HINTS.id);
   });
 
+  it("rejects Univer 0.25 range+value id edits", () => {
+    const { univer, hints } = setup();
+    const event = univer.emit(COMMAND.setRangeValues, {
+      range: { startRow: 1, startColumn: 0, endRow: 1, endColumn: 0 },
+      value: { v: "99999" },
+    });
+    expect(event.cancel).toBe(true);
+    expect(hints.at(-1)).toBe(HINTS.id);
+  });
+
   it("paste containing =SUM(...) keeps values only", () => {
     const { univer, hints } = setup();
     const params = {
@@ -71,6 +82,19 @@ describe("installInterceptors", () => {
     expect(hints.at(-1)).toBe(HINTS.pasteFormula);
   });
 
+  it("strips formulas on Univer paste ids and mutations", () => {
+    const { univer, hints } = setup();
+    const shortKey = { cellValue: { 1: { 2: { f: "=SUM(1,2)", v: 3 } } } };
+    expect(univer.emit(COMMAND.pasteShortKey, shortKey).cancel).toBeFalsy();
+    expect(shortKey.cellValue[1][2].f).toBeUndefined();
+    const mutation = {
+      cellValue: { 1: { 3: { f: "=A1", v: 1 } } },
+    };
+    expect(univer.emit(COMMAND.setRangeValuesMutation, mutation).cancel).toBeFalsy();
+    expect(mutation.cellValue[1][3].f).toBeUndefined();
+    expect(hints).toContain(HINTS.pasteFormula);
+  });
+
   it("insert row assigns draft:<8hex> into map.rowKeys", () => {
     const { univer, map } = setup();
     const before = [...map.rowKeys];
@@ -80,6 +104,19 @@ describe("installInterceptors", () => {
     expect(event.cancel).toBeFalsy();
     expect(map.rowKeys[0]).toBe("draft:3f9a1c2e");
     expect(map.rowKeys.slice(1)).toEqual(before);
+    expect(univer.executed.some((item) => item.id === COMMAND.setRangeValues)).toBe(true);
+    const idWrite = univer.executed.find((item) => item.id === COMMAND.setRangeValues);
+    const value = (idWrite?.params as { value?: { v?: string; custom?: { lumio?: { draftId?: boolean } } } }).value;
+    expect(value?.v).toBe("合入时发号");
+    expect(value?.custom?.lumio?.draftId).toBe(true);
+  });
+
+  it("does not mint a second draft key for the inner insert-row command", () => {
+    const { univer, map } = setup();
+    univer.emit(COMMAND.insertRowBefore, { range: { startRow: 1, endRow: 1 } });
+    const afterUi = [...map.rowKeys];
+    univer.emit("sheet.command.insert-row", { range: { startRow: 1, endRow: 1 } });
+    expect(map.rowKeys).toEqual(afterUi);
   });
 
   it("delete row records the key in map.deleted", () => {

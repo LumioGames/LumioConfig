@@ -71,6 +71,11 @@ export function App() {
       const paintedAt = performance.now();
       interceptorsRef.current = installInterceptors(instance.univerAPI, map, {
         onHint: (hint) => dispatch({ type: "hint", hint }),
+        executeCommand: (id, params) =>
+          (instance.univerAPI as { executeCommand?: (commandId: string, commandParams?: unknown) => unknown }).executeCommand?.(
+            id,
+            params,
+          ),
       });
       instanceRef.current = instance;
       mapRef.current = map;

@@ -65,14 +65,8 @@ function displayValue(
   if (column.name === "id" && rowKey.startsWith("draft:")) {
     return { v: DRAFT_ID_LABEL, forceString: true };
   }
-  if (token.state === "missing") {
-    return { v: badgeFor("missing"), forceString: true };
-  }
-  if (token.state === "empty") {
-    return { v: badgeFor("empty"), forceString: true };
-  }
-  if (token.state === "null") {
-    return { v: badgeFor("null"), forceString: true };
+  if (token.state === "missing" || token.state === "empty" || token.state === "null") {
+    return { v: undefined, forceString: false };
   }
   if (token.state === "default") {
     return displayFromEffective(token.effective);
@@ -102,7 +96,7 @@ function cellFor(
 ): WorkbookCell {
   const readOnly = column.readOnly === true || column.name === "id";
   const { v, forceString } = displayValue(token, column, rowKey);
-  const badge = token.state === "default" ? badgeFor("default") : undefined;
+  const badge = badgeFor(token.state);
   const cell: WorkbookCell = {
     s: styleIdFor(token.state, readOnly),
     custom: writeLumioCustom({

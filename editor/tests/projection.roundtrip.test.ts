@@ -71,6 +71,20 @@ describe("buildWorkbook → extractTokens", () => {
     expect(diffTokens(extracted, expected)).toEqual([]);
   });
 
+  it("does not write four-state badges into cell values", () => {
+    const table = loadJson("skills.json");
+    const { workbook } = buildWorkbook(table);
+    const sheet = workbook.sheets.skills;
+    const demo = sheet?.cellData?.["3"];
+    const displayName = demo?.["2"];
+    const effect = demo?.["3"];
+    const cooldown = demo?.["5"];
+    expect(displayName?.v).toBeUndefined();
+    expect(effect?.v).toBeUndefined();
+    expect(cooldown?.v).toBeUndefined();
+    expect(displayName?.custom?.lumio).toMatchObject({ state: "empty", raw: '""' });
+  });
+
   it("does not put four-state badges into extracted raw tokens", () => {
     const table = loadJson("skills.json");
     const { extracted } = roundTrip(table);

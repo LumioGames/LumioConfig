@@ -5,6 +5,7 @@ export class FakeUniver implements InterceptorHost {
     BeforeCommandExecute: "BeforeCommandExecute",
     CommandExecuted: "CommandExecuted",
   };
+  executed: Array<{ id: string; params?: unknown }> = [];
   private befores: Array<(event: CommandInterceptEvent) => void> = [];
   private afters: Array<(event: CommandInterceptEvent) => void> = [];
 
@@ -33,6 +34,11 @@ export class FakeUniver implements InterceptorHost {
       }
     }
     return event;
+  }
+
+  executeCommand(id: string, params?: unknown) {
+    this.executed.push({ id, params });
+    return this.emit(id, params);
   }
 }
 

@@ -1,5 +1,5 @@
 import type { ProjectionMap } from "../api/types";
-import { DRAFT_ID_LABEL, writeLumioCustom } from "./cellMeta";
+import { DRAFT_ID_LABEL, styleIdFor, writeLumioCustom } from "./cellMeta";
 
 export const HINTS = {
   formula: "公式不可用，配表不持久化公式",
@@ -13,27 +13,31 @@ export const HINTS = {
 
 export const COMMAND = {
   setRangeValues: "sheet.command.set-range-values",
+  setRangeValuesMutation: "sheet.mutation.set-range-values",
   merge: "sheet.command.add-worksheet-merge",
   mergeAll: "sheet.command.add-worksheet-merge-all",
   mergeVertical: "sheet.command.add-worksheet-merge-vertical",
   mergeHorizontal: "sheet.command.add-worksheet-merge-horizontal",
   insertColBefore: "sheet.command.insert-col-before",
-  insertMultiColsBefore: "sheet.command.insert-multi-cols-before",
-  insertMultiColsRight: "sheet.command.insert-multi-cols-right",
+  insertColAfter: "sheet.command.insert-col-after",
+  insertColByRange: "sheet.command.insert-col-by-range",
   insertCol: "sheet.command.insert-col",
   removeColConfirm: "sheet.command.remove-col-confirm",
-  removeCol: "sheet.command.remove-col",
-  insertRangeMoveRight: "sheet.command.insert-range-move-right-confirm",
-  deleteRangeMoveLeft: "sheet.command.delete-range-move-left-confirm",
+  removeColByRange: "sheet.command.remove-col-by-range",
+  confirmRemoveCol: "sheet.confirm.remove-col",
   insertRowBefore: "sheet.command.insert-row-before",
-  insertMultiRowsAbove: "sheet.command.insert-multi-rows-above",
-  insertMultiRowsAfter: "sheet.command.insert-multi-rows-after",
-  insertRow: "sheet.command.insert-row",
+  insertRowAfter: "sheet.command.insert-row-after",
+  insertRowByRange: "sheet.command.insert-row-by-range",
   removeRowConfirm: "sheet.command.remove-row-confirm",
-  removeRow: "sheet.command.remove-row",
-  paste: "sheet.command.paste",
+  removeRowByRange: "sheet.command.remove-row-by-range",
+  confirmRemoveRow: "sheet.confirm.remove-row",
+  paste: "univer.command.paste",
+  pasteNamed: "sheet.command.paste",
+  pasteShortKey: "sheet.command.paste-by-short-key",
+  pasteValue: "sheet.command.paste-value",
+  pasteOptional: "sheet.command.optional-paste",
+  pasteBesidesBorder: "sheet.command.paste-besides-border",
   pasteFormula: "sheet.command.paste-formula",
-  pasteValues: "sheet.command.paste-values",
   insertFunction: "formula-ui.operation.insert-function",
   moreFunctions: "formula-ui.operation.more-functions",
 } as const;
@@ -47,26 +51,36 @@ const MERGE_IDS = new Set<string>([
 
 const COLUMN_IDS = new Set<string>([
   COMMAND.insertColBefore,
-  COMMAND.insertMultiColsBefore,
-  COMMAND.insertMultiColsRight,
+  COMMAND.insertColAfter,
+  COMMAND.insertColByRange,
   COMMAND.insertCol,
   COMMAND.removeColConfirm,
-  COMMAND.removeCol,
-  COMMAND.insertRangeMoveRight,
-  COMMAND.deleteRangeMoveLeft,
+  COMMAND.removeColByRange,
+  COMMAND.confirmRemoveCol,
 ]);
 
-const INSERT_ROW_BEFORE = new Set<string>([
+const INSERT_ROW_AFTER = new Set<string>([COMMAND.insertRowAfter]);
+const INSERT_ROW_IDS = new Set<string>([
   COMMAND.insertRowBefore,
-  COMMAND.insertMultiRowsAbove,
-  COMMAND.insertRow,
+  COMMAND.insertRowAfter,
+  COMMAND.insertRowByRange,
 ]);
 
-const INSERT_ROW_AFTER = new Set<string>([COMMAND.insertMultiRowsAfter]);
+const DELETE_ROW_IDS = new Set<string>([
+  COMMAND.removeRowConfirm,
+  COMMAND.removeRowByRange,
+  COMMAND.confirmRemoveRow,
+]);
 
-const DELETE_ROW_IDS = new Set<string>([COMMAND.removeRowConfirm, COMMAND.removeRow]);
-
-const PASTE_IDS = new Set<string>([COMMAND.paste, COMMAND.pasteFormula, COMMAND.pasteValues]);
+const PASTE_IDS = new Set<string>([
+  COMMAND.paste,
+  COMMAND.pasteNamed,
+  COMMAND.pasteShortKey,
+  COMMAND.pasteValue,
+  COMMAND.pasteOptional,
+  COMMAND.pasteBesidesBorder,
+  COMMAND.pasteFormula,
+]);
 
 const FORMULA_UI_IDS = new Set<string>([COMMAND.insertFunction, COMMAND.moreFunctions]);
 
@@ -95,6 +109,7 @@ export interface InterceptorHost {
 export interface InstallInterceptorsOptions {
   onHint?: (hint: string) => void;
   randomBytes?: () => Uint8Array;
+  executeCommand?: (id: string, params?: unknown) => unknown;
 }
 
 function resolveHost(univer: unknown): InterceptorHost {
@@ -115,7 +130,15 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
 }
 
-function visitCells(
+function numberOf(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function looksLikeCell(rec: Record<string, unknown>): boolean {
+  return "v" in rec || "f" in rec || "t" in rec || "custom" in rec || "si" in rec;
+}
+
+export function visitCells(
   value: unknown,
   visit: (cell: Record<string, unknown>, row?: number, col?: number) => void,
   row?: number,
@@ -129,15 +152,27 @@ function visitCells(
   if (!rec) {
     return;
   }
-  const looksLikeCell = "v" in rec || "f" in rec || "t" in rec || "custom" in rec || "si" in rec;
-  if (looksLikeCell && !("cellValue" in rec) && !("range" in rec)) {
+
+  const range = asRecord(rec.range);
+  const rangeRow = numberOf(range?.startRow);
+  const rangeCol = numberOf(range?.startColumn);
+  if (rec.value && typeof rec.value === "object" && !Array.isArray(rec.value)) {
+    const cell = rec.value as Record<string, unknown>;
+    if (looksLikeCell(cell) && !("cellValue" in cell)) {
+      visit(cell, rangeRow ?? row, rangeCol ?? col);
+    } else {
+      visitCells(rec.value, visit, rangeRow ?? row, rangeCol ?? col);
+    }
+  }
+
+  if (looksLikeCell(rec) && !("cellValue" in rec) && !("range" in rec) && !("value" in rec)) {
     visit(rec, row, col);
   }
   if (rec.cellValue) {
     visitCells(rec.cellValue, visit);
   }
   for (const [key, child] of Object.entries(rec)) {
-    if (key === "custom" || key === "s" || key === "p") {
+    if (key === "custom" || key === "s" || key === "p" || key === "range" || key === "value") {
       continue;
     }
     const asRow = Number(key);
@@ -148,11 +183,7 @@ function visitCells(
         for (const [colKey, cell] of Object.entries(nested)) {
           visitCells(cell, visit, asRow, Number(colKey));
         }
-        continue;
       }
-    }
-    if (key === "cellValue" || key === "value" || key === "clipboard" || key === "data") {
-      visitCells(child, visit, row, col);
     }
   }
 }
@@ -197,6 +228,18 @@ function idColumnIndex(map: ProjectionMap): number {
   return index >= 0 ? index : 0;
 }
 
+function isDraftIdWrite(value: unknown): boolean {
+  let draft = false;
+  visitCells(value, (cell) => {
+    const custom = asRecord(cell.custom);
+    const lumio = asRecord(custom?.lumio);
+    if (lumio?.draftId === true) {
+      draft = true;
+    }
+  });
+  return draft;
+}
+
 function touchesHeaderOrId(value: unknown, map: ProjectionMap): "header" | "id" | undefined {
   const idCol = idColumnIndex(map);
   let hit: "header" | "id" | undefined;
@@ -226,12 +269,9 @@ function rowRange(params: unknown): { startRow: number; count: number } | undefi
     numberOf(rec.rowCount) ??
     numberOf(rec.numRows) ??
     numberOf(rec.count) ??
+    numberOf(asRecord(rec.value)?.count) ??
     Math.max(1, endRow - startRow + 1);
   return { startRow, count };
-}
-
-function numberOf(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 export function newDraftRowKey(randomBytes?: () => Uint8Array): string {
@@ -280,6 +320,90 @@ function applyDelete(map: ProjectionMap, params: unknown): string[] {
   return removed;
 }
 
+function attachLumioFromEdit(params: unknown, map: ProjectionMap): void {
+  visitCells(params, (cell, row, col) => {
+    if (row === undefined || col === undefined || row <= 0) {
+      return;
+    }
+    const column = map.columns[col];
+    const rowKey = map.rowKeys[row - 1];
+    if (!column || !rowKey) {
+      return;
+    }
+    const raw =
+      cell.v === undefined || cell.v === null
+        ? ""
+        : typeof cell.v === "string"
+          ? cell.v
+          : String(cell.v);
+    cell.custom = {
+      ...asRecord(cell.custom),
+      ...writeLumioCustom({
+        state: "value",
+        raw,
+        effective: cell.v ?? raw,
+        column,
+        rowKey,
+      }),
+    };
+  });
+}
+
+export function draftIdCell(rowKey: string): Record<string, unknown> {
+  return {
+    v: DRAFT_ID_LABEL,
+    t: 1,
+    s: "idReadOnly",
+    custom: writeLumioCustom({
+      state: "value",
+      raw: "",
+      effective: null,
+      column: "id",
+      rowKey,
+      draftId: true,
+    }),
+  };
+}
+
+function missingCell(rowKey: string, column: string): Record<string, unknown> {
+  return {
+    s: styleIdFor("missing", column === "id"),
+    custom: writeLumioCustom({
+      state: "missing",
+      raw: "@missing",
+      effective: null,
+      column,
+      rowKey,
+    }),
+  };
+}
+
+function writeDraftRow(
+  executeCommand: ((id: string, params?: unknown) => unknown) | undefined,
+  map: ProjectionMap,
+  keys: string[],
+  startSheetRow: number,
+): void {
+  if (!executeCommand) {
+    return;
+  }
+  keys.forEach((rowKey, offset) => {
+    const sheetRow = startSheetRow + offset;
+    map.columns.forEach((column, colIndex) => {
+      const value = column === "id" ? draftIdCell(rowKey) : missingCell(rowKey, column);
+      executeCommand(COMMAND.setRangeValues, {
+        range: {
+          startRow: sheetRow,
+          startColumn: colIndex,
+          endRow: sheetRow,
+          endColumn: colIndex,
+        },
+        value,
+      });
+    });
+  });
+}
+
 export function installInterceptors(
   univer: unknown,
   map: ProjectionMap,
@@ -287,6 +411,7 @@ export function installInterceptors(
 ): { dispose: () => void } {
   const host = resolveHost(univer);
   const hint = (message: string) => options?.onHint?.(message);
+  const pendingInserts: Array<{ keys: string[]; startSheetRow: number }> = [];
 
   const onBefore = (event: CommandInterceptEvent) => {
     const id = event.id;
@@ -305,7 +430,7 @@ export function installInterceptors(
       hint(HINTS.formula);
       return;
     }
-    if (PASTE_IDS.has(id)) {
+    if (PASTE_IDS.has(id) || id === COMMAND.setRangeValuesMutation) {
       if (hasFormulaField(event.params) || id === COMMAND.pasteFormula) {
         stripFormulas(event.params);
         hint(HINTS.pasteFormula);
@@ -314,9 +439,11 @@ export function installInterceptors(
       if (blocked === "header") {
         event.cancel = true;
         hint(HINTS.header);
-      } else if (blocked === "id") {
+      } else if (blocked === "id" && !isDraftIdWrite(event.params)) {
         event.cancel = true;
         hint(HINTS.id);
+      } else {
+        attachLumioFromEdit(event.params, map);
       }
       return;
     }
@@ -327,7 +454,7 @@ export function installInterceptors(
         hint(HINTS.header);
         return;
       }
-      if (blocked === "id") {
+      if (blocked === "id" && !isDraftIdWrite(event.params)) {
         event.cancel = true;
         hint(HINTS.id);
         return;
@@ -337,14 +464,19 @@ export function installInterceptors(
         hint(HINTS.formula);
         return;
       }
+      if (!isDraftIdWrite(event.params)) {
+        attachLumioFromEdit(event.params, map);
+      }
       return;
     }
-    if (INSERT_ROW_BEFORE.has(id) || INSERT_ROW_AFTER.has(id)) {
+    if (INSERT_ROW_IDS.has(id)) {
       const keys = applyInsert(map, event.params, INSERT_ROW_AFTER.has(id), options?.randomBytes);
       const rec = asRecord(event.params);
       if (rec) {
         rec.lumioDraftKeys = keys;
       }
+      const range = rowRange(event.params) ?? { startRow: 1, count: keys.length };
+      pendingInserts.push({ keys, startSheetRow: INSERT_ROW_AFTER.has(id) ? range.startRow + 1 : range.startRow });
       hint(`${HINTS.insertRow}（${keys.join(", ")}）`);
       return;
     }
@@ -353,12 +485,31 @@ export function installInterceptors(
     }
   };
 
+  const onAfter = (event: CommandInterceptEvent) => {
+    if (event.cancel) {
+      return;
+    }
+    if (!INSERT_ROW_IDS.has(event.id)) {
+      return;
+    }
+    const next = pendingInserts.shift();
+    if (!next) {
+      return;
+    }
+    writeDraftRow(options?.executeCommand, map, next.keys, next.startSheetRow);
+  };
+
   const disposers: Array<{ dispose(): void }> = [];
   if (typeof host.addEvent === "function") {
     const beforeToken = host.Event?.BeforeCommandExecute ?? "BeforeCommandExecute";
+    const afterToken = host.Event?.CommandExecuted ?? "CommandExecuted";
     disposers.push(host.addEvent(beforeToken, onBefore));
+    disposers.push(host.addEvent(afterToken, onAfter));
   } else if (typeof host.onBeforeCommandExecute === "function") {
     disposers.push(host.onBeforeCommandExecute(onBefore));
+    if (typeof host.onCommandExecuted === "function") {
+      disposers.push(host.onCommandExecuted(onAfter));
+    }
   } else {
     throw new Error("installInterceptors: no beforeCommandExecute hook");
   }
@@ -369,21 +520,5 @@ export function installInterceptors(
         disposer.dispose();
       }
     },
-  };
-}
-
-export function draftIdCell(rowKey: string): Record<string, unknown> {
-  return {
-    v: DRAFT_ID_LABEL,
-    t: 4,
-    s: "idReadOnly",
-    custom: writeLumioCustom({
-      state: "value",
-      raw: "",
-      effective: null,
-      column: "id",
-      rowKey,
-      draftId: true,
-    }),
   };
 }
