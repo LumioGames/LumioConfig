@@ -1,0 +1,4 @@
+{
+  "code": "REQUIRED_TABLE_MISSING",
+  "requiredTables": ["skills", "effects"]
+}
