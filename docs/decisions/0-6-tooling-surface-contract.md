@@ -56,10 +56,10 @@
 
 | 动作 | 含义 | 本仓入口 |
 | --- | --- | --- |
-| 查 | 读表 / 读 schema / 读技能卡 | 读 `tables/` `schemas/`；`validate` |
+| 查 | 读表 / 读 schema / 读技能卡 | `query table|row|schema|card` |
 | 提案 | 写补丁 | 写上述 JSON |
 | 预检 | 自己先跑机器门 | `patch validate` |
-| 预演 | 编译预览 | `export`（不等于上线） |
+| 预演 | 编译预览 | `preview`（隔离 export，不等于上线） |
 | 提交 | 送进机器门合入 | `patch apply` |
 
 没有第六个动作。没有激活、没有「推给玩家」。审计走 Git（作者、改前后指纹、理由）。

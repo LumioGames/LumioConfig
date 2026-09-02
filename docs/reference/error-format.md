@@ -18,3 +18,5 @@ CLI 的 --json 输出是错误数组；排序键为 table、row、column、code�
 发号/registry 错误码：`ORDINAL_PERSISTED`（补丁或 registry 写入 `seat` / `revisionOrdinal`）、`ALIAS_CONFLICT`（别名与现名冲突）、`REGISTRY_DANGLING_NAME`、`ID_OUT_OF_RANGE`。
 
 导表层覆盖错误码：`LAYER_CREATE_FORBIDDEN`（`layers/` overlay 试图新增行；overlay 只能 update 既有行）。
+
+查询错误码：`UNKNOWN_ROW`（`query row` / `query card` 找不到名字或终身编号）。
