@@ -17,6 +17,8 @@
 | [0-4-artifact-container-and-target-split.md](0-4-artifact-container-and-target-split.md) | 0-4 产物容器与三端切分 | 配表产物容器与投影 | 合并时现查现占 |
 | [0-5-revision-lifecycle.md](0-5-revision-lifecycle.md) | 0-5 版本生命周期 | 配表 Revision 生命周期 | 合并时现查现占 |
 | [0-6-tooling-surface-contract.md](0-6-tooling-surface-contract.md) | 0-6 工具面契约 | 配表工具面契约 | 合并时现查现占 |
+| [0-7-web-editor-boundary-and-stack.md](0-7-web-editor-boundary-and-stack.md) | 0-7 网页编辑器权威边界与技术选型 | 配表编辑器权威边界与选型（架构仓落地方案 `.spec/plans/2026-09-02-config-web-editor-landing.md` §1–§2） | 合并时现查现占 |
+| [0-8-draft-submit-merge-lifecycle.md](0-8-draft-submit-merge-lifecycle.md) | 0-8 草稿、提交与合并生命周期 | 配表草稿、提交与三方合并生命周期（同上 §3；`base`/`expect` 部分与 0-6 合并考虑） | 合并时现查现占 |
 
 0-3 额外交回：已钉 Unicode NFC，双语言对照测试集在 `testdata/unicode/`。搬入架构仓时把该政策与 golden 一并带上，仍不在本仓改 ADR-041。
 
