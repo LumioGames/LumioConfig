@@ -10,7 +10,7 @@ Durable Review inputs live in `testdata/integration/review-input.json` (hash tri
 | Field | Meaning |
 | --- | --- |
 | tag | `integration-R-00327` |
-| `compilerHash` | fingerprint of `src/lumio_config/*.py` |
+| `compilerHash` | fingerprint of `src/lumio_config/*.py` (equal across rebuilds in one worktree; not a cross-OS golden because it hashes working-tree compiler bytes) |
 | `inputHash` | fingerprint of `schemas/` `tables/` `registry/` `layers/` |
 | `outputHash` | fingerprint of the export tree except `manifest.json` |
 | `revisionId` | aggregate content fingerprint |
@@ -28,7 +28,7 @@ python tools/lumio_config.py format --root testdata/integration/mixed-table
 python tools/lumio_config.py export --out /tmp/mixed-out --root testdata/integration/mixed-table
 ```
 
-Two independent exports of the same sources must match `compilerHash` / `inputHash` / `outputHash` in `testdata/integration/review-input.json`, including projection files.
+Two independent exports of the same sources must match `inputHash` / `outputHash` in `testdata/integration/review-input.json` (and each other, including `compilerHash` and projection files).
 
 The mixed-visibility vertical chain is driven by `tests/integration/` via subprocess CLI.
 

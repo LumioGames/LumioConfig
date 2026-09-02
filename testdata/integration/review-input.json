@@ -2,6 +2,7 @@
   "architectureCommit": "a7c1221d3797db696e60bf8a8c748c907975a64c",
   "baselineId": "LGE-V1.4-2026-08-27",
   "compilerHash": "ecd08c01fd45efe0306954d3a2fa3730b89294dc5876d9a43012d7062530dd9f",
+  "compilerHashPinned": false,
   "consumerCommits": {},
   "inputHash": "cc50434a50f22b5506ee4d0b998aafd8461adac2fad9829ddcaef3478f18698a",
   "knownGaps": [

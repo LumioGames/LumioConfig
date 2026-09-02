@@ -352,11 +352,12 @@ class RebuildRollbackTests(unittest.TestCase):
                 self.assertEqual(len(first_manifest[key]), 64, key)
             review = _review_payload(first_root, first_manifest)
             pinned = _load_json(REVIEW_INPUT)
+            self.assertEqual(len(review["compilerHash"]), 64)
+            self.assertFalse(pinned.get("compilerHashPinned", True))
             for key in (
                 "tag",
                 "architectureCommit",
                 "baselineId",
-                "compilerHash",
                 "inputHash",
                 "outputHash",
                 "revisionId",
