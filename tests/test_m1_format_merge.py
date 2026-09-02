@@ -1,3 +1,5 @@
+import hashlib
+import json
 import shutil
 import subprocess
 import sys
@@ -7,7 +9,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from lumio_config.fingerprint import content_fingerprint
+from lumio_config.model import TableParseError
 from lumio_config.text_table import format_table_text, parse_table
+from lumio_config.validate import validate_repository
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -136,6 +141,152 @@ class FormatAndMergeTests(unittest.TestCase):
             combined = table_path.read_text(encoding="utf-8")
             self.assertIn("121", combined)
             self.assertIn("91", combined)
+
+    def test_four_state_tokens_round_trip_through_shipped_parser(self):
+        source = (
+            "table: states\nschema: schemas/states.json\n"
+            "| id | name | note | flag | extra |\n"
+            "| --- | --- | --- | --- | --- |\n"
+            '| 1 | alpha | "" | null | @default |\n'
+        )
+        parsed = parse_table(source, Path("tables/states.txt"))
+        self.assertEqual(parsed.rows[0]["id"].state, "value")
+        self.assertEqual(parsed.rows[0]["id"].value, "1")
+        self.assertEqual(parsed.rows[0]["name"].value, "alpha")
+        self.assertEqual(parsed.rows[0]["note"].state, "empty")
+        self.assertEqual(parsed.rows[0]["flag"].state, "null")
+        self.assertEqual(parsed.rows[0]["extra"].state, "default")
+        formatted = format_table_text(parsed)
+        again = parse_table(formatted, Path("tables/states.txt"))
+        self.assertEqual(
+            {name: (cell.state, cell.value) for name, cell in again.rows[0].items()},
+            {name: (cell.state, cell.value) for name, cell in parsed.rows[0].items()},
+        )
+        omitted = (
+            "table: states\nschema: schemas/states.json\n"
+            "| id | name | note |\n"
+            "| --- | --- | --- |\n"
+            "| 1 | alpha |\n"
+        )
+        missing = parse_table(omitted, Path("tables/states.txt"))
+        self.assertEqual(missing.rows[0]["note"].state, "missing")
+        self.assertEqual(missing.rows[0]["note"].token(), "@missing")
+
+    def test_pipe_escape_round_trips_and_unknown_escape_is_invalid(self):
+        source = (
+            "table: states\nschema: schemas/states.json\n"
+            "| id | name |\n"
+            "| --- | --- |\n"
+            "| 1 | a\\|b |\n"
+        )
+        parsed = parse_table(source, Path("tables/states.txt"))
+        self.assertEqual(parsed.rows[0]["name"].value, "a|b")
+        self.assertIn("a\\|b", format_table_text(parsed))
+
+        dangling = (
+            "table: states\nschema: schemas/states.json\n"
+            "| id | name |\n"
+            "| --- | --- |\n"
+            "| 1 | trailing\\ |\n"
+        )
+        with self.assertRaises(TableParseError) as raised:
+            parse_table(dangling, Path("tables/states.txt"))
+        self.assertEqual(raised.exception.code, "INVALID_ESCAPE")
+
+        unknown = (
+            "table: states\nschema: schemas/states.json\n"
+            "| id | name |\n"
+            "| --- | --- |\n"
+            "| 1 | a\\nb |\n"
+        )
+        with self.assertRaises(TableParseError) as raised_unknown:
+            parse_table(unknown, Path("tables/states.txt"))
+        self.assertEqual(raised_unknown.exception.code, "INVALID_ESCAPE")
+
+    def test_undeclared_column_is_rejected_by_validate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_authority(root)
+            (root / "tables" / "skills.txt").write_text(
+                "table: skills\nschema: schemas/skills.json\n\n"
+                "| id | name | display_name | effect_id | damage | cooldown_frames | icon | extra |\n"
+                "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+                "| 40001 | fireball | Fireball | 50001 | 120 | 150 | fx_fireball | nope |\n\n"
+                "| 40002 | frostbolt | Frostbolt | 50002 | 90 | 90 | fx_frostbolt | nope |\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            errors = validate_repository(root)
+            self.assertTrue(any(error["code"] == "UNKNOWN_COLUMN" for error in errors), errors)
+
+    def test_format_check_does_not_change_source_sha256(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_authority(root)
+            table_path = root / "tables" / "skills.txt"
+            dirty = table_path.read_text(encoding="utf-8").replace("| 40001 |", "|40001|")
+            table_path.write_text(dirty, encoding="utf-8", newline="\n")
+            before = hashlib.sha256(table_path.read_bytes()).hexdigest()
+            result = _run_cli("format", "--check", root=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(before, hashlib.sha256(table_path.read_bytes()).hexdigest())
+            self.assertEqual(table_path.read_text(encoding="utf-8"), dirty)
+
+    def test_schema_ordinal_missing_and_duplicate_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_authority(root)
+            schema_path = root / "schemas" / "skills.json"
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            for column in schema["columns"]:
+                column.pop("ordinal", None)
+            schema_path.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
+            missing = validate_repository(root)
+            self.assertTrue(any(error["code"] == "MISSING_ORDINAL" for error in missing), missing)
+
+            schema["columns"][0]["ordinal"] = 0
+            schema["columns"][1]["ordinal"] = 0
+            for index, column in enumerate(schema["columns"][2:], start=2):
+                column["ordinal"] = index
+            schema_path.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
+            duplicated = validate_repository(root)
+            self.assertTrue(any(error["code"] == "DUPLICATE_ORDINAL" for error in duplicated), duplicated)
+
+    def test_content_fingerprint_uses_ordinal_not_json_array_order(self):
+        source = (
+            "table: labels\nschema: schemas/labels.json\n"
+            "| id | name |\n| --- | --- |\n| 1 | alpha |\n"
+        )
+        table = parse_table(source, Path("tables/labels.txt"))
+        schema_a = {
+            "table": "labels",
+            "idColumn": "id",
+            "columns": [
+                {"name": "id", "type": "u32", "required": True, "visibility": "S", "ordinal": 0},
+                {"name": "name", "type": "string", "required": True, "visibility": "S", "ordinal": 1},
+            ],
+        }
+        schema_b = {
+            "table": "labels",
+            "idColumn": "id",
+            "columns": [
+                {"name": "name", "type": "string", "required": True, "visibility": "S", "ordinal": 1},
+                {"name": "id", "type": "u32", "required": True, "visibility": "S", "ordinal": 0},
+            ],
+        }
+        self.assertEqual(content_fingerprint(table, schema_a), content_fingerprint(table, schema_b))
+
+    def test_real_tables_contain_no_logic_and_validate(self):
+        errors = validate_repository(ROOT)
+        self.assertEqual(errors, [], errors)
+        for name in ("skills", "effects", "drops"):
+            text = (ROOT / "tables" / f"{name}.txt").read_text(encoding="utf-8")
+            self.assertNotRegex(text, r"\bif\b")
+            self.assertNotIn("script", text.lower())
+            schema = json.loads((ROOT / "schemas" / f"{name}.json").read_text(encoding="utf-8"))
+            ordinals = [column["ordinal"] for column in schema["columns"]]
+            self.assertEqual(len(ordinals), len(set(ordinals)))
+            self.assertTrue(all(isinstance(value, int) and not isinstance(value, bool) for value in ordinals))
 
 
 if __name__ == "__main__":

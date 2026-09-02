@@ -9,6 +9,9 @@ from .model import Cell, TableParseError, TableSource
 _SEPARATOR = re.compile(r"^-{3,}$")
 
 
+_ALLOWED_ESCAPES = frozenset({"\\", "|"})
+
+
 def _split_row(line: str, line_number: int) -> list[str]:
     text = line.strip()
     if not text.startswith("|"):
@@ -18,6 +21,8 @@ def _split_row(line: str, line_number: int) -> list[str]:
     escaped = False
     for char in text:
         if escaped:
+            if char not in _ALLOWED_ESCAPES:
+                raise TableParseError("INVALID_ESCAPE", "unknown backslash escape in table cell", line_number)
             current.append(char)
             escaped = False
         elif char == "\\":
@@ -28,7 +33,7 @@ def _split_row(line: str, line_number: int) -> list[str]:
         else:
             current.append(char)
     if escaped:
-        current.append("\\")
+        raise TableParseError("INVALID_ESCAPE", "dangling backslash in table cell", line_number)
     pieces.append("".join(current).strip())
     if pieces and pieces[0] == "":
         pieces = pieces[1:]
