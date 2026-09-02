@@ -333,7 +333,8 @@ class PatchAndIdTests(unittest.TestCase):
             patch_path.write_text(json.dumps(_create_skill("ice_lance")), encoding="utf-8")
             result = _run_cli("patch", "apply", str(patch_path), root=root)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn("patch-apply: OK", result.stdout)
+            payload = json.loads(result.stdout)
+            self.assertTrue(payload["ok"], result.stdout)
             self.assertIn("ice_lance", (root / "tables" / "skills.txt").read_text(encoding="utf-8"))
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .export import ValidationFailure, export_repository
@@ -60,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
     patch = subparsers.add_parser("patch", help="validate or apply a name-only source patch")
     patch.add_argument("mode", choices=["validate", "apply"])
     patch.add_argument("patch_path", type=Path)
+    patch.add_argument("--audit", type=Path, default=None)
+    patch.add_argument("--reason", default=None)
     _root_argument(patch)
     return parser
 
@@ -91,15 +94,35 @@ def main(argv: list[str] | None = None) -> int:
         payload = json.loads(args.patch_path.read_text(encoding="utf-8"))
         if args.mode == "validate":
             errors = validate_patch(root, payload)
-            label = "patch-validate"
-        else:
-            errors = apply_patch(root, payload)
-            label = "patch-apply"
-        if errors:
-            print(json.dumps(errors, ensure_ascii=False, indent=2, sort_keys=True))
-            return 1
-        print(f"{label}: OK")
-        return 0
+            if errors:
+                print(json.dumps(errors, ensure_ascii=False, indent=2, sort_keys=True))
+                return 1
+            print("patch-validate: OK")
+            return 0
+        result = apply_patch(root, payload)
+        body = {
+            "ok": not result.errors,
+            "summary": result.summary,
+            "errors": result.errors,
+            "sourceFingerprint": result.source_fingerprint,
+            "beforeSourceFingerprint": result.before_source_fingerprint,
+            "assignedIds": result.assigned_ids,
+        }
+        if args.reason:
+            body["reason"] = args.reason
+        print(json.dumps(body, ensure_ascii=False, indent=2, sort_keys=True))
+        if args.audit and not result.errors:
+            args.audit.parent.mkdir(parents=True, exist_ok=True)
+            line = {
+                "time": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "table": payload.get("table"),
+                "summary": result.summary,
+                "beforeSourceFingerprint": result.before_source_fingerprint,
+                "sourceFingerprint": result.source_fingerprint,
+            }
+            with args.audit.open("a", encoding="utf-8", newline="\n") as handle:
+                handle.write(json.dumps(line, ensure_ascii=False) + "\n")
+        return 0 if not result.errors else 1
     return 2
 
 

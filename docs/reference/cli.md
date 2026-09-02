@@ -20,8 +20,9 @@
 
     python tools/lumio_config.py patch validate path/to/patch.json
     python tools/lumio_config.py patch apply path/to/patch.json
+    python tools/lumio_config.py patch apply path/to/patch.json --audit audit.jsonl --reason "why"
 
-校验或合入名字补丁。补丁不得填写终身编号；create 在 apply 时由发号台分配。失败时 stdout 为结构化错误 JSON 数组；成功时打印 `patch-validate: OK` 或 `patch-apply: OK`。
+校验或合入名字补丁。补丁不得填写终身编号；create 在 apply 时由发号台分配。`patch validate` 失败时 stdout 为结构化错误 JSON 数组，成功时打印 `patch-validate: OK`。`patch apply` 始终打印 JSON：`ok` / `summary` / `errors` / `sourceFingerprint` / `beforeSourceFingerprint` / `assignedIds`；`--reason` 只写入该 JSON，不自动 commit。`--audit` 在成功时追加一行 JSON（时间、表、摘要、前后指纹）。
 
 ## export
 
