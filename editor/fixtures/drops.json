@@ -1,0 +1,40 @@
+{
+  "table": "drops",
+  "sourceFingerprint": "sha256:a148ee0f2ffe4bbd79db23e0179e1da0355510bf5a34bc8091ecf867d364dbae",
+  "columns": [
+    { "name": "id", "type": "u32", "required": true, "visibility": "SCV", "readOnly": true },
+    { "name": "name", "type": "string", "required": true, "visibility": "SCV" },
+    { "name": "skill_id", "type": "ref", "required": true, "refTarget": "skills", "visibility": "S" },
+    { "name": "chance_permille", "type": "i32", "required": true, "minimum": 0, "maximum": 1000, "visibility": "S" },
+    { "name": "display_name", "type": "string", "required": true, "visibility": "C" }
+  ],
+  "rows": [
+    {
+      "id": 60001,
+      "name": "ember_cache",
+      "cells": {
+        "skill_id": { "state": "value", "raw": "40001", "effective": "40001" },
+        "chance_permille": { "state": "value", "raw": "250", "effective": 250 },
+        "display_name": { "state": "value", "raw": "Ember Cache", "effective": "Ember Cache" }
+      }
+    },
+    {
+      "id": 60002,
+      "name": "winter_cache",
+      "cells": {
+        "skill_id": { "state": "value", "raw": "40002", "effective": "40002" },
+        "chance_permille": { "state": "value", "raw": "125", "effective": 125 },
+        "display_name": { "state": "value", "raw": "Winter Cache", "effective": "Winter Cache" }
+      }
+    },
+    {
+      "id": 60090,
+      "name": "emoji_cache",
+      "cells": {
+        "skill_id": { "state": "missing", "raw": "@missing", "effective": null },
+        "chance_permille": { "state": "null", "raw": "null", "effective": null },
+        "display_name": { "state": "value", "raw": "余烬匣🔥", "effective": "余烬匣🔥" }
+      }
+    }
+  ]
+}

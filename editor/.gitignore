@@ -1,0 +1,8 @@
+node_modules
+dist
+test-results
+playwright-report
+playwright/.cache
+coverage
+fixtures/big-10k-50.json
+*.log

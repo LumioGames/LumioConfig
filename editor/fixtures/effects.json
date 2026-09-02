@@ -1,0 +1,40 @@
+{
+  "table": "effects",
+  "sourceFingerprint": "sha256:2b3649daeb13ee680fbb495175b35b576f64b8aa8c0e556cb54c1a4fa0287fea",
+  "columns": [
+    { "name": "id", "type": "u32", "required": true, "visibility": "SCV", "readOnly": true },
+    { "name": "name", "type": "string", "required": true, "visibility": "SCV" },
+    { "name": "duration_frames", "type": "i32", "required": true, "minimum": 1, "visibility": "S", "default": 30 },
+    { "name": "fx_key", "type": "string", "required": true, "visibility": "C" },
+    { "name": "formula_key", "type": "string", "required": true, "visibility": "S" }
+  ],
+  "rows": [
+    {
+      "id": 50001,
+      "name": "burn",
+      "cells": {
+        "duration_frames": { "state": "value", "raw": "180", "effective": 180 },
+        "fx_key": { "state": "value", "raw": "fx_burn", "effective": "fx_burn" },
+        "formula_key": { "state": "value", "raw": "damage_over_time", "effective": "damage_over_time" }
+      }
+    },
+    {
+      "id": 50002,
+      "name": "chill",
+      "cells": {
+        "duration_frames": { "state": "value", "raw": "120", "effective": 120 },
+        "fx_key": { "state": "value", "raw": "fx_chill", "effective": "fx_chill" },
+        "formula_key": { "state": "value", "raw": "slow_percent", "effective": "slow_percent" }
+      }
+    },
+    {
+      "id": 50090,
+      "name": "冰霜印记",
+      "cells": {
+        "duration_frames": { "state": "default", "raw": "@default", "effective": 30 },
+        "fx_key": { "state": "empty", "raw": "\"\"", "effective": "" },
+        "formula_key": { "state": "null", "raw": "null", "effective": null }
+      }
+    }
+  ]
+}
