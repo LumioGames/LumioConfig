@@ -40,7 +40,7 @@ def ordered_schema_columns(schema: dict[str, Any]) -> list[dict[str, Any]]:
     return [column for _, column in sorted(enumerate(columns), key=lambda item: _ordinal_sort_key(item[1], item[0]))]
 
 
-def canonical_table_value(table: TableSource, schema: dict[str, Any]) -> dict[str, Any]:
+def canonical_table_value(table: TableSource, schema: dict[str, Any], tick_rate: int = 60) -> dict[str, Any]:
     columns = _column_map(schema)
     id_column = str(schema.get("idColumn", "id"))
     ordered = ordered_schema_columns(schema)
@@ -50,7 +50,7 @@ def canonical_table_value(table: TableSource, schema: dict[str, Any]) -> dict[st
         for column in ordered:
             name = str(column["name"])
             cell = row.get(name, Cell("missing"))
-            present, value = effective_value(cell, columns[name])
+            present, value = effective_value(cell, columns[name], tick_rate)
             if present and column.get("type") == "string" and isinstance(value, str):
                 value = normalize_string(value)
             values[name] = cell.canonical(value if present else None)
@@ -68,8 +68,25 @@ def schema_columns(schema: dict[str, Any]) -> list[str]:
     return [str(column["name"]) for column in ordered_schema_columns(schema)]
 
 
-def content_fingerprint(table: TableSource, schema: dict[str, Any]) -> str:
-    return hashlib.sha256(canonical_json(canonical_table_value(table, schema))).hexdigest()
+def content_fingerprint(table: TableSource, schema: dict[str, Any], tick_rate: int = 60) -> str:
+    return hashlib.sha256(canonical_json(canonical_table_value(table, schema, tick_rate))).hexdigest()
+
+
+def fingerprint_files(files: list[Path], relative_to: Path) -> str:
+    digest = hashlib.sha256()
+    base = relative_to.resolve()
+    ordered = sorted(
+        {path.resolve() for path in files if path.is_file()},
+        key=lambda path: path.relative_to(base).as_posix(),
+    )
+    for path in ordered:
+        rel = path.relative_to(base).as_posix().encode("utf-8")
+        data = path.read_bytes()
+        digest.update(len(rel).to_bytes(8, "big"))
+        digest.update(rel)
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(data)
+    return digest.hexdigest()
 
 
 def source_fingerprint(table_path: Path, schema_path: Path) -> str:

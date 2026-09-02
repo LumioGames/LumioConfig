@@ -21,7 +21,9 @@
 - 明确空值：写成 null，表示作者明确给出空值。
 - 默认标记：写成 @default，要求编译期使用 Schema default。
 
-字符串中的管道符使用反斜线转义（`\|`）；字面反斜线写成 `\\`。悬空反斜线或未知 `\x` 序列报 `INVALID_ESCAPE`，不得静默吞掉。字符串单元格按 NFC 归一化后再进入内容指纹和格式化输出。数值列使用十进制文本；表现浮点列的特殊值在首版拒绝。
+字符串中的管道符使用反斜线转义（`\|`）；字面反斜线写成 `\\`。悬空反斜线或未知 `\x` 序列报 `INVALID_ESCAPE`，不得静默吞掉。字符串单元格按 NFC 归一化后再进入内容指纹和格式化输出。数值列使用十进制文本；表现浮点列拒绝 NaN/Inf，负零归一为 `0.0`。Schema 列可声明 `unit`：`seconds` 按 `repository.yaml` 的 `tickRate` 换成帧整数，`percent` 换成千分比整数。作者可写 `2.5`，产物写整数。
+
+可选 overlay 文本表放在 `layers/{engine,platform,server,product,environment}/<table>.txt`，只覆盖 `tables/` 里已有的行。
 
 Schema 每列有唯一整数 `ordinal`，改名或重排 JSON 数组后仍识别同一列；内容指纹按 ordinal 排序列。缺失或重复 ordinal 报 `MISSING_ORDINAL` / `DUPLICATE_ORDINAL`。
 

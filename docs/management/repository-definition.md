@@ -14,7 +14,7 @@
 
 ## 管理对象
 
-- **Source**：`schemas/`、`tables/`、`registry/`，是 Git 中的权威内容。
+- **Source**：`schemas/`、`tables/`、`registry/`，是 Git 中的权威内容；`layers/` 是编译期可选覆盖，不能创造新行。
 - **Change**：结构化补丁或等价的 Pull Request 改动；必须经过机器校验。
 - **Revision**：一次可重建的导出集合，包含三端投影和内容/包裹/底稿指纹。
 - **Artifact**：导出目录中的只读文件；不得在目标实现仓手改。
