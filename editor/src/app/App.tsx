@@ -105,6 +105,7 @@ export function App() {
   const savingRef = useRef(false);
   const pendingHintRef = useRef("");
   const rebasingRef = useRef(false);
+  const conflictWriteRef = useRef(false);
   const rebaseFlightRef = useRef<Promise<unknown> | null>(null);
   const rebaseNowRef = useRef<() => Promise<unknown>>(async () => undefined);
   stateRef.current = state;
@@ -131,7 +132,13 @@ export function App() {
       return;
     }
     const phase = stateRef.current.phase;
-    if (phase === "Validating" || phase === "ReadyToSubmit" || phase === "Submitting" || rebasingRef.current) {
+    if (
+      phase === "Validating" ||
+      phase === "ReadyToSubmit" ||
+      phase === "Submitting" ||
+      phase === "Conflicted" ||
+      rebasingRef.current
+    ) {
       return;
     }
     if (saveTimer.current) {
@@ -222,15 +229,20 @@ export function App() {
       return;
     }
     rememberToken(map, rowKey, column, token);
-    await apiHost.executeCommand(COMMAND.setRangeValues, {
-      range: {
-        startRow: rowIndex + 1,
-        startColumn: colIndex,
-        endRow: rowIndex + 1,
-        endColumn: colIndex,
-      },
-      value: buildCell(token, desc, rowKey),
-    });
+    conflictWriteRef.current = force;
+    try {
+      await apiHost.executeCommand(COMMAND.setRangeValues, {
+        range: {
+          startRow: rowIndex + 1,
+          startColumn: colIndex,
+          endRow: rowIndex + 1,
+          endColumn: colIndex,
+        },
+        value: buildCell(token, desc, rowKey),
+      });
+    } finally {
+      conflictWriteRef.current = false;
+    }
     markDirty();
   }, [markDirty]);
 
@@ -266,7 +278,8 @@ export function App() {
           dispatch({ type: "hint", hint });
         },
         tableColumns: warehouse.columns,
-        canEdit: () => rebasingRef.current || canEdit(stateRef.current),
+        canEdit: () =>
+          conflictWriteRef.current || (!rebasingRef.current && canEdit(stateRef.current)),
         onChange: markDirty,
         onViewChange: () => {
           if (mapRef.current) {
@@ -444,6 +457,10 @@ export function App() {
           openTable(stateRef.current.table);
           return result;
         }
+        if (result.errors.some((item) => item.code === "SCHEMA_CHANGED")) {
+          dispatch({ type: "schemaChanged" });
+          return result;
+        }
         const conflict = result.errors.some(
           (item) => item.code === "STALE_BASELINE" || item.code === "DELETED_ROW_CONFLICT",
         );
@@ -482,16 +499,34 @@ export function App() {
     const flight = (async () => {
       try {
         const loadedDraft = await providerRef.current.load(tableName);
+        if (stateRef.current.table !== tableName) {
+          return undefined;
+        }
         if (!loadedDraft.draft) {
+          disposeSheet();
+          mountWorkbook(loadedDraft.table, 0);
           return undefined;
         }
         const expected = loadedDraft.draft.draftVersion ?? stateRef.current.draftVersion;
         const result = await providerRef.current.rebase(tableName, expected);
+        if (stateRef.current.table !== tableName) {
+          return result;
+        }
         if (result.code === "SCHEMA_CHANGED") {
+          const loaded = await providerRef.current.load(tableName);
+          if (stateRef.current.table !== tableName) {
+            return result;
+          }
+          disposeSheet();
+          mountWorkbook(loaded.table, 0);
           dispatch({ type: "schemaChanged" });
+          stateRef.current = { ...stateRef.current, phase: "Failed", hint: "SCHEMA_CHANGED，请刷新重放" };
           return result;
         }
         const loaded = await providerRef.current.load(tableName);
+        if (stateRef.current.table !== tableName) {
+          return result;
+        }
         disposeSheet();
         const overlay = {
           ...result.draft,
@@ -561,20 +596,31 @@ export function App() {
       .catch((error: unknown) => {
         dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
       });
-    const stop = providerRef.current.subscribe((name) => {
+    const stop = providerRef.current.subscribe((name, data) => {
       if (name === "schema_changed") {
+        const eventTable = (data as { table?: string } | undefined)?.table;
+        if (eventTable && eventTable !== stateRef.current.table) {
+          return;
+        }
         dispatch({ type: "schemaChanged" });
         return;
       }
       if (name === "repo_revision_changed") {
+        const eventTable = (data as { table?: string } | undefined)?.table;
+        if (eventTable && eventTable !== stateRef.current.table) {
+          return;
+        }
         const phase = stateRef.current.phase;
         if (phase === "Submitting" || phase === "Validating") {
           return;
         }
-        rebasingRef.current = true;
-        stateRef.current = { ...stateRef.current, phase: "Stale" };
-        dispatch({ type: "stale", hint: "仓库已变化，草稿保留" });
-        void rebaseNow();
+        void (async () => {
+          await persistDraftRef.current();
+          rebasingRef.current = true;
+          stateRef.current = { ...stateRef.current, phase: "Stale" };
+          dispatch({ type: "stale", hint: "仓库已变化，草稿保留" });
+          await rebaseNow();
+        })();
       }
     });
     return stop;
@@ -806,19 +852,28 @@ export function App() {
           <ConflictPanel
             conflicts={conflicts}
             onAction={(conflict, action, value) => {
+              const finishConflicts = (next: RebaseConflict[]) => {
+                setConflicts(next);
+                if (next.length === 0) {
+                  dispatch({ type: "conflictsResolved" });
+                  stateRef.current = { ...stateRef.current, phase: "ReadyDirty" };
+                }
+              };
               if (action === "cancel") {
-                setConflicts([]);
-                dispatch({ type: "dirty", dirtyCount: Math.max(stateRef.current.dirtyCount, 1) });
+                finishConflicts([]);
                 return;
               }
               if (action === "drop") {
                 const map = mapRef.current;
                 if (conflict.rowId && map) {
-                  delete map.currentCells[conflict.rowId];
-                  map.rowKeys = map.rowKeys.filter((key) => key !== conflict.rowId);
+                  if (conflict.code === "DELETED_ROW_CONFLICT") {
+                    delete map.currentCells[conflict.rowId];
+                    map.rowKeys = map.rowKeys.filter((key) => key !== conflict.rowId);
+                  } else {
+                    map.deleted.delete(conflict.rowId);
+                  }
                 }
-                setConflicts((current) => current.filter((item) => item.rowId !== conflict.rowId));
-                dispatch({ type: "dirty", dirtyCount: Math.max(stateRef.current.dirtyCount, 1) });
+                finishConflicts(conflicts.filter((item) => item.rowId !== conflict.rowId));
                 return;
               }
               const raw =
@@ -844,15 +899,9 @@ export function App() {
               if (conflict.rowId && conflict.column) {
                 void writeToken(conflict.rowId, conflict.column, token, true);
               }
-              setConflicts((current) => {
-                const next = current.filter(
-                  (item) => !(item.rowId === conflict.rowId && item.column === conflict.column),
-                );
-                if (next.length === 0) {
-                  dispatch({ type: "dirty", dirtyCount: Math.max(stateRef.current.dirtyCount, 1) });
-                }
-                return next;
-              });
+              finishConflicts(
+                conflicts.filter((item) => !(item.rowId === conflict.rowId && item.column === conflict.column)),
+              );
             }}
           />
         ) : null}

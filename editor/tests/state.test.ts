@@ -50,6 +50,10 @@ describe("editor reducer", () => {
     const conflicted = reducer(merged, { type: "conflicted", hint: "单元格冲突" });
     expect(conflicted.phase).toBe("Conflicted");
     expect(canSubmit(conflicted)).toBe(false);
+    const stillConflicted = reducer(conflicted, { type: "dirty", dirtyCount: 2 });
+    expect(stillConflicted.phase).toBe("Conflicted");
+    const resolved = reducer(stillConflicted, { type: "conflictsResolved" });
+    expect(resolved.phase).toBe("ReadyDirty");
     const schema = reducer(merged, { type: "schemaChanged" });
     expect(schema.phase).toBe("Failed");
     expect(schema.hint).toContain("SCHEMA_CHANGED");

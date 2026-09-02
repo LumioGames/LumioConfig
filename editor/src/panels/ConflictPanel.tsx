@@ -39,7 +39,7 @@ export function ConflictPanel({ conflicts, onAction }: ConflictPanelProps) {
               <td>{conflict.current ?? ""}</td>
               <td>{conflict.draft ?? ""}</td>
               <td>
-                {conflict.code === "DELETED_ROW_CONFLICT" ? (
+                {conflict.code === "DELETED_ROW_CONFLICT" || !conflict.column ? (
                   <>
                     <button type="button" data-testid="conflict-drop" onClick={() => onAction(conflict, "drop")}>
                       放弃我的改动

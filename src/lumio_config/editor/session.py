@@ -192,7 +192,8 @@ class Session:
             current_schema = (self._fingerprints.get(table) or {}).get("schemaFingerprint") or ""
             base_fp = str(draft.get("baseFingerprint") or "")
             snapshot = (self._history.get(table) or {}).get(base_fp)
-            if snapshot and snapshot.get("schemaFingerprint") and snapshot["schemaFingerprint"] != current_schema:
+            draft_schema = str(draft.get("schemaFingerprint") or "") or str((snapshot or {}).get("schemaFingerprint") or "")
+            if draft_schema and current_schema and draft_schema != current_schema:
                 return RebaseResult(ok=False, draft=draft, conflicts=[], base_fingerprint=base_fp, code="SCHEMA_CHANGED", draft_version=int(draft.get("draftVersion") or 0))
             schema = self.schemas[table]
             id_column = str(schema.get("idColumn", "id"))
@@ -371,22 +372,24 @@ class Session:
                 else:
                     new_deleted.append(str(row_id))
 
+        next_draft = {
+            "table": table,
+            "baseFingerprint": current_fp,
+            "schemaFingerprint": current_schema,
+            "rows": new_rows,
+            "renamed": new_renamed,
+            "deleted": new_deleted,
+            "draftVersion": int(draft.get("draftVersion") or 0),
+        }
         if conflicts:
             return RebaseResult(
                 ok=False,
-                draft=draft,
+                draft=next_draft,
                 conflicts=conflicts,
                 base_fingerprint=current_fp,
                 merged=merged,
                 draft_version=int(draft.get("draftVersion") or 0),
             )
-        next_draft = {
-            "table": table,
-            "baseFingerprint": current_fp,
-            "rows": new_rows,
-            "renamed": new_renamed,
-            "deleted": new_deleted,
-        }
         version = drafts.save(table, next_draft, int(draft.get("draftVersion") or 0))
         loaded = drafts.load(table) or next_draft
         return RebaseResult(

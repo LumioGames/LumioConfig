@@ -306,6 +306,9 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
         def _put_draft(self, table: str) -> None:
             body = self._read_json()
             expected = int(body.get("expectedDraftVersion") or 0)
+            fps = host.session.fingerprints().get(table) or {}
+            if fps.get("schemaFingerprint"):
+                body["schemaFingerprint"] = fps["schemaFingerprint"]
             try:
                 version = host.drafts.save(table, body, expected)
             except DraftVersionConflict as exc:

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import shutil
 import sys
@@ -40,7 +41,13 @@ def _fp(root: Path) -> str:
 
 def _draft(root: Path, rows: dict, version: int = 0, **extra) -> tuple[DraftStore, dict, int]:
     store = DraftStore(root)
-    payload = {"table": "skills", "baseFingerprint": _fp(root), "rows": rows, **extra}
+    payload = {
+        "table": "skills",
+        "baseFingerprint": _fp(root),
+        "schemaFingerprint": hashlib.sha256((root / "schemas" / "skills.json").read_bytes()).hexdigest(),
+        "rows": rows,
+        **extra,
+    }
     version = store.save("skills", payload, version)
     loaded = store.load("skills")
     assert loaded is not None
@@ -181,6 +188,43 @@ class RebaseDraftTests(unittest.TestCase):
             session.reload_from_disk()
             result = session.rebase_draft("skills", draft, store)
             self.assertTrue(any(item.get("code") == "STALE_BASELINE" for item in result.conflicts), result.conflicts)
+
+    def test_same_row_keeps_take_draft_cells_when_another_cell_conflicts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_repo(root)
+            session = _session(root)
+            store, draft, version = _draft(
+                root,
+                {
+                    "40001": {
+                        "damage": {"state": "value", "raw": "133"},
+                        "cooldown_frames": {"state": "value", "raw": "80"},
+                    }
+                },
+            )
+            _apply(root, [{"op": "update", "name": "fireball", "set": {"damage": 140}}])
+            session.reload_from_disk()
+            result = session.rebase_draft("skills", draft, store)
+            self.assertFalse(result.ok)
+            self.assertTrue(any(item.get("code") == "STALE_BASELINE" and item.get("column") == "damage" for item in result.conflicts))
+            self.assertEqual(result.draft["rows"]["40001"]["cooldown_frames"]["raw"], "80")
+            self.assertNotIn("damage", result.draft["rows"]["40001"])
+            self.assertEqual(store.load("skills")["draftVersion"], version)
+
+    def test_schema_changed_without_history_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_repo(root)
+            store, draft, version = _draft(root, {"40001": {"damage": {"state": "value", "raw": "130"}}})
+            schema = json.loads((root / "schemas" / "skills.json").read_text(encoding="utf-8"))
+            schema["title"] = "skills-v3"
+            (root / "schemas" / "skills.json").write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
+            session = _session(root)
+            result = session.rebase_draft("skills", draft, store)
+            self.assertFalse(result.ok)
+            self.assertEqual(result.code, "SCHEMA_CHANGED")
+            self.assertEqual(store.load("skills")["draftVersion"], version)
 
     def test_schema_changed_does_not_write_draft(self):
         with tempfile.TemporaryDirectory() as temp:

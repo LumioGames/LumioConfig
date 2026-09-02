@@ -25,6 +25,7 @@ export type EditorAction =
   | { type: "submit" }
   | { type: "submitted"; fingerprint: string }
   | { type: "conflicted"; hint: string }
+  | { type: "conflictsResolved" }
   | { type: "rebased"; merged: number; draftVersion: number }
   | { type: "schemaChanged" };
 
@@ -55,6 +56,15 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
     case "hint":
       return { ...state, hint: action.hint };
     case "dirty":
+      if (
+        state.phase === "Conflicted" ||
+        state.phase === "Stale" ||
+        state.phase === "Failed" ||
+        state.phase === "Submitting" ||
+        state.phase === "Validating"
+      ) {
+        return { ...state, dirtyCount: action.dirtyCount };
+      }
       return {
         ...state,
         dirtyCount: action.dirtyCount,
@@ -91,6 +101,8 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       };
     case "conflicted":
       return { ...state, phase: "Conflicted", hint: action.hint };
+    case "conflictsResolved":
+      return { ...state, phase: "ReadyDirty", dirtyCount: Math.max(state.dirtyCount, 1), hint: "" };
     case "rebased":
       return {
         ...state,

@@ -176,6 +176,16 @@ test.describe("host rebase", () => {
       await expect(page.getByTestId("conflict-panel")).toContainText("133");
       await page.getByTestId("conflict-mine").click();
       await expect(page.getByTestId("conflict-panel")).toHaveCount(0);
+      const submitted = await page.evaluate(async () => {
+        await window.__lumioPoc?.validateNow?.();
+        return window.__lumioPoc?.submitNow?.();
+      });
+      expect(
+        submitted && typeof submitted === "object" && "ok" in submitted ? (submitted as { ok: boolean }).ok : false,
+      ).toBeTruthy();
+      const skills = fs.readFileSync(path.join(isolated, "tables", "skills.txt"), "utf8");
+      expect(skills).toContain("133");
+      expect(skills).not.toContain("| 140 ");
     } finally {
       isolatedHost.child.kill();
     }
