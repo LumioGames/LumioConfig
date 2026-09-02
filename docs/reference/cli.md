@@ -22,7 +22,22 @@
     python tools/lumio_config.py patch apply path/to/patch.json
     python tools/lumio_config.py patch apply path/to/patch.json --audit audit.jsonl --reason "why"
 
-校验或合入名字补丁。补丁不得填写终身编号；create 在 apply 时由发号台分配。`patch validate` 失败时 stdout 为结构化错误 JSON 数组，成功时打印 `patch-validate: OK`。`patch apply` 始终打印 JSON：`ok` / `summary` / `errors` / `sourceFingerprint` / `beforeSourceFingerprint` / `assignedIds`；`--reason` 只写入该 JSON，不自动 commit。`--audit` 在成功时追加一行 JSON（时间、表、摘要、前后指纹）。
+校验或合入名字补丁。补丁不得填写终身编号；create 在 apply 时由发号台分配。`patch validate` 失败时 stdout 为结构化错误 JSON 数组，成功时打印 `patch-validate: OK`。`patch apply` 始终打印 JSON：`contract`（`lumio-config-tools/v1`）/ `ok` / `summary` / `errors` / `sourceFingerprint` / `beforeSourceFingerprint` / `assignedIds` / `actor`；`--reason` 写入该 JSON，不自动 commit。`--actor` 默认 `ai`。`--audit` 在成功时追加一行 JSON（时间、表、摘要、前后指纹、actor、理由）。`--timeout` 为可选秒数上限。
+
+## query
+
+    python tools/lumio_config.py query table <table>
+    python tools/lumio_config.py query row <table> <name-or-id>
+    python tools/lumio_config.py query schema <table>
+    python tools/lumio_config.py query card <table> <name>
+
+只读查询，输出带 `"contract": "lumio-config-tools/v1"` 的 JSON。`card` 返回主表行，以及 ref 目标行和反向引用该行的子表行。不写 `tables/` / `registry/`。
+
+## preview
+
+    python tools/lumio_config.py preview path/to/patch.json
+
+在临时目录对「当前源 + 补丁」做隔离 export，输出三端是否变化与内容/底稿指纹前后值；不改权威源。成功/失败均为同一合同 JSON。
 
 ## registry
 

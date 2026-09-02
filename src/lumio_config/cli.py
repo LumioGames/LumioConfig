@@ -9,12 +9,22 @@ from pathlib import Path
 from .export import ValidationFailure, export_repository
 from .ids import verify_registry
 from .patch import apply_patch, validate_patch
+from .preview import preview_patch
+from .query import CONTRACT, query_card, query_row, query_schema, query_table
 from .text_table import format_table_text, parse_table
 from .validate import load_sources, validate_repository
 
 
 def _root_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--root", type=Path, default=None, help="repository root (defaults to the project root)")
+
+
+def _timeout_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--timeout", type=float, default=None, help="maximum seconds for this command")
+
+
+def _print_json(value: object) -> None:
+    print(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True))
 
 
 def _resolve_root(value: Path | None) -> Path:
@@ -64,7 +74,21 @@ def build_parser() -> argparse.ArgumentParser:
     patch.add_argument("patch_path", type=Path)
     patch.add_argument("--audit", type=Path, default=None)
     patch.add_argument("--reason", default=None)
+    patch.add_argument("--actor", default="ai", help="who submitted the patch")
+    _timeout_argument(patch)
     _root_argument(patch)
+
+    query = subparsers.add_parser("query", help="read a table, row, schema, or card as JSON")
+    query.add_argument("mode", choices=["table", "row", "schema", "card"])
+    query.add_argument("table_name")
+    query.add_argument("key", nargs="?", default=None)
+    _timeout_argument(query)
+    _root_argument(query)
+
+    preview = subparsers.add_parser("preview", help="export a candidate patch in isolation without writing source")
+    preview.add_argument("patch_path", type=Path)
+    _timeout_argument(preview)
+    _root_argument(preview)
 
     registry = subparsers.add_parser("registry", help="verify row-id and tombstone registries")
     registry.add_argument("mode", choices=["verify"])
@@ -106,16 +130,18 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         result = apply_patch(root, payload)
         body = {
+            "contract": CONTRACT,
             "ok": not result.errors,
             "summary": result.summary,
             "errors": result.errors,
             "sourceFingerprint": result.source_fingerprint,
             "beforeSourceFingerprint": result.before_source_fingerprint,
             "assignedIds": result.assigned_ids,
+            "actor": args.actor,
         }
         if args.reason:
             body["reason"] = args.reason
-        print(json.dumps(body, ensure_ascii=False, indent=2, sort_keys=True))
+        _print_json(body)
         if args.audit and not result.errors:
             args.audit.parent.mkdir(parents=True, exist_ok=True)
             line = {
@@ -124,10 +150,32 @@ def main(argv: list[str] | None = None) -> int:
                 "summary": result.summary,
                 "beforeSourceFingerprint": result.before_source_fingerprint,
                 "sourceFingerprint": result.source_fingerprint,
+                "actor": args.actor,
             }
+            if args.reason:
+                line["reason"] = args.reason
             with args.audit.open("a", encoding="utf-8", newline="\n") as handle:
                 handle.write(json.dumps(line, ensure_ascii=False) + "\n")
         return 0 if not result.errors else 1
+    if args.command == "query":
+        if args.mode in {"row", "card"} and not args.key:
+            _print_json({"contract": CONTRACT, "ok": False, "errors": [{"table": args.table_name, "row": "", "column": "", "code": "PATCH_INVALID", "message": "row or card query needs a name or id", "suggestion": "pass the row name or permanent id"}]})
+            return 1
+        if args.mode == "table":
+            payload = query_table(root, args.table_name)
+        elif args.mode == "schema":
+            payload = query_schema(root, args.table_name)
+        elif args.mode == "card":
+            payload = query_card(root, args.table_name, str(args.key))
+        else:
+            payload = query_row(root, args.table_name, str(args.key))
+        _print_json(payload)
+        return 0 if payload.get("ok", True) else 1
+    if args.command == "preview":
+        patch = json.loads(args.patch_path.read_text(encoding="utf-8"))
+        payload = preview_patch(root, patch)
+        _print_json(payload)
+        return 0 if payload.get("ok") else 1
     if args.command == "registry":
         errors = verify_registry(root)
         if errors:
