@@ -1,0 +1,183 @@
+import { expect, test, type Page } from "@playwright/test";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const editorRoot = path.resolve(here, "../..");
+const repoRoot = path.resolve(editorRoot, "..");
+const distDir = path.join(editorRoot, "dist");
+const python =
+  process.env.PYTHON ?? "C:\\Users\\g923\\AppData\\Local\\Programs\\Python\\Python312\\python.exe";
+
+function copyRepo(dst: string) {
+  for (const name of ["schemas", "tables", "registry"]) {
+    fs.cpSync(path.join(repoRoot, name), path.join(dst, name), { recursive: true });
+  }
+  fs.copyFileSync(path.join(repoRoot, "repository.yaml"), path.join(dst, "repository.yaml"));
+  const lumio = path.join(repoRoot, ".lumio");
+  if (fs.existsSync(lumio)) {
+    fs.cpSync(lumio, path.join(dst, ".lumio"), { recursive: true });
+  }
+}
+
+async function gitInit(root: string) {
+  const run = (args: string[]) =>
+    new Promise<void>((resolve, reject) => {
+      const child = spawn("git", args, { cwd: root, stdio: "ignore" });
+      child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`git ${args.join(" ")} -> ${code}`))));
+    });
+  await run(["init"]);
+  await run(["config", "user.email", "e2e@test"]);
+  await run(["config", "user.name", "e2e"]);
+  await run(["add", "-A"]);
+  await run(["commit", "-m", "init"]);
+}
+
+function startHost(root: string): Promise<{ child: ChildProcessWithoutNullStreams; url: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      python,
+      [path.join(repoRoot, "tools", "lumio_config.py"), "serve", "--port", "0", "--no-open", "--root", root],
+      {
+        cwd: repoRoot,
+        env: { ...process.env, LUMIO_EDITOR_DIST: distDir, PYTHONUTF8: "1", PYTHONUNBUFFERED: "1" },
+      },
+    );
+    let buffer = "";
+    const onData = (chunk: Buffer) => {
+      buffer += chunk.toString("utf8");
+      const match = buffer.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[^\s]+/);
+      if (match) {
+        child.stdout.off("data", onData);
+        resolve({ child, url: match[0].trim() });
+      }
+    };
+    child.stdout.on("data", onData);
+    child.stderr.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+    });
+    child.on("exit", (code) => reject(new Error(`host exited ${code}: ${buffer}`)));
+    setTimeout(() => reject(new Error(`host start timeout: ${buffer}`)), 30_000);
+  });
+}
+
+function stopHost(child: ChildProcessWithoutNullStreams) {
+  return new Promise<void>((resolve) => {
+    child.once("exit", () => resolve());
+    child.kill();
+    setTimeout(resolve, 2000);
+  });
+}
+
+async function waitPoc(page: Page, url: string) {
+  await page.goto(url);
+  await page.getByTestId("univer-root").waitFor();
+  await page.waitForFunction(() => Boolean(window.__lumioPoc?.map?.()));
+}
+
+test.describe("host drafts", () => {
+  test.describe.configure({ mode: "serial" });
+  test.use({ bypassCSP: true });
+  let tmp = "";
+  let host: { child: ChildProcessWithoutNullStreams; url: string } | undefined;
+
+  test.beforeAll(async () => {
+    if (!fs.existsSync(path.join(distDir, "index.html"))) {
+      throw new Error("editor/dist missing; run pnpm build before host e2e");
+    }
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lumio-r361-"));
+    copyRepo(tmp);
+    await gitInit(tmp);
+    host = await startHost(tmp);
+  });
+
+  test.afterAll(async () => {
+    if (host) {
+      await stopHost(host.child);
+    }
+    if (tmp && fs.existsSync(tmp)) {
+      try {
+        fs.rmSync(tmp, { recursive: true, force: true });
+      } catch {
+        /* Windows may keep the python process handle briefly */
+      }
+    }
+  });
+
+  test("refresh restores draft and a later save increments draftVersion", async ({ page }) => {
+    if (!host) {
+      throw new Error("host missing");
+    }
+    await waitPoc(page, host.url);
+    await page.evaluate(() => window.__lumioPoc?.applyFourState("40001", "display_name", "null"));
+    const version = await page.evaluate(() => window.__lumioPoc?.saveDraftNow());
+    expect(version).toBeGreaterThan(0);
+    await page.reload();
+    await page.waitForFunction(() => Boolean(window.__lumioPoc?.map?.()));
+    const restored = await page.evaluate(() => window.__lumioPoc?.extractTokens()?.["40001"]?.display_name?.raw);
+    expect(restored).toBe("null");
+    const shown = await page.evaluate(() => window.__lumioPoc?.draftVersion());
+    expect(shown).toBe(version);
+    await page.evaluate(() => window.__lumioPoc?.applyFourState("40001", "display_name", "empty"));
+    const next = await page.evaluate(() => window.__lumioPoc?.saveDraftNow());
+    expect(next).toBe((version ?? 0) + 1);
+  });
+
+  test("second tab save returns DRAFT_VERSION_CONFLICT", async ({ page, context }) => {
+    if (!host) {
+      throw new Error("host missing");
+    }
+    await waitPoc(page, host.url);
+    const page2 = await context.newPage();
+    await waitPoc(page2, host.url);
+    await page.evaluate(() => window.__lumioPoc?.applyFourState("40001", "icon", "null"));
+    const first = await page.evaluate(() => window.__lumioPoc?.saveDraftNow());
+    expect(first).toBeGreaterThan(0);
+    await page2.evaluate(() => window.__lumioPoc?.applyFourState("40001", "icon", "empty"));
+    const second = await page2.evaluate(() => window.__lumioPoc?.saveDraftNow());
+    expect(second).toBeUndefined();
+    await expect(page2.getByTestId("status-hint")).toContainText("标签页");
+    await expect(page2.getByTestId("draft-refresh")).toBeVisible();
+    await page2.close();
+  });
+
+  test("view-only zoom stays in localStorage, not the draft file", async ({ page }) => {
+    if (!host) {
+      throw new Error("host missing");
+    }
+    await waitPoc(page, host.url);
+    await page.evaluate(async () => {
+      await window.__lumioPoc?.executeCommand("sheet.command.set-zoom-ratio", { zoomRatio: 1.5 });
+      window.__lumioPoc?.persistViewNow();
+    });
+    const view = await page.evaluate(() => {
+      const keys = Object.keys(localStorage).filter((key) => key.startsWith("lumio-config-editor:view:"));
+      return keys.map((key) => localStorage.getItem(key) ?? "");
+    });
+    expect(view.join("")).toMatch(/zoom|1\.5|1\.25/);
+    const draftPath = path.join(tmp, ".lumio", "drafts", "skills.json");
+    if (fs.existsSync(draftPath)) {
+      const draft = fs.readFileSync(draftPath, "utf8");
+      expect(draft).not.toContain("zoomRatio");
+      expect(draft).not.toContain("columnWidths");
+    }
+  });
+
+  test("Host restart restores the draft", async ({ page }) => {
+    if (!host) {
+      throw new Error("host missing");
+    }
+    await waitPoc(page, host.url);
+    await page.evaluate(() => window.__lumioPoc?.applyFourState("40001", "display_name", "default"));
+    const version = await page.evaluate(() => window.__lumioPoc?.saveDraftNow());
+    expect(version).toBeGreaterThan(0);
+    await stopHost(host.child);
+    host = await startHost(tmp);
+    await waitPoc(page, host.url);
+    const restored = await page.evaluate(() => window.__lumioPoc?.extractTokens()?.["40001"]?.display_name?.raw);
+    expect(restored).toBe("@default");
+  });
+});

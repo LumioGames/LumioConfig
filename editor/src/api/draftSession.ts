@@ -1,0 +1,49 @@
+import type { Draft, TableResponse } from "./types";
+import { api, HostApiError, subscribeEvents } from "./client";
+
+export interface SubmitResult {
+  ok: boolean;
+}
+
+export interface DraftSessionProvider {
+  load(table: string): Promise<{ table: TableResponse; draft?: Draft }>;
+  saveDraft(table: string, draft: Draft, expectedVersion: number): Promise<number>;
+  submit(patch: unknown): Promise<SubmitResult>;
+  subscribe(handler: (name: string, data: unknown) => void): () => void;
+}
+
+export class LocalDraftSessionProvider implements DraftSessionProvider {
+  async load(table: string): Promise<{ table: TableResponse; draft?: Draft }> {
+    const tableResponse = await api<TableResponse>(`/api/tables/${table}`);
+    try {
+      const draft = await api<Draft>(`/api/drafts/${table}`);
+      return { table: tableResponse, draft };
+    } catch (error) {
+      if (error instanceof HostApiError && (error.code === "NOT_FOUND" || error.code === "UNKNOWN_TABLE")) {
+        return { table: tableResponse };
+      }
+      throw error;
+    }
+  }
+
+  async saveDraft(table: string, draft: Draft, expectedVersion: number): Promise<number> {
+    const body = { ...draft, expectedDraftVersion: expectedVersion };
+    const result = await api<{ draftVersion: number }>(`/api/drafts/${table}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+    return result.draftVersion;
+  }
+
+  async submit(_patch: unknown): Promise<SubmitResult> {
+    throw new Error("NotImplemented");
+  }
+
+  subscribe(handler: (name: string, data: unknown) => void): () => void {
+    let stop: (() => void) | undefined;
+    void subscribeEvents(handler).then((dispose) => {
+      stop = dispose;
+    });
+    return () => stop?.();
+  }
+}

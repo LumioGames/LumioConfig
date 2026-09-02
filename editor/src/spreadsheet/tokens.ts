@@ -7,7 +7,11 @@ export function tokensFromTable(table: TableResponse): Record<string, Record<str
     const cells: Record<string, CellToken> = {};
     for (const column of table.columns) {
       if (column.name === "id") {
-        cells.id = { state: "value", raw: String(row.id), effective: row.id };
+        if (rowKey.startsWith("draft:")) {
+          cells.id = { state: "value", raw: "", effective: null };
+        } else {
+          cells.id = { state: "value", raw: String(row.id), effective: row.id };
+        }
       } else if (column.name === "name") {
         cells.name = { state: "value", raw: row.name, effective: row.name };
       } else {

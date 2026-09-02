@@ -132,6 +132,9 @@ class Session:
             },
         }
 
+    def reload_settings(self, settings: Settings) -> None:
+        self.settings = settings
+
     def subscribe(self) -> queue.Queue[dict[str, Any]]:
         pending: queue.Queue[dict[str, Any]] = queue.Queue()
         with self._lock:

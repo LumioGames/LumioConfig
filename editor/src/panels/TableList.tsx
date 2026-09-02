@@ -3,15 +3,18 @@ import { FIXTURES } from "../fixtures/catalog";
 interface TableListProps {
   selected: string;
   onSelect: (name: string) => void;
+  dirtyCounts?: Record<string, number>;
+  names?: { name: string; label?: string }[];
 }
 
-export function TableList({ selected, onSelect }: TableListProps) {
+export function TableList({ selected, onSelect, dirtyCounts = {}, names }: TableListProps) {
+  const items = names ?? FIXTURES;
   return (
-    <nav className="table-list" data-testid="table-list" aria-label="fixture tables">
-      <h1>LumioConfig POC</h1>
-      <p className="table-list__note">静态 fixture，无 Host HTTP</p>
+    <nav className="table-list" data-testid="table-list" aria-label="tables">
+      <h1>LumioConfig</h1>
+      <p className="table-list__note">草稿自动保存，不写权威源</p>
       <ul>
-        {FIXTURES.map((fixture) => (
+        {items.map((fixture) => (
           <li key={fixture.name}>
             <button
               type="button"
@@ -19,7 +22,8 @@ export function TableList({ selected, onSelect }: TableListProps) {
               className={fixture.name === selected ? "is-active" : undefined}
               onClick={() => onSelect(fixture.name)}
             >
-              {fixture.label}
+              {fixture.label ?? fixture.name}
+              {dirtyCounts[fixture.name] ? ` · ${dirtyCounts[fixture.name]}` : ""}
             </button>
           </li>
         ))}

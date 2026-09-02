@@ -127,4 +127,20 @@ describe("installInterceptors", () => {
     expect(map.deleted.has(first ?? "")).toBe(true);
     expect(map.rowKeys).not.toContain(first);
   });
+
+  it("paste keeps an existing four-state lumio token instead of collapsing to value", () => {
+    const { univer, map } = setup();
+    const params = {
+      range: { startRow: 1, startColumn: 2, endRow: 1, endColumn: 2 },
+      value: {
+        custom: {
+          lumio: { state: "empty", raw: '""', effective: "", column: "display_name", rowKey: "40001" },
+        },
+      },
+    };
+    const event = univer.emit(COMMAND.paste, params);
+    expect(event.cancel).toBeFalsy();
+    expect(map.currentCells["40001"]?.display_name?.raw).toBe('""');
+    expect(map.currentCells["40001"]?.display_name?.state).toBe("empty");
+  });
 });

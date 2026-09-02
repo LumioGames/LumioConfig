@@ -58,8 +58,9 @@ body,
 
 .app-main {
   display: grid;
-  grid-template-rows: 1fr 36px;
+  grid-template-rows: 1fr auto auto 36px;
   min-width: 0;
+  position: relative;
 }
 
 .univer-root {
@@ -84,4 +85,47 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.four-state-menu {
+  position: fixed;
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #d8dee6;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.four-state-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.four-state-menu button:hover {
+  background: #e8f1ff;
+}
+
+.settings-panel,
+.error-panel {
+  padding: 6px 12px;
+  font-size: 12px;
+  background: #fff;
+  border-top: 1px solid #e6ebf1;
+}
+
+.draft-refresh {
+  margin: 6px 12px;
+  padding: 6px 12px;
+  border: 1px solid #8ab4f8;
+  background: #e8f1ff;
+  border-radius: 6px;
+  cursor: pointer;
 }
