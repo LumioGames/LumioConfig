@@ -51,9 +51,11 @@ def build_release_manifest(
     input_hash: str,
     output_hash: str,
 ) -> dict[str, Any]:
+    target_manifests = {target: f"{TARGET_DIRS[target]}/manifest.json" for target in targets}
     return {
         "formatVersion": 1,
         "baselineId": baseline_id,
+        "revisionId": content_fingerprint,
         "targets": targets,
         "compilerHash": compiler_hash,
         "inputHash": input_hash,
@@ -61,7 +63,9 @@ def build_release_manifest(
         "contentFingerprint": content_fingerprint,
         "packageFingerprint": package_fingerprint,
         "sourceFingerprint": source_fingerprint,
+        "publicRoot": package_fingerprint,
         "origins": "origins.json",
-        "targetManifests": {target: f"{TARGET_DIRS[target]}/manifest.json" for target in targets},
+        "targetManifests": target_manifests,
+        "projectionRoots": dict(target_manifests),
         "tables": tables,
     }

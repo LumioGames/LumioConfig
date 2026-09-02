@@ -1,0 +1,4 @@
+{
+  "code": "REVISION_FINGERPRINT_MISMATCH",
+  "requiredTables": ["skills"]
+}

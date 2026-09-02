@@ -1,0 +1,4 @@
+{
+  "code": "PROJECTION_PUBLIC_ROOT_MIXED",
+  "requiredTables": ["skills"]
+}
