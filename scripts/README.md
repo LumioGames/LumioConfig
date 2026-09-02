@@ -14,4 +14,4 @@ On Linux or macOS with symlink support, run:
 sh scripts/ensure-agent-links.sh
 ```
 
-The scripts touch only `.claude/agents`, `.claude/skills`, and `.agents/skills`, and verify that each path resolves into this repository's `.spec/` directory. Run `node .spec/tools/spec-lint.mjs` after repair.
+The scripts touch only `.claude/skills` and `.agents/skills`, and verify that each path resolves into this repository's `.spec/` directory. Framework skills and the reviewer subagent come from the [LumioAgentSpec](https://github.com/LumioGames/LumioAgentSpec) plugin; run `/lumio:lint` after repair.

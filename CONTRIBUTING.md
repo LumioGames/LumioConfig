@@ -9,8 +9,6 @@
 ## 提交前检查
 
 ```bash
-node .spec/tools/spec-lint.mjs
-node --test .spec/tools/spec-lint.test.mjs
 python -m unittest discover -s tests -v
 python tools/lumio_config.py validate
 python tools/lumio_config.py format --check
@@ -18,6 +16,8 @@ python tools/lumio_config.py export --out build/export
 python tools/lumio_config.py patch validate path/to/patch.json
 git diff --check
 ```
+
+`.spec/` 结构校验由 [LumioAgentSpec](https://github.com/LumioGames/LumioAgentSpec) 插件提供：装了插件的宿主跑 `/lumio:lint`，未装的宿主跑 `node <插件目录>/tools/spec-lint.mjs .`。
 
 提交标题使用 `type(scope): subject`，例如 `feat(validator): reject hidden-column refs`。每个 Pull Request 只解决一类问题，并说明源表、Schema、工具和验证证据。
 

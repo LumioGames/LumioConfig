@@ -111,4 +111,4 @@ description: 架构仓主会话向七个实现仓提需求、按 wave 派活、�
 
 - 每张完成卡在 Workflow 上有证据评论（分支/提交号 + 实际验证输出）。
 - 阶段汇总报告的每条退出条件都有对应命令输出或卡片链接，无裸声称。
-- 本仓 `node .spec/tools/spec-lint.mjs` 通过（技能结构合规）。
+- 本仓 `/lumio:lint` 通过（`.spec/` 结构合规；未装插件的宿主跑 `node <插件目录>/tools/spec-lint.mjs .`）。

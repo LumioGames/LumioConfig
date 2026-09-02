@@ -2,8 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $spec = Join-Path $root '.spec'
+# 框架技能与 reviewer 子 Agent 由 lumio 插件提供；这里只维护项目专属技能的链接。
 $links = @{
-    (Join-Path $root '.claude\agents') = Join-Path $spec 'agents'
     (Join-Path $root '.claude\skills') = Join-Path $spec 'skills'
     (Join-Path $root '.agents\skills') = Join-Path $spec 'skills'
 }
@@ -30,6 +30,6 @@ foreach ($entry in $links.GetEnumerator()) {
     }
 }
 
-git -C $root update-index --assume-unchanged -- .claude/agents .claude/skills .agents/skills
+git -C $root update-index --assume-unchanged -- .claude/skills .agents/skills
 
 Write-Output 'Agent links: OK'

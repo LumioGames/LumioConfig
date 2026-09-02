@@ -3,6 +3,7 @@ name: knowledge
 description: LumioConfig 开发规范与功能设计导航——修改表源、工具或治理文件时查
 metadata:
   type: index
+  status: 已交付
 ---
 
 # Knowledge（项目知识库 · 导航）
