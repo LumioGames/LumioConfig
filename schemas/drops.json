@@ -4,18 +4,21 @@
   "columns": [
     {
       "name": "id",
+      "ordinal": 0,
       "type": "u32",
       "required": true,
       "visibility": "SCV"
     },
     {
       "name": "name",
+      "ordinal": 1,
       "type": "string",
       "required": true,
       "visibility": "SCV"
     },
     {
       "name": "skill_id",
+      "ordinal": 2,
       "type": "ref",
       "required": true,
       "refTarget": "skills",
@@ -23,6 +26,7 @@
     },
     {
       "name": "chance_permille",
+      "ordinal": 3,
       "type": "i32",
       "required": true,
       "minimum": 0,
@@ -31,6 +35,7 @@
     },
     {
       "name": "display_name",
+      "ordinal": 4,
       "type": "string",
       "required": true,
       "visibility": "C"

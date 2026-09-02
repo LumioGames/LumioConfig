@@ -15,6 +15,10 @@ from lumio_config.validate import validate_repository
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _columns(*columns: dict) -> list[dict]:
+    return [{**column, "ordinal": index} for index, column in enumerate(columns)]
+
+
 class ToolchainTests(unittest.TestCase):
     def test_repository_examples_validate_without_errors(self):
         errors = validate_repository(ROOT)
@@ -31,10 +35,10 @@ class ToolchainTests(unittest.TestCase):
                     {
                         "table": "items",
                         "idColumn": "id",
-                        "columns": [
+                        "columns": _columns(
                             {"name": "id", "type": "u32", "required": True, "visibility": "SCV"},
                             {"name": "name", "type": "string", "required": True, "visibility": "SCV"},
-                        ],
+                        ),
                     }
                 ),
                 encoding="utf-8",
@@ -60,10 +64,10 @@ class ToolchainTests(unittest.TestCase):
                     {
                         "table": "items",
                         "idColumn": "id",
-                        "columns": [
+                        "columns": _columns(
                             {"name": "id", "type": "u32", "required": True, "visibility": "S"},
                             {"name": "name", "type": "string", "required": True, "visibility": "C"},
-                        ],
+                        ),
                     }
                 ),
                 encoding="utf-8",
@@ -73,10 +77,10 @@ class ToolchainTests(unittest.TestCase):
                     {
                         "table": "links",
                         "idColumn": "id",
-                        "columns": [
+                        "columns": _columns(
                             {"name": "id", "type": "u32", "required": True, "visibility": "SCV"},
                             {"name": "item_id", "type": "ref", "required": True, "refTarget": "items", "visibility": "C"},
-                        ],
+                        ),
                     }
                 ),
                 encoding="utf-8",
@@ -105,10 +109,10 @@ class ToolchainTests(unittest.TestCase):
                     {
                         "table": "skills",
                         "idColumn": "id",
-                        "columns": [
+                        "columns": _columns(
                             {"name": "id", "type": "u32", "required": True, "visibility": "SCV"},
                             {"name": "effect_id", "type": "ref", "required": True, "refTarget": "effects", "visibility": "S"},
-                        ],
+                        ),
                     }
                 ),
                 encoding="utf-8",
@@ -118,7 +122,7 @@ class ToolchainTests(unittest.TestCase):
                     {
                         "table": "effects",
                         "idColumn": "id",
-                        "columns": [{"name": "id", "type": "u32", "required": True, "visibility": "S"}],
+                        "columns": _columns({"name": "id", "type": "u32", "required": True, "visibility": "S"}),
                     }
                 ),
                 encoding="utf-8",
@@ -172,10 +176,10 @@ class ToolchainTests(unittest.TestCase):
         schema = {
             "table": "skills",
             "idColumn": "id",
-            "columns": [
+            "columns": _columns(
                 {"name": "id", "type": "u32", "required": True, "visibility": "SCV"},
                 {"name": "name", "type": "string", "required": True, "visibility": "SCV"},
-            ],
+            ),
         }
         self.assertEqual(
             content_fingerprint(parse_table(left, Path("skills.txt")), schema),
@@ -202,12 +206,12 @@ class ToolchainTests(unittest.TestCase):
         schema = {
             "table": "states",
             "idColumn": "id",
-            "columns": [
+            "columns": _columns(
                 {"name": "id", "type": "u32", "required": True, "visibility": "SCV"},
                 {"name": "required_name", "type": "string", "required": True, "visibility": "S"},
                 {"name": "optional_name", "type": "string", "required": False, "visibility": "S"},
                 {"name": "default_name", "type": "string", "required": False, "default": "fallback", "visibility": "S"},
-            ],
+            ),
         }
         table = parse_table(source, Path("states.txt"))
         self.assertEqual(table.rows[0]["optional_name"].state, "empty")
@@ -230,10 +234,10 @@ class ToolchainTests(unittest.TestCase):
                     {
                         "table": "values",
                         "idColumn": "id",
-                        "columns": [
+                        "columns": _columns(
                             {"name": "id", "type": "u32", "required": True, "visibility": "SCV"},
                             {"name": "amount", "type": "i32", "required": True, "visibility": "S"},
-                        ],
+                        ),
                     }
                 ),
                 encoding="utf-8",

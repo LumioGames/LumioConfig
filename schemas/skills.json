@@ -4,24 +4,28 @@
   "columns": [
     {
       "name": "id",
+      "ordinal": 0,
       "type": "u32",
       "required": true,
       "visibility": "SCV"
     },
     {
       "name": "name",
+      "ordinal": 1,
       "type": "string",
       "required": true,
       "visibility": "SCV"
     },
     {
       "name": "display_name",
+      "ordinal": 2,
       "type": "string",
       "required": true,
       "visibility": "C"
     },
     {
       "name": "effect_id",
+      "ordinal": 3,
       "type": "ref",
       "required": true,
       "refTarget": "effects",
@@ -29,6 +33,7 @@
     },
     {
       "name": "damage",
+      "ordinal": 4,
       "type": "i32",
       "required": true,
       "minimum": 0,
@@ -36,6 +41,7 @@
     },
     {
       "name": "cooldown_frames",
+      "ordinal": 5,
       "type": "i32",
       "required": true,
       "minimum": 1,
@@ -43,6 +49,7 @@
     },
     {
       "name": "icon",
+      "ordinal": 6,
       "type": "string",
       "required": true,
       "visibility": "C"

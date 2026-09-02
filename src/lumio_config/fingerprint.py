@@ -28,29 +28,44 @@ def _row_key(row: dict[str, Cell], id_column: str) -> tuple[int, object]:
         return (1, raw or "")
 
 
+def _ordinal_sort_key(column: dict[str, Any], index: int) -> tuple[int, int, int]:
+    ordinal = column.get("ordinal")
+    if type(ordinal) is int:
+        return (0, ordinal, index)
+    return (1, index, index)
+
+
+def ordered_schema_columns(schema: dict[str, Any]) -> list[dict[str, Any]]:
+    columns = [column for column in schema.get("columns", []) if isinstance(column, dict) and column.get("name")]
+    return [column for _, column in sorted(enumerate(columns), key=lambda item: _ordinal_sort_key(item[1], item[0]))]
+
+
 def canonical_table_value(table: TableSource, schema: dict[str, Any]) -> dict[str, Any]:
     columns = _column_map(schema)
     id_column = str(schema.get("idColumn", "id"))
+    ordered = ordered_schema_columns(schema)
     rows: list[dict[str, Any]] = []
     for row in sorted(table.rows, key=lambda item: _row_key(item, id_column)):
         values: dict[str, Any] = {}
-        for name in schema_columns(schema):
-            column = columns[name]
+        for column in ordered:
+            name = str(column["name"])
             cell = row.get(name, Cell("missing"))
-            present, value = effective_value(cell, column)
+            present, value = effective_value(cell, columns[name])
             if present and column.get("type") == "string" and isinstance(value, str):
                 value = normalize_string(value)
             values[name] = cell.canonical(value if present else None)
         rows.append(values)
+    canonical_schema = dict(schema)
+    canonical_schema["columns"] = ordered
     return {
         "table": table.name,
-        "schema": schema,
+        "schema": canonical_schema,
         "rows": rows,
     }
 
 
 def schema_columns(schema: dict[str, Any]) -> list[str]:
-    return [str(column["name"]) for column in schema.get("columns", []) if isinstance(column, dict) and column.get("name")]
+    return [str(column["name"]) for column in ordered_schema_columns(schema)]
 
 
 def content_fingerprint(table: TableSource, schema: dict[str, Any]) -> str:

@@ -196,6 +196,20 @@ def validate_repository(root: Path) -> list[dict[str, str]]:
             errors.append(_error(table_name, code="DUPLICATE_SCHEMA_COLUMN", message="schema contains duplicate column names", suggestion="declare each column once"))
         if id_column not in column_map:
             errors.append(_error(table_name, column=id_column, code="ID_COLUMN_MISSING", message=f"id column {id_column} is not declared", suggestion="declare the stable row id column"))
+        seen_ordinals: dict[int, str] = {}
+        for column in columns:
+            name = str(column.get("name", ""))
+            if "ordinal" not in column:
+                errors.append(_error(table_name, column=name, code="MISSING_ORDINAL", message=f"{name} is missing integer ordinal", suggestion="assign a unique integer ordinal that survives rename and reorder"))
+                continue
+            ordinal = column["ordinal"]
+            if type(ordinal) is not int:
+                errors.append(_error(table_name, column=name, code="INVALID_ORDINAL", message=f"{name} ordinal must be an integer", suggestion="use a unique integer ordinal"))
+                continue
+            if ordinal in seen_ordinals:
+                errors.append(_error(table_name, column=name, code="DUPLICATE_ORDINAL", message=f"{name} reuses ordinal {ordinal} already used by {seen_ordinals[ordinal]}", suggestion="give each column a unique ordinal"))
+            else:
+                seen_ordinals[ordinal] = name
         declared = set(column_map)
         for column in columns:
             name = str(column.get("name", ""))
