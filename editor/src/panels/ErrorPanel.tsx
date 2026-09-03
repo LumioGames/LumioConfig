@@ -1,3 +1,5 @@
+import { Button, Panel } from "../components/ui";
+
 interface ErrorItem {
   table?: string;
   row?: string;
@@ -16,14 +18,14 @@ export function ErrorPanel({ errors, onJump }: ErrorPanelProps) {
     return null;
   }
   return (
-    <ul className="error-panel" data-testid="error-panel">
+    <Panel as="ul" data-testid="error-panel">
       {errors.map((error, index) => (
         <li key={`${error.code}-${index}`}>
-          <button type="button" onClick={() => onJump?.(error.row, error.column)}>
+          <Button onClick={() => onJump?.(error.row, error.column)}>
             {error.code}: {error.message}
-          </button>
+          </Button>
         </li>
       ))}
-    </ul>
+    </Panel>
   );
 }

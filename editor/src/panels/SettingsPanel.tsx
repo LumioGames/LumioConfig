@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { Panel } from "../components/ui";
 import type { SessionResponse } from "../api/types";
 
 interface SettingsPanelProps {
@@ -26,7 +27,7 @@ export function SettingsPanel({ enabled }: SettingsPanelProps) {
   }
 
   return (
-    <section className="settings-panel" data-testid="settings-panel">
+    <Panel data-testid="settings-panel">
       <label>
         <input
           type="checkbox"
@@ -49,6 +50,6 @@ export function SettingsPanel({ enabled }: SettingsPanelProps) {
         autoCommit
       </label>
       <span data-testid="settings-message">{message}</span>
-    </section>
+    </Panel>
   );
 }

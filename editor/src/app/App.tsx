@@ -21,6 +21,7 @@ import { ErrorPanel } from "../panels/ErrorPanel";
 import { SettingsPanel } from "../panels/SettingsPanel";
 import { StatusBar } from "../panels/StatusBar";
 import { TableList } from "../panels/TableList";
+import { Button } from "../components/ui";
 import { applyEditors, editorKinds, type EditorKind } from "../spreadsheet/editors";
 import { buildDraft, buildPatch, countDirty, extractTokens, mergeCurrentCells, rememberToken } from "../spreadsheet/extract";
 import { FOUR_STATE_MENU, tokenForDeleteKey, tokenForMenu, type FourStateKind } from "../spreadsheet/fourState";
@@ -829,8 +830,8 @@ export function App() {
           >
             {FOUR_STATE_MENU.map((item) => (
               <li key={item.kind}>
-                <button
-                  type="button"
+                <Button
+                  variant="menu"
                   data-testid={`four-state-${item.kind}`}
                   onClick={() => {
                     const desc = columnOf(tableRef.current, menu.column);
@@ -844,7 +845,7 @@ export function App() {
                   }}
                 >
                   {item.label}
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -929,14 +930,13 @@ export function App() {
         ) : null}
         <SettingsPanel enabled={hostMode} />
         {canRefreshOnly(state) ? (
-          <button
-            type="button"
+          <Button
+            variant="primary"
             data-testid="draft-refresh"
-            className="draft-refresh"
             onClick={() => window.location.reload()}
           >
             刷新
-          </button>
+          </Button>
         ) : null}
         <ErrorPanel errors={errors} />
         <StatusBar

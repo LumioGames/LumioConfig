@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../api/client";
+import { Button, Panel } from "../components/ui";
 
 interface ExportFile {
   table?: string | null;
@@ -24,8 +25,7 @@ export function ExportPanel({ tables, selected }: ExportPanelProps) {
   const [hint, setHint] = useState("");
 
   return (
-    <section className="export-panel" data-testid="export-panel">
-      <h2>导出 CSV / TSV</h2>
+    <Panel variant="boxed" className="export-panel" data-testid="export-panel" title="导出 CSV / TSV">
       <p>单向生成物，不能导回仓库。</p>
       <label>
         格式
@@ -50,8 +50,7 @@ export function ExportPanel({ tables, selected }: ExportPanelProps) {
           <option value="V">V</option>
         </select>
       </label>
-      <button
-        type="button"
+      <Button
         data-testid="btn-export"
         onClick={() => {
           void (async () => {
@@ -74,7 +73,7 @@ export function ExportPanel({ tables, selected }: ExportPanelProps) {
         }}
       >
         导出
-      </button>
+      </Button>
       {hint ? <p data-testid="export-hint">{hint}</p> : null}
       <ul data-testid="export-files">
         {files.map((file) => (
@@ -104,6 +103,6 @@ export function ExportPanel({ tables, selected }: ExportPanelProps) {
           </li>
         ))}
       </ul>
-    </section>
+    </Panel>
   );
 }

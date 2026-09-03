@@ -1,4 +1,5 @@
 import type { PatchObject, PatchOp } from "../api/types";
+import { Button, DataTable, Panel } from "../components/ui";
 
 interface DiffPreviewProps {
   patch: PatchObject | null;
@@ -11,6 +12,11 @@ interface DiffPreviewProps {
   disabled: boolean;
   onValidate: () => void;
   onSubmit: () => void;
+}
+
+interface OpRow {
+  op: PatchOp;
+  index: number;
 }
 
 function describeOp(op: PatchOp): string {
@@ -40,40 +46,31 @@ export function DiffPreview({
   onValidate,
   onSubmit,
 }: DiffPreviewProps) {
+  const rows: OpRow[] = (patch?.ops ?? []).map((op, index) => ({ op, index }));
   return (
-    <section className="diff-preview" data-testid="diff-preview">
+    <Panel className="diff-preview" data-testid="diff-preview">
       <div className="diff-preview__actions">
-        <button type="button" data-testid="btn-validate" disabled={disabled || !canValidate} onClick={onValidate}>
+        <Button data-testid="btn-validate" disabled={disabled || !canValidate} onClick={onValidate}>
           预检
-        </button>
-        <button type="button" data-testid="btn-submit" disabled={disabled || !canSubmit} onClick={onSubmit}>
+        </Button>
+        <Button data-testid="btn-submit" disabled={disabled || !canSubmit} onClick={onSubmit}>
           提交补丁
-        </button>
+        </Button>
       </div>
       <p data-testid="diff-target">
         将提交到：{revision || "—"}，autoCommit={String(autoCommit)}，autoExport={String(autoExport)}
       </p>
       <p data-testid="diff-summary">{summary || "尚未预检"}</p>
-      <table>
-        <thead>
-          <tr>
-            <th>表</th>
-            <th>行</th>
-            <th>操作</th>
-            <th>改动</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(patch?.ops ?? []).map((op, index) => (
-            <tr key={`${op.op}-${op.name}-${index}`}>
-              <td>{patch?.table}</td>
-              <td>{op.name}</td>
-              <td>{op.op}</td>
-              <td>{describeOp(op)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+      <DataTable
+        rowKey={(row) => `${row.op.op}-${row.op.name}-${row.index}`}
+        rows={rows}
+        columns={[
+          { key: "table", header: "表", render: () => patch?.table },
+          { key: "row", header: "行", render: (row) => row.op.name },
+          { key: "op", header: "操作", render: (row) => row.op.op },
+          { key: "change", header: "改动", render: (row) => describeOp(row.op) },
+        ]}
+      />
+    </Panel>
   );
 }
