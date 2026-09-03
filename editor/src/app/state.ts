@@ -28,7 +28,9 @@ export type EditorAction =
   | { type: "conflicted"; hint: string }
   | { type: "conflictsResolved" }
   | { type: "rebased"; merged: number; draftVersion: number }
-  | { type: "schemaChanged" };
+  | { type: "schemaChanged" }
+  /** 仅 __lumioPoc.setPhase(layout.spec 的 14 态注入)使用,生产代码不得派发。 */
+  | { type: "debugPhase"; phase: EditorPhase; failKind?: FailKind; online?: boolean; dirtyCount?: number; hint?: string };
 
 export const INITIAL_EDITOR_STATE: EditorState = {
   phase: "Opening",
@@ -119,6 +121,15 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
       };
     case "schemaChanged":
       return { ...state, phase: "Failed", hint: "SCHEMA_CHANGED，请刷新重放", failKind: "SCHEMA_CHANGED" };
+    case "debugPhase":
+      return {
+        ...state,
+        phase: action.phase,
+        failKind: action.failKind ?? (action.phase === "Failed" ? "" : state.failKind),
+        ...(action.online === undefined ? {} : { online: action.online }),
+        ...(action.dirtyCount === undefined ? {} : { dirtyCount: action.dirtyCount }),
+        ...(action.hint === undefined ? {} : { hint: action.hint }),
+      };
     default:
       return state;
   }

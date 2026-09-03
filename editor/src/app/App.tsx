@@ -21,14 +21,20 @@ import { ErrorPanel } from "../panels/ErrorPanel";
 import { SettingsPanel } from "../panels/SettingsPanel";
 import { StatusBar } from "../panels/StatusBar";
 import { TableList } from "../panels/TableList";
-import { Button } from "../components/ui";
+import { TopBar } from "../panels/TopBar";
+import { Banner } from "../panels/Banner";
+import { GridToolbar } from "../panels/GridToolbar";
+import { Inspector } from "../panels/Inspector";
+import { Button, ToastProvider } from "../components/ui";
 import { applyEditors, editorKinds, type EditorKind } from "../spreadsheet/editors";
+import { installLumioBadges } from "../spreadsheet/badges";
+import type { CellMeta } from "../spreadsheet/cellMeta";
 import { buildDraft, buildPatch, countDirty, extractTokens, mergeCurrentCells, rememberToken } from "../spreadsheet/extract";
 import { tokenForDeleteKey, tokenForMenu, type FourStateKind } from "../spreadsheet/fourState";
 import { COMMAND, installInterceptors, newDraftRowKey } from "../spreadsheet/interceptors";
 import { applyDraft, applyRebase, buildCell, workbookFromWarehouse } from "../spreadsheet/projection";
 import { createSheetsUniver, loadWorkbook, type SheetsUniver } from "../spreadsheet/univer";
-import { applyViewState, captureViewState, load as loadView, save as saveView } from "../spreadsheet/viewState";
+import { applyViewState, captureViewState, load as loadView, save as saveView, uiFlags } from "../spreadsheet/viewState";
 import { INITIAL_EDITOR_STATE, canEdit, canRefreshOnly, canSave, canSubmit, canValidate, reducer, type EditorAction } from "./state";
 import { phaseView } from "./phaseView";
 import { COPY } from "./copy";
@@ -43,6 +49,7 @@ export interface PocBridge {
   table: () => string;
   timings: Record<string, number>;
   setHint: (hint: string) => void;
+  setPhase: (phase: string, failKind?: string, online?: boolean, dirtyCount?: number, hint?: string) => void;
   executeCommand: (id: string, params?: unknown) => Promise<unknown>;
   applyFourState: (rowKey: string, column: string, kind: FourStateKind) => Promise<void> | void;
   deleteKey: (rowKey: string, column: string) => Promise<string | undefined> | string | undefined;
@@ -83,12 +90,16 @@ function idToName(rows: Array<{ id: number | string; name: string }>): Record<st
 export function App() {
   const [state, dispatch] = useReducer(reducer, INITIAL_EDITOR_STATE);
   const [tableNames, setTableNames] = useState<{ name: string; label?: string }[] | undefined>(undefined);
+  const [tableSummaries, setTableSummaries] = useState<SessionTableSummary[] | undefined>(undefined);
   const [dirtyCounts, setDirtyCounts] = useState<Record<string, number>>({});
   const [errors, setErrors] = useState<Array<{ code?: string; message?: string }>>([]);
   const [conflicts, setConflicts] = useState<RebaseConflict[]>([]);
   const [patchPreview, setPatchPreview] = useState<PatchObject | null>(null);
   const [summary, setSummary] = useState("");
-  const [revisionLabel, setRevisionLabel] = useState("");
+  const [revision, setRevision] = useState<{ vcs: string; id: string; branch: string } | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [selection, setSelection] = useState<{ row: number; column: string; rowKey: string } | null>(null);
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoExport, setAutoExport] = useState(false);
   const patchRef = useRef<PatchObject | null>(null);
@@ -97,6 +108,7 @@ export function App() {
   const mapRef = useRef<ProjectionMap | null>(null);
   const tableRef = useRef<TableResponse | null>(null);
   const interceptorsRef = useRef<{ dispose: () => void } | null>(null);
+  const badgesRef = useRef<{ dispose: () => void } | null>(null);
   const timingsRef = useRef<Record<string, number>>({});
   const hostMode = Boolean(readToken());
   const providerRef = useRef(new LocalDraftSessionProvider());
@@ -107,18 +119,30 @@ export function App() {
   const persistDraftRef = useRef<() => Promise<number | undefined>>(async () => undefined);
   const savingRef = useRef(false);
   const pendingHintRef = useRef("");
+  const pendingFailKindRef = useRef<"" | "VCS">("");
   const rebasingRef = useRef(false);
   const conflictWriteRef = useRef(false);
   const rebaseFlightRef = useRef<Promise<unknown> | null>(null);
+  // 最近一次 ui 开合态(persistView 合并保留,防止视图快照覆写抹掉标志)。
+  const uiFlagsRef = useRef<{ inspectorOpen: boolean; sidebarCollapsed: boolean }>({
+    inspectorOpen: false,
+    sidebarCollapsed: false,
+  });
+
   const rebaseNowRef = useRef<() => Promise<unknown>>(async () => undefined);
   stateRef.current = state;
+  uiFlagsRef.current = { inspectorOpen, sidebarCollapsed };
 
   const persistView = useCallback((table: string) => {
     const snapshot = instanceRef.current?.univerAPI.getActiveWorkbook()?.save();
     if (!snapshot) {
       return;
     }
-    saveView(REPO_NAME, table, captureViewState(snapshot as never, table));
+    saveView(REPO_NAME, table, {
+      ...captureViewState(snapshot as never, table),
+      inspectorOpen: uiFlagsRef.current.inspectorOpen,
+      sidebarCollapsed: uiFlagsRef.current.sidebarCollapsed,
+    });
   }, []);
 
   const markDirty = useCallback(() => {
@@ -253,6 +277,8 @@ export function App() {
 
   const disposeSheet = useCallback(() => {
     interceptorsRef.current?.dispose();
+    badgesRef.current?.dispose();
+    badgesRef.current = null;
     instanceRef.current?.dispose();
     instanceRef.current = null;
     interceptorsRef.current = null;
@@ -330,6 +356,13 @@ export function App() {
         refOptions: refOptionsRef.current,
       });
       applyViewState(workbook, warehouse.table, loadView(REPO_NAME, warehouse.table));
+      const viewFlags = uiFlags(loadView(REPO_NAME, warehouse.table));
+      // 同步镜像到 ref:挂载期间(loadWorkbook 触发的 onViewChange → persistView)
+      // 可能先于 React 渲染发生,届时必须读到持久化的开合态,否则会把 false 覆写回存储。
+      uiFlagsRef.current = viewFlags;
+      setSidebarCollapsed(viewFlags.sidebarCollapsed);
+      setInspectorOpen(viewFlags.inspectorOpen);
+      setSelection(null);
       const projectedAt = performance.now();
       // ADR 0004:四态四项以「单元格」分组注入 Univer 原生右键,App 只传 handlers。
       const instance = createSheetsUniver(container, {
@@ -342,6 +375,7 @@ export function App() {
         },
       });
       loadWorkbook(instance.univerAPI, workbook);
+      badgesRef.current = installLumioBadges(instance.univer);
       void applyEditors(instance.univerAPI, displayed, refOptionsRef.current);
       const paintedAt = performance.now();
       const openAction: EditorAction = {
@@ -396,7 +430,13 @@ export function App() {
         dispatch({ type: "dirty", dirtyCount: dirty });
         setDirtyCounts((current) => ({ ...current, [warehouse.table]: dirty }));
         if (pendingHintRef.current) {
-          dispatch({ type: "hint", hint: pendingHintRef.current });
+          // 提交后的 VCS 后续失败经 reload 重新落 Failed·VCS(§5 P2-2 归类)。
+          if (pendingFailKindRef.current) {
+            dispatch({ type: "failed", hint: pendingHintRef.current, failKind: pendingFailKindRef.current });
+            pendingFailKindRef.current = "";
+          } else {
+            dispatch({ type: "hint", hint: pendingHintRef.current });
+          }
           pendingHintRef.current = "";
         }
       }
@@ -532,8 +572,11 @@ export function App() {
           (item) => item.code === "VCS_COMMIT_FAILED" || item.code === "EXPORT_FAILED",
         );
         if (followUp) {
+          // §5 Failed·failKind=VCS:改动已合入 TXT 但 commit/导表未完成;reload 后
+          // 经 pendingFail 重新落 Failed,横幅给「查看详情 / 重试」。
           pendingHintRef.current = COPY.banner.failedVcs;
-          dispatch({ type: "validated", ok: false, hint: pendingHintRef.current });
+          pendingFailKindRef.current = "VCS";
+          dispatch({ type: "validated", ok: false, hint: COPY.banner.failedVcs });
           openTable(stateRef.current.table);
           return result;
         }
@@ -665,10 +708,11 @@ export function App() {
     if (!hostMode) {
       return;
     }
-    void api<SessionResponse>("/api/session")
+      void api<SessionResponse>("/api/session")
       .then((session) => {
         setTableNames(session.tables.map((item: SessionTableSummary) => ({ name: item.name, label: item.name })));
-        setRevisionLabel(`${session.revision.branch ?? session.revision.vcs}/${session.revision.id}`);
+        setTableSummaries(session.tables);
+        setRevision(session.revision);
         setAutoCommit(session.settings.submit.autoCommit);
         setAutoExport(session.settings.submit.autoExport);
         dispatch({ type: "online", online: true });
@@ -734,6 +778,8 @@ export function App() {
       table: () => state.table,
       timings: timingsRef.current,
       setHint: (hint: string) => dispatch({ type: "hint", hint }),
+      setPhase: (phase: string, failKind?: string, online?: boolean, dirtyCount?: number, hint?: string) =>
+        dispatch({ type: "debugPhase", phase: phase as never, failKind: failKind as never, online, dirtyCount, hint }),
       executeCommand: async (id: string, params?: unknown) => {
         const apiHost = instanceRef.current?.univerAPI as {
           executeCommand?: (commandId: string, commandParams?: unknown) => Promise<unknown>;
@@ -863,17 +909,229 @@ export function App() {
     };
   }, [currentPatch, markDirty, mountWorkbook, persistDraft, rebaseNow, state.draftVersion, state.hint, state.phase, state.table, submitNow, validateNow, writeToken]);
 
-  const view = phaseView(state);
+  /** 检查器开合/侧栏折叠写入视图状态(localStorage)。 */
+  const persistUiFlags = useCallback((table: string, patch: { inspectorOpen?: boolean; sidebarCollapsed?: boolean }) => {
+    const current = loadView(REPO_NAME, table);
+    saveView(REPO_NAME, table, { ...current, ...patch });
+  }, []);
+
+  const toggleInspector = useCallback(() => {
+    setInspectorOpen((open) => {
+      const next = !open;
+      if (stateRef.current.table) {
+        persistUiFlags(stateRef.current.table, { inspectorOpen: next });
+      }
+      return next;
+    });
+  }, [persistUiFlags]);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((collapsed) => {
+      const next = !collapsed;
+      if (stateRef.current.table) {
+        persistUiFlags(stateRef.current.table, { sidebarCollapsed: next });
+      }
+      return next;
+    });
+  }, [persistUiFlags]);
+
+  // Ctrl+M 是应用级键(§11),焦点在表格内也要生效:不走 useHotkeys 的
+  // .univer-root 保留规则,只忽略真文本输入;M6-J(Task 17)统一进 HOTKEYS。
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.metaKey || event.key.toLowerCase() !== "m") {
+        return;
+      }
+      // 只拦真文本输入;Univer 网格宿主 DIV 本身是 contenteditable(聚焦态≠输入态),
+      // 不能按 contenteditable 一律忽略。
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+        return;
+      }
+      event.preventDefault();
+      toggleInspector();
+    };
+    // 捕获阶段:Univer 画布层会 stopPropagation 冒泡 keydown。
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [toggleInspector]);
+
+  /** 点格/选区变化 → 检查器目标(§3 默认收起,选格展开)。 */
+  const trackSelection = useCallback(() => {
+    const map = mapRef.current;
+    const target = selectionRowColumn();
+    if (!map || !target) {
+      return;
+    }
+    const row = map.rowKeys.indexOf(target.rowKey) + 1;
+    setSelection({ row, column: target.column, rowKey: target.rowKey });
+    setInspectorOpen((open) => {
+      if (!open && stateRef.current.table) {
+        persistUiFlags(stateRef.current.table, { inspectorOpen: true });
+      }
+      return true;
+    });
+  }, [persistUiFlags, selectionRowColumn]);
+
+// Univer canvas 会拦 mousedown 传播,React 合成事件收不到;用 document 捕获
+  // 阶段监听(捕获先于子层 stopPropagation),命中表格容器再延时读选区。
+  useEffect(() => {
+    const onDown = (event: MouseEvent) => {
+      const container = containerRef.current;
+      if (!container || !(event.target instanceof Node) || !container.contains(event.target)) {
+        return;
+      }
+      window.setTimeout(trackSelection, 60);
+    };
+    document.addEventListener("mousedown", onDown, true);
+    return () => document.removeEventListener("mousedown", onDown, true);
+  }, [trackSelection]);
+
+  /** 检查器展示模型(cellMeta.CellMeta):从 map+tokens+冲突表组装。 */
+  const metaForSelection = useCallback((): CellMeta | null => {
+    const map = mapRef.current;
+    const table = tableRef.current;
+    const univerAPI = instanceRef.current?.univerAPI;
+    if (!map || !table || !selection || !univerAPI) {
+      return null;
+    }
+    const desc = columnOf(table, selection.column);
+    if (!desc) {
+      return null;
+    }
+    const tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
+    const current = tokens[selection.rowKey]?.[selection.column];
+    if (!current) {
+      return null;
+    }
+    const baseline = map.baseCells?.[selection.rowKey]?.[selection.column];
+    const conflictCell = conflicts.find(
+      (item) => item.rowId === selection.rowKey && item.column === selection.column,
+    );
+    return {
+      table: table.table,
+      rowKey: selection.rowKey,
+      rowName: tokens[selection.rowKey]?.name?.raw ?? selection.rowKey,
+      rowStatus: selection.rowKey.startsWith("draft:")
+        ? "new"
+        : map.deleted.has(selection.rowKey)
+          ? "deleted"
+          : "existing",
+      column: desc,
+      current,
+      baseline,
+      remoteErrors: errors as CellMeta["remoteErrors"],
+      conflict: conflictCell ? { code: conflictCell.code ?? "", message: conflictCell.message ?? "" } : null,
+    };
+  }, [conflicts, errors, selection]);
+
+  const view = phaseView(state, {
+    revision: revision ?? undefined,
+    conflictCount: conflicts.length,
+  });
 
   return (
-    <div className="app-shell">
-      <TableList selected={state.table} onSelect={openTable} dirtyCounts={dirtyCounts} names={tableNames} />
-      <div className="app-main">
-        <div
-          ref={containerRef}
-          className="univer-root"
-          data-testid="univer-root"
+    <ToastProvider>
+    <div
+      className="app-shell"
+      data-inspector-open={inspectorOpen}
+      data-sidebar-collapsed={sidebarCollapsed}
+    >
+      <TopBar
+        tableName={state.table}
+        revision={revision}
+        view={view}
+        dirtyCount={state.dirtyCount}
+        inspectorOpen={inspectorOpen}
+        onToggleSidebar={toggleSidebar}
+        onOpenPalette={() => {
+          /* 命令面板随 M6-J 接线 */
+        }}
+        onExport={() => {
+          document.querySelector("[data-testid='btn-export']")?.scrollIntoView({ block: "center" });
+        }}
+        onValidate={() => {
+          void validateNow();
+        }}
+        onSubmit={() => {
+          void submitNow();
+        }}
+        onOpenSettings={() => {
+          document.querySelector("[data-testid='setting-autocommit']")?.scrollIntoView({ block: "center" });
+        }}
+        onOpenShortcuts={() => {
+          /* 快捷键对话框随 M6-J 接线 */
+        }}
+        onToggleInspector={toggleInspector}
+      />
+      <Banner
+        banner={view.banner}
+        onAction={(action) => {
+          if (action === "refresh" || action === "retry") {
+            window.location.reload();
+          }
+          /* resolve/cancel/details/ack 随 M6-I 冲突页签接线 */
+        }}
+      />
+      <TableList
+        tables={(tableSummaries ?? []).map((item) => ({
+          name: item.name,
+          rowCount: item.rowCount,
+          dirtyCount: dirtyCounts[item.name] ?? 0,
+          conflictCount: item.name === state.table ? conflicts.length : 0,
+        }))}
+        active={state.table}
+        collapsed={sidebarCollapsed}
+        onSelect={openTable}
+        onToggleCollapse={toggleSidebar}
+      />
+      <div className="app-grid">
+        <GridToolbar
+          univerAPI={instanceRef.current?.univerAPI ?? null}
+          columnCount={mapRef.current?.columns.length ?? 0}
+          canEdit={canEdit(state)}
         />
+        <div className="app-grid-body">
+          <div ref={containerRef} className="univer-root" data-testid="univer-root" />
+          {inspectorOpen ? (
+            <Inspector
+              open={inspectorOpen}
+              selection={selection ? { row: selection.row, column: selection.column } : null}
+              meta={metaForSelection()}
+              onFourState={(kind) => {
+                if (selection) {
+                  void applyFourStateToSelection(kind);
+                }
+              }}
+              onRevert={() => {
+                const meta = metaForSelection();
+                if (meta?.baseline && selection) {
+                  void writeToken(selection.rowKey, selection.column, meta.baseline);
+                }
+              }}
+              onDeleteRow={() => {
+                const map = mapRef.current;
+                if (map && selection && !selection.rowKey.startsWith("draft:")) {
+                  map.deleted.add(selection.rowKey);
+                  markDirty();
+                }
+              }}
+              onUndeleteRow={() => {
+                const map = mapRef.current;
+                if (map && selection) {
+                  map.deleted.delete(selection.rowKey);
+                  markDirty();
+                }
+              }}
+              onGoToConflicts={() => {
+                /* 冲突跳转随 M6-I 接线 */
+              }}
+              onClose={() => setInspectorOpen(false)}
+            />
+          ) : null}
+        </div>
+      </div>
+      <div className="app-legacy">
         {state.phase === "Conflicted" ? (
           <ConflictPanel
             conflicts={conflicts}
@@ -935,7 +1193,7 @@ export function App() {
           <DiffPreview
             patch={patchPreview}
             summary={summary}
-            revision={revisionLabel}
+            revision={revision ? `${revision.branch ?? revision.vcs}/${revision.id}` : ""}
             autoCommit={autoCommit}
             autoExport={autoExport}
             canValidate={canValidate(state)}
@@ -956,24 +1214,28 @@ export function App() {
         {canRefreshOnly(state) ? (
           <Button
             variant="primary"
-            data-testid="draft-refresh"
+            data-testid="draft-refresh-fallback"
             onClick={() => window.location.reload()}
           >
             {COPY.bannerActions.refresh}
           </Button>
         ) : null}
         <ErrorPanel errors={errors} />
-        <StatusBar
-          table={state.table}
-          rowCount={state.rowCount}
-          fingerprint={state.fingerprint}
-          hint={state.hint}
-          draftVersion={state.draftVersion}
-          dirtyCount={state.dirtyCount}
-          online={state.online}
-          phase={view.label}
-        />
       </div>
+      <StatusBar
+        tableName={state.table}
+        rowCount={state.rowCount}
+        draftVersion={state.draftVersion}
+        dirtyCount={state.dirtyCount}
+        uncommittedMerges={0}
+        fingerprint={state.fingerprint}
+        online={state.online}
+        liveText={state.hint}
+        onOpenPatchTab={() => {
+          document.querySelector("[data-testid='btn-validate']")?.scrollIntoView({ block: "center" });
+        }}
+      />
     </div>
+    </ToastProvider>
   );
 }

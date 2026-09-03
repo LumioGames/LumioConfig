@@ -1,6 +1,6 @@
 :root {
   color-scheme: light;
-  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-sans, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif);
   font-size: 14px;
 }
 
@@ -11,82 +11,89 @@ body,
   height: 100%;
 }
 
+/*
+ * v3 壳网格(设计稿 §2 / ADR 0003):
+ * 行:顶栏 42 / 横幅 auto / 主体 1fr / 底部条 auto(抽屉随 M6-I,现为旧面板) / 状态条 24
+ * 列:侧栏(200,可折叠 44) / 主体 1fr。检查器是主体内 flex 兄弟(260px,
+ * 组件自带样式),收起时不渲染,表格横向滚动不挤压列宽。
+ */
 .app-shell {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-rows: 42px auto minmax(0, 1fr) auto 24px;
+  grid-template-columns: var(--shell-side, 200px) minmax(0, 1fr);
   height: 100%;
   background: var(--color-bg-app);
 }
 
+.app-shell[data-sidebar-collapsed="true"] {
+  --shell-side: 44px;
+}
+
+.top-bar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-width: 0;
+}
+
 .table-list {
+  grid-column: 1;
+  grid-row: 3;
+  min-height: 0;
+  overflow: hidden;
   border-right: 1px solid var(--color-border);
-  padding: 16px 12px;
   background: var(--color-bg-surface);
 }
 
-.table-list h1 {
-  font-size: 16px;
-  margin: 0 0 8px;
-}
-
-.table-list__note {
-  color: var(--color-text-muted);
-  margin: 0 0 12px;
-  font-size: 12px;
-}
-
-.table-list ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.app-main {
+.app-grid {
+  grid-column: 2;
+  grid-row: 3;
   display: grid;
-  grid-template-rows: 1fr auto auto 36px;
+  grid-template-rows: 32px minmax(0, 1fr);
   min-width: 0;
-  position: relative;
+  min-height: 0;
+}
+
+.app-grid-body {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
 }
 
 .univer-root {
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   background: var(--color-bg-surface);
 }
 
-.status-bar {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  padding: 0 12px;
+/* 检查器在 grid-row 3 / 列 3 */
+.app-grid-body > :last-child:not(.univer-root) {
+  flex: 0 0 auto;
+}
+
+/*
+ * 底部条:本 wave 承载旧面板(DiffPreview/ExportPanel/SettingsPanel/ErrorPanel/
+ * ConflictPanel),M6-I 接抽屉时整体替换;限高保住表格区占比,内部滚动,
+ * E2E 点击自动滚入。
+ */
+.app-legacy {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  max-height: 150px;
+  overflow-y: auto;
   border-top: 1px solid var(--color-border);
   background: var(--color-bg-surface);
-  font-size: 12px;
-  color: var(--color-text);
+  padding: 4px 12px;
 }
 
-.status-bar__hint {
-  color: var(--color-danger-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.four-state-menu {
-  position: fixed;
-  z-index: 20;
-  margin: 0;
-  padding: 4px;
-  list-style: none;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+.status-bar {
+  grid-column: 1 / -1;
+  grid-row: 5;
 }
 
 .diff-preview {
-  padding: 8px 12px;
-  max-height: 180px;
+  padding: 8px 0;
+  max-height: 140px;
   overflow: auto;
 }
 
