@@ -3,6 +3,15 @@ import type { WorkbookData } from "./workbook-types";
 
 export const VIEW_KEY_PREFIX = "lumio-config-editor:view:";
 
+/** §8 末段 J3:上次打开这张表时看到的修订与指纹,键 `lumio-config-editor:seen:<repo>:<table>`。 */
+export const SEEN_KEY_PREFIX = "lumio-config-editor:seen:";
+
+/** J3 横幅的判定输入:revision.id + sourceFingerprint(定位键见 §9 说明)。 */
+export interface SeenRecord {
+  revisionId: string;
+  fingerprint: string;
+}
+
 export interface ViewState {
   columnWidths?: Record<string, number>;
   freeze?: FreezeState;
@@ -35,6 +44,61 @@ export function uiFlags(state: ViewState | null): {
 
 export function storageKey(repoName: string, table: string): string {
   return `${VIEW_KEY_PREFIX}${repoName}:${table}`;
+}
+
+function seenStorageKey(repoName: string, table: string): string {
+  return `${SEEN_KEY_PREFIX}${repoName}:${table}`;
+}
+
+/** 读上次看到的修订/指纹;无记录或载荷损坏一律 null(等同首次打开)。 */
+export function readSeen(
+  repoName: string,
+  table: string,
+  storage: Pick<Storage, "getItem"> = globalThis.localStorage,
+): SeenRecord | null {
+  if (!storage) {
+    return null;
+  }
+  const raw = storage.getItem(seenStorageKey(repoName, table));
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Partial<SeenRecord>;
+    return typeof parsed?.revisionId === "string" && typeof parsed?.fingerprint === "string"
+      ? { revisionId: parsed.revisionId, fingerprint: parsed.fingerprint }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 记住「这次看到的」;打开时无 seen 由 App 先种入,出横幅后由 ack 写入收敛。 */
+export function writeSeen(
+  repoName: string,
+  table: string,
+  value: SeenRecord,
+  storage: Pick<Storage, "setItem"> = globalThis.localStorage,
+): void {
+  storage.setItem(seenStorageKey(repoName, table), JSON.stringify(value));
+}
+
+/**
+ * 打开表时的横幅判定(§8 末段 J3):没有 seen(首次打开)不出横幅;
+ * 有 seen 且修订或指纹任一不同 → 出「自你上次打开以来这张表已变化」,
+ * 横幅文案与 [知道了] 动作由 App 接线(Banner + COPY.bannerActions.ack)。
+ */
+export function changedSinceSeen(
+  repoName: string,
+  table: string,
+  current: SeenRecord,
+  storage: Pick<Storage, "getItem"> = globalThis.localStorage,
+): boolean {
+  const seen = readSeen(repoName, table, storage);
+  if (!seen) {
+    return false;
+  }
+  return seen.revisionId !== current.revisionId || seen.fingerprint !== current.fingerprint;
 }
 
 export function load(

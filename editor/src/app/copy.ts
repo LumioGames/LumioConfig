@@ -40,6 +40,8 @@ export const COPY = {
     failedDraftConflict: "另一个标签页保存了这张表的草稿。此页已停止编辑，刷新后接着改。",
     offline: "无法连接本机服务。请重新运行 serve，再打开新链接。",
     closed: "会话已结束。请重新打开链接；若链接已失效，请重新运行 serve 后打开新链接。",
+    /** §8 末段 J3:打开表时修订/指纹与上次看到的不同 → 蓝底横幅 + [知道了](ack 写 seen)。 */
+    changedSinceSeen: "自你上次打开以来这张表已变化",
   },
   /** §5 横幅动作按钮。 */
   bannerActions: {
@@ -76,10 +78,13 @@ export const COPY = {
     if (autoExport) return `${target}，并导出表文件；不会自动 commit。`;
     return `${target}。`;
   },
-  /** §12:autoCommit ☑ 行。 */
+  /** §12:autoCommit ☑ 行 + 设置对话框标题/第二项/关闭。 */
   settings: {
+    title: "设置",
     autoCommitLabel: "提交后自动 commit 到当前分支",
+    autoExportLabel: "提交后自动导表",
     savedToast: "已保存到本机设置",
+    close: "关闭",
   },
   /** §10 表列表(侧栏)。 */
   sidebar: {
@@ -125,6 +130,17 @@ export const COPY = {
   onboardingToast: "草稿会自动保存在本机，提交前不会写进仓库",
   /** §12:导出说明。 */
   exportNote: "单向生成物，不会导回仓库；输出到 build/export",
+  /** §8 抽屉「导出」页签的标签(CSV/TSV、S/C/V 是格式/列组标识,非文案)。 */
+  export: {
+    tables: "表",
+    format: "格式",
+    source: "来源",
+    sourceRepo: "仓库",
+    sourceDraft: "含我的草稿",
+    target: "目标列",
+    targetAll: "全部",
+    submit: "导出",
+  },
   /** §12:required 列守卫。 */
   validation: {
     requiredMissingColumn: "必填列不能设为缺列",
