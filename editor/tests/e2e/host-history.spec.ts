@@ -186,12 +186,12 @@ test.describe("host history (git)", () => {
     const revision = page.getByTestId("diff-revision").first();
     await expect(revision).toContainText("config(skills): raise fireball damage to 140");
     await expect(page.getByTestId("diff-cell").first()).toContainText("fireball · damage · 130 → 140");
-    // 跳格必须真实生效(快审 P1-1):断言 set-selection 命中 fireball 行的 rowId(40001)
-    // 与 damage 列——rowId 与 rowKeys 同域,行名「fireball」不在 rowKeys 里,
-    // 该断言只有走通 rowId 直命中分支才可能通过。
+    // 跳格必须真实生效(快审 P1-1/P1-1R):activeSelection 经 facade 读回
+    // Univer 真实选区,只有 sheet.command.select-range 真正执行才会等于目标
+    // (rowId 40001 与 rowKeys 同域,行名「fireball」不在 rowKeys 里)。
     await page.getByTestId("diff-cell").first().click();
     await expect
-      .poll(() => page.evaluate(() => window.__lumioPoc?.lastJump?.() ?? null))
+      .poll(() => page.evaluate(() => window.__lumioPoc?.activeSelection?.() ?? null))
       .toEqual({ rowKey: "40001", column: "damage" });
   });
 });

@@ -86,6 +86,8 @@ export interface PocBridge {
   submitNow: () => Promise<unknown>;
   rebaseNow: () => Promise<unknown>;
   lastJump: () => { rowKey: string; column: string } | null;
+  /** 真实 Univer 选区(facade 读回),e2e 断言跳格最终生效用。 */
+  activeSelection: () => { rowKey: string; column: string } | null;
 }
 
 declare global {
@@ -974,21 +976,26 @@ export function App() {
       submitNow: () => submitNow(),
       rebaseNow: () => rebaseNow(),
       lastJump: () => lastJumpRef.current,
+      activeSelection: () => selectionRowColumn(),
       draftVersion: () => state.draftVersion,
       phase: () => state.phase,
     };
     return () => {
       delete window.__lumioPoc;
     };
-  }, [currentPatch, markDirty, mountWorkbook, persistDraft, rebaseNow, state.draftVersion, state.hint, state.phase, state.table, submitNow, validateNow, writeToken]);
+  }, [currentPatch, markDirty, mountWorkbook, persistDraft, rebaseNow, selectionRowColumn, state.draftVersion, state.hint, state.phase, state.table, submitNow, validateNow, writeToken]);
 
-  /** 跳格:按 rowKey/列名把选区移到目标格(补丁/错误/冲突/改动页签共用)。 */
+  /** 跳格:按 rowKey/列名把选区移到目标格(补丁/错误/冲突/改动页签共用)。
+   * Univer 0.25.1 没有 sheet.command.set-selection(快审 P1-1R:静默失败),
+   * 真实命令是 sheet.command.select-range,成功才记 lastJump 供 e2e 断言。 */
   const jumpToCell = useCallback((rowKey: string, column: string) => {
     const map = mapRef.current;
+    const workbook = instanceRef.current?.univerAPI?.getActiveWorkbook?.();
+    const sheet = workbook?.getActiveSheet?.();
     const apiHost = instanceRef.current?.univerAPI as {
-      executeCommand?: (id: string, params?: unknown) => unknown;
+      executeCommand?: (id: string, params?: unknown) => Promise<unknown>;
     } | undefined;
-    if (!map || !apiHost?.executeCommand) {
+    if (!map || !apiHost?.executeCommand || !workbook || !sheet) {
       return;
     }
     const row = map.rowKeys.indexOf(rowKey);
@@ -996,12 +1003,21 @@ export function App() {
     if (row < 0 || col < 0) {
       return;
     }
-    apiHost.executeCommand("sheet.command.set-selection", {
-      range: { startRow: row + 1, endRow: row + 1, startColumn: col, endColumn: col },
-    });
-    lastJumpRef.current = { rowKey, column };
-    setSelection({ row: row + 1, column, rowKey });
-    setInspectorOpen((open) => open);
+    void apiHost
+      .executeCommand("sheet.command.select-range", {
+        unitId: workbook.getId(),
+        subUnit: sheet.getSheetId(),
+        range: { startRow: row + 1, endRow: row + 1, startColumn: col, endColumn: col },
+        reveal: true,
+      })
+      .then((result) => {
+        if (!result) {
+          return;
+        }
+        lastJumpRef.current = { rowKey, column };
+        setSelection({ row: row + 1, column, rowKey });
+        setInspectorOpen((open) => open);
+      });
   }, []);
 
   /** 检查器开合/侧栏折叠写入视图状态(localStorage)。 */
