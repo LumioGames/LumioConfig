@@ -644,6 +644,9 @@ export function installInterceptors(
           execute?.(COMMAND.setRangeValues, {
             range: { startRow: sheetRow, startColumn: col, endRow: sheetRow, endColumn: col },
             value: {
+              // 四态写入必须带显式 v:null:Univer mutation 合并只在新值带 v 字段时
+              // 覆盖,否则画布残留旧文本(评审 P2-1,与 buildCell 写路径同规则)。
+              v: null,
               s: styleIdFor(result.token.state, false),
               custom: writeLumioCustom({
                 ...result.token,
