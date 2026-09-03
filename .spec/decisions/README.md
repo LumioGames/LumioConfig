@@ -32,3 +32,8 @@
 |------|------|------|
 | [0001](0001-adopt-lumioagentspec-plugin.md) | Agent 治理框架改用 LumioAgentSpec 插件分发 | 生效 |
 | [0002](0002-ci-spec-lint-from-upstream.md) | CI 结构校验改从 LumioAgentSpec 上游拉取 | 生效 |
+| [0003](0003-web-editor-v3-information-architecture.md) | 网页编辑器 v3 采用三栏 + 底部抽屉信息架构，检查器只读且默认收起 | 生效 |
+| [0004](0004-univer-surface-trim-and-native-context-menu.md) | Univer 自带工具栏整体关闭、白名单动作走自建工具栏、四态注入原生右键 | 生效 |
+| [0005](0005-session-phase-user-facing-mapping.md) | 会话阶段以用户口径呈现：预检无改动置灰、提交只在有副作用时确认、阻断态横幅化、`failKind` 取代 hint 子串判断 | 生效 |
+| [0006](0006-four-state-rendering-spike-and-j3-scope.md) | 四态呈现由 spike 决定；J3 本轮只做指纹变化横幅；`invalid` 红字为前端守卫缺失；深色主题后续 | 生效 |
+| [0007](0007-redesign-delivery-strategy.md) | 重设计叠在已交付的 UI 原语与令牌上、修复卡先行、`App.tsx` 由主 loop 每 wave 接线，不采用一卡一会话流程 | 生效 |

@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html,body{margin:0;height:100%;background:#f6f7f9;color:#1c2230}
+  a{color:oklch(0.45 0.12 155)}a:hover{color:oklch(0.35 0.12 155)}
+  *{box-sizing:border-box}
+  button{font:inherit;color:inherit}
+  input,select{font:inherit;color:inherit}
+  @keyframes lm-spin{to{transform:rotate(360deg)}}
+  @keyframes lm-fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .lm-btn:hover:not(:disabled){filter:brightness(0.96)}
+  .lm-ghost:hover:not(:disabled){background:#eceff3}
+  .lm-row:hover{background:#f3f5f8}
+  .lm-item:hover{background:#eceff3}
+  button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:2px solid oklch(0.52 0.12 155);outline-offset:1px}
+</style>
+</helmet>
+<div ref="{{ rootRef }}" tabIndex="0" onKeyDown="{{ onKey }}" data-testid="app-shell" style="position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-height:0;overflow:hidden;background:#f6f7f9;color:#1c2230;font:13px/1.45 system-ui,-apple-system,'PingFang SC','Microsoft YaHei','Segoe UI',sans-serif;outline:none">
+
+  <!-- 顶栏 -->
+  <header style="display:flex;align-items:center;gap:10px;height:42px;padding:0 10px 0 6px;background:#fff;border-bottom:1px solid #e3e6eb;flex:none">
+    <button class="lm-ghost" onClick="{{ toggleSidebar }}" title="折叠 / 展开表列表（Ctrl+B）" aria-label="折叠表列表" style="width:28px;height:28px;border:0;border-radius:4px;background:transparent;cursor:pointer;display:grid;place-items:center">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h12"></path></svg>
+    </button>
+    <div style="display:flex;align-items:center;gap:6px;min-width:0">
+      <span style="font-weight:600;color:#6a7280">LumioConfig</span>
+      <span style="color:#c3c8d1">/</span>
+      <button class="lm-ghost" onClick="{{ openPalette }}" title="切换表（Ctrl+K）" data-testid="table-switcher" style="display:flex;align-items:center;gap:4px;height:28px;padding:0 8px;border:0;border-radius:4px;background:transparent;cursor:pointer;font-weight:600;font-size:14px">
+        {{ table }}
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4.5l3 3 3-3"></path></svg>
+      </button>
+      <span title="{{ revisionTitle }}" style="color:#6a7280;font-size:12px;font-variant-numeric:tabular-nums">{{ revisionLabel }}</span>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div data-testid="status-phase" title="{{ phaseTitle }}" style="{{ phasePillStyle }}">
+      <sc-if value="{{ phaseSpin }}" hint-placeholder-val="{{ false }}">
+        <span style="width:10px;height:10px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:lm-spin .8s linear infinite;flex:none"></span>
+      </sc-if>
+      <sc-if value="{{ phaseDot }}" hint-placeholder-val="{{ true }}">
+        <span style="width:7px;height:7px;border-radius:50%;background:currentColor;flex:none"></span>
+      </sc-if>
+      <span>{{ phaseLabel }}</span>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div style="display:flex;align-items:center;gap:6px">
+      <button class="lm-btn" data-testid="btn-export-top" onClick="{{ openExport }}" title="导出 CSV / TSV（单向生成物）" style="display:flex;align-items:center;gap:6px;height:28px;padding:0 12px;border:1px solid oklch(0.80 0.08 155);border-radius:4px;background:oklch(0.96 0.03 155);color:oklch(0.40 0.12 155);cursor:pointer;font-weight:600">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M5 7l3 3 3-3M3 12v2h10v-2"></path></svg>导出
+      </button>
+      <span style="width:1px;height:18px;background:#e3e6eb;margin:0 4px"></span>
+      <button class="lm-btn" data-testid="btn-validate" disabled="{{ validateDisabled }}" onClick="{{ doValidate }}" title="{{ validateTitle }}" style="height:28px;padding:0 12px;border:1px solid #cfd4dc;border-radius:4px;background:#fff;cursor:pointer;font-weight:500;opacity:{{ validateOpacity }}">预检</button>
+      <button class="lm-btn" data-testid="btn-submit" disabled="{{ submitDisabled }}" onClick="{{ askSubmit }}" title="{{ submitTitle }}" style="height:28px;padding:0 12px;border:1px solid transparent;border-radius:4px;background:oklch(0.52 0.12 155);color:#fff;cursor:pointer;font-weight:600;opacity:{{ submitOpacity }}">提交补丁</button>
+      <button class="lm-ghost" onClick="{{ toggleMore }}" title="更多：设置、快捷键" aria-label="更多" style="width:28px;height:28px;border:0;border-radius:4px;background:transparent;cursor:pointer;display:grid;place-items:center">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.5"></circle><circle cx="8" cy="8" r="1.5"></circle><circle cx="13" cy="8" r="1.5"></circle></svg>
+      </button>
+      <button class="lm-ghost" onClick="{{ toggleRight }}" title="{{ rightToggleTitle }}" aria-label="面板" style="width:28px;height:28px;border:0;border-radius:4px;background:transparent;cursor:pointer;display:grid;place-items:center;color:{{ rightToggleColor }}">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"></rect><path d="M10 2.5v11"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- 横幅 -->
+  <sc-if value="{{ banner }}" hint-placeholder-val="{{ false }}">
+    <div role="status" data-testid="banner" style="{{ bannerStyle }}">
+      <span style="width:8px;height:8px;border-radius:50%;background:currentColor;flex:none"></span>
+      <span style="flex:1;min-width:0">{{ bannerText }}</span>
+      <sc-for list="{{ bannerActions }}" as="a" hint-placeholder-count="1">
+        <button class="lm-btn" onClick="{{ a.onClick }}" disabled="{{ a.disabled }}" data-testid="{{ a.testid }}" style="{{ a.style }}">{{ a.label }}</button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- 主体 -->
+  <div style="{{ bodyStyle }}">
+
+    <!-- 表列表 -->
+    <nav aria-label="表" data-testid="table-list" style="{{ sidebarStyle }}">
+      <sc-if value="{{ sidebarOpen }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:8px 8px 4px">
+          <div style="display:flex;align-items:center;gap:6px;height:26px;padding:0 6px;border:1px solid #e3e6eb;border-radius:4px;background:#fff;color:#9aa3b0">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path></svg>
+            <input value="{{ tableQuery }}" onChange="{{ setTableQuery }}" placeholder="搜索表" aria-label="搜索表" style="flex:1;min-width:0;border:0;background:transparent;outline:none;font-size:12px;color:#1c2230"></input>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:1px;padding:0 6px">
+          <sc-for list="{{ tables }}" as="t" hint-placeholder-count="3">
+            <button class="lm-item" onClick="{{ t.onClick }}" data-testid="{{ t.testid }}" aria-current="{{ t.current }}" style="{{ t.style }}">
+              <span style="display:flex;align-items:center;gap:6px;min-width:0">
+                <span style="font-weight:{{ t.weight }};overflow:hidden;text-overflow:ellipsis">{{ t.name }}</span>
+                <span style="color:#9aa3b0;font-size:11px;font-variant-numeric:tabular-nums">{{ t.rows }} 行</span>
+              </span>
+              <span style="display:flex;align-items:center;gap:4px">
+                <sc-if value="{{ t.conflict }}" hint-placeholder-val="{{ false }}"><span title="有冲突待处理" style="font-size:10px;line-height:16px;padding:0 5px;border-radius:8px;background:#f3ecfb;color:#7a3fb0;font-weight:600">冲突</span></sc-if>
+                <sc-if value="{{ t.dirty }}" hint-placeholder-val="{{ false }}"><span title="{{ t.dirtyTitle }}" style="font-size:10px;line-height:16px;padding:0 5px;border-radius:8px;background:#fff7e0;color:#b7791f;font-weight:600;font-variant-numeric:tabular-nums">{{ t.dirty }}</span></sc-if>
+              </span>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ sidebarClosed }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:2px;padding:8px 6px;align-items:center">
+          <sc-for list="{{ tables }}" as="t" hint-placeholder-count="3">
+            <button class="lm-item" onClick="{{ t.onClick }}" title="{{ t.name }}" style="{{ t.railStyle }}">{{ t.initial }}<sc-if value="{{ t.dirty }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:#b7791f"></span></sc-if></button>
+          </sc-for>
+        </div>
+      </sc-if>
+    </nav>
+
+    <!-- 表格区 -->
+    <main style="grid-area:main;display:flex;flex-direction:column;min-width:0;min-height:0;background:#fff;position:relative">
+      <div role="toolbar" aria-label="表格工具" style="display:flex;align-items:center;gap:2px;height:32px;padding:0 6px;border-bottom:1px solid #e3e6eb;flex:none;color:#3c434c">
+        <sc-for list="{{ toolbar }}" as="b" hint-placeholder-count="8">
+          <sc-if value="{{ b.sep }}" hint-placeholder-val="{{ false }}"><span style="width:1px;height:16px;background:#e3e6eb;margin:0 4px"></span></sc-if>
+          <sc-if value="{{ b.btn }}" hint-placeholder-val="{{ true }}">
+            <button class="lm-ghost" onClick="{{ b.onClick }}" disabled="{{ b.disabled }}" title="{{ b.title }}" aria-label="{{ b.label }}" style="display:flex;align-items:center;gap:4px;height:24px;padding:0 6px;border:0;border-radius:4px;background:{{ b.bg }};cursor:pointer;font-size:12px;opacity:{{ b.opacity }}">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="{{ b.d }}"></path></svg>
+              <sc-if value="{{ b.text }}" hint-placeholder-val="{{ false }}"><span>{{ b.text }}</span></sc-if>
+            </button>
+          </sc-if>
+        </sc-for>
+        <div style="flex:1"></div>
+        <span style="font-size:11px;color:#9aa3b0">{{ gridHint }}</span>
+      </div>
+
+      <div data-testid="univer-root" onClick="{{ closePopups }}" style="flex:1;min-height:0;overflow:auto;position:relative;font-variant-numeric:tabular-nums">
+        <sc-if value="{{ gridReady }}" hint-placeholder-val="{{ true }}">
+          <div style="display:inline-block;min-width:100%">
+            <div style="display:flex;position:sticky;top:0;z-index:2;background:#f6f7f9;border-bottom:1px solid #d9dde4">
+              <div style="width:44px;flex:none;height:36px;border-right:1px solid #e3e6eb"></div>
+              <sc-for list="{{ headers }}" as="h" hint-placeholder-count="6">
+                <button onClick="{{ h.onClick }}" onContextMenu="{{ h.onCtx }}" title="{{ h.title }}" style="{{ h.style }}">
+                  <span style="display:flex;align-items:baseline;gap:4px;min-width:0">
+                    <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis">{{ h.name }}</span>
+                    <sc-if value="{{ h.required }}" hint-placeholder-val="{{ false }}"><span style="color:#b3261e;font-weight:700" aria-label="必填">*</span></sc-if>
+                    <sc-if value="{{ h.readOnly }}" hint-placeholder-val="{{ false }}"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#9aa3b0" stroke-width="1.8" aria-label="只读"><rect x="3" y="7" width="10" height="7" rx="1"></rect><path d="M5.5 7V5a2.5 2.5 0 015 0v2"></path></svg></sc-if>
+                  </span>
+                  <span style="display:flex;align-items:center;gap:4px;flex:none">
+                    <span style="font-size:10px;color:#6a7280;font-family:ui-monospace,Consolas,monospace">{{ h.type }}</span>
+                    <span style="font-size:9px;letter-spacing:.5px;color:#6a7280;border:1px solid #d9dde4;border-radius:2px;padding:0 3px;line-height:12px">{{ h.vis }}</span>
+                  </span>
+                </button>
+              </sc-for>
+            </div>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+              <div class="lm-row" data-testid="{{ r.testid }}" style="{{ r.style }}">
+                <div title="{{ r.numTitle }}" style="{{ r.numStyle }}">{{ r.num }}</div>
+                <sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="6">
+                  <div onClick="{{ c.onClick }}" onDoubleClick="{{ c.onDbl }}" onContextMenu="{{ c.onCtx }}" title="{{ c.title }}" data-testid="{{ c.testid }}" style="{{ c.style }}">
+                    <sc-if value="{{ c.editing }}" hint-placeholder-val="{{ false }}">
+                      <input ref="{{ editRef }}" value="{{ editVal }}" onChange="{{ onEditChange }}" onKeyDown="{{ onEditKey }}" onBlur="{{ commitEdit }}" aria-label="编辑单元格" style="position:absolute;inset:0;width:100%;height:100%;border:0;padding:0 6px;outline:2px solid oklch(0.52 0.12 155);outline-offset:-2px;background:#fff;font:inherit;text-align:{{ c.align }}"></input>
+                    </sc-if>
+                    <span style="overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1;text-align:{{ c.align }}">{{ c.text }}</span>
+                    <sc-if value="{{ c.badge }}" hint-placeholder-val="{{ false }}"><span style="{{ c.badgeStyle }}">{{ c.badge }}</span></sc-if>
+                    <sc-for list="{{ c.marks }}" as="m" hint-placeholder-count="0">
+                      <span title="{{ m.title }}" style="{{ m.style }}">{{ m.text }}</span>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{ gridSkeleton }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:24px;color:#9aa3b0;display:flex;flex-direction:column;gap:10px">
+            <div style="height:12px;width:40%;background:#eef0f3;border-radius:3px"></div>
+            <div style="height:12px;width:70%;background:#eef0f3;border-radius:3px"></div>
+            <div style="height:12px;width:55%;background:#eef0f3;border-radius:3px"></div>
+            <span style="font-size:12px">正在读取 {{ table }} …</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{ gridLocked }}" hint-placeholder-val="{{ false }}">
+          <div aria-hidden="true" style="position:absolute;inset:0;background:rgba(255,255,255,.45);cursor:not-allowed;z-index:3"></div>
+        </sc-if>
+      </div>
+    </main>
+
+    <!-- 次级面板（A：底部抽屉 / B：右侧页签） -->
+    <section data-testid="panel" aria-label="面板" style="{{ panelStyle }}">
+      <div role="tablist" style="{{ tabBarStyle }}">
+        <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
+          <button role="tab" aria-selected="{{ tb.active }}" onClick="{{ tb.onClick }}" data-testid="{{ tb.testid }}" style="{{ tb.style }}">
+            <span>{{ tb.label }}</span>
+            <sc-if value="{{ tb.count }}" hint-placeholder-val="{{ false }}"><span style="{{ tb.countStyle }}">{{ tb.count }}</span></sc-if>
+          </button>
+        </sc-for>
+        <div style="flex:1"></div>
+        <button class="lm-ghost" onClick="{{ togglePanel }}" title="{{ panelToggleTitle }}" aria-label="收起面板" style="width:24px;height:24px;border:0;border-radius:4px;background:transparent;cursor:pointer;display:grid;place-items:center;color:#6a7280">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6"><path d="{{ panelChevron }}"></path></svg>
+        </button>
+      </div>
+
+      <sc-if value="{{ panelBodyOpen }}" hint-placeholder-val="{{ false }}">
+        <div role="tabpanel" style="flex:1;min-height:0;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:10px">
+
+          <!-- 补丁 -->
+          <sc-if value="{{ tabPatch }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ resultCard }}" hint-placeholder-val="{{ false }}">
+              <div data-testid="submit-result" style="border:1px solid oklch(0.80 0.08 155);background:oklch(0.97 0.02 155);border-radius:4px;padding:8px 10px;display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12px">
+                <span style="grid-column:1/-1;font-weight:600;color:oklch(0.40 0.12 155)">已提交</span>
+                <span style="color:#6a7280">新底稿指纹</span><span style="font-family:ui-monospace,Consolas,monospace">{{ resultFp }}</span>
+                <span style="color:#6a7280">发号</span><span style="font-family:ui-monospace,Consolas,monospace">{{ resultIds }}</span>
+                <span style="color:#6a7280">版本库</span><span>{{ resultVcs }}</span>
+                <span style="color:#6a7280">导表</span><span>{{ resultExport }}</span>
+              </div>
+            </sc-if>
+            <sc-if value="{{ patchEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="color:#9aa3b0;padding:16px 0;text-align:center;font-size:12px">还没有改动。改格子后这里会列出将要提交的内容。</div>
+            </sc-if>
+            <sc-if value="{{ patchHas }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span data-testid="diff-summary" style="font-weight:600">{{ patchSummary }}</span>
+                <span data-testid="diff-target" style="color:#6a7280;font-size:12px">{{ patchTarget }}</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <sc-for list="{{ patchGroups }}" as="g" hint-placeholder-count="2">
+                  <div style="border:1px solid #e3e6eb;border-radius:4px;overflow:hidden">
+                    <button class="lm-item" onClick="{{ g.onClick }}" style="display:flex;align-items:center;gap:8px;width:100%;padding:5px 8px;border:0;background:#f6f7f9;cursor:pointer;text-align:left">
+                      <span style="{{ g.opStyle }}">{{ g.opLabel }}</span>
+                      <span style="font-weight:600;font-family:ui-monospace,Consolas,monospace">{{ g.name }}</span>
+                      <span style="color:#9aa3b0;font-size:11px">{{ g.meta }}</span>
+                    </button>
+                    <sc-for list="{{ g.lines }}" as="l" hint-placeholder-count="1">
+                      <button class="lm-item" onClick="{{ l.onClick }}" title="跳到此格" style="display:grid;grid-template-columns:120px 1fr;gap:8px;width:100%;padding:3px 8px 3px 30px;border:0;border-top:1px solid #eef0f3;background:transparent;cursor:pointer;text-align:left;font-size:12px">
+                        <span style="color:#6a7280;font-family:ui-monospace,Consolas,monospace">{{ l.col }}</span>
+                        <span style="font-family:ui-monospace,Consolas,monospace;display:flex;gap:6px;align-items:center;min-width:0"><span style="color:#9aa3b0;text-decoration:line-through">{{ l.from }}</span><span style="color:#9aa3b0">→</span><span style="font-weight:600">{{ l.to }}</span></span>
+                      </button>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <!-- 错误 -->
+          <sc-if value="{{ tabErrors }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ errorsEmpty }}" hint-placeholder-val="{{ true }}">
+              <div style="color:#9aa3b0;padding:16px 0;text-align:center;font-size:12px">{{ errorsEmptyText }}</div>
+            </sc-if>
+            <sc-for list="{{ errorGroups }}" as="eg" hint-placeholder-count="1">
+              <div data-testid="error-panel" style="border:1px solid #f1c4c0;border-radius:4px;overflow:hidden">
+                <div style="padding:5px 8px;background:#fdecec;color:#b3261e;font-weight:600;display:flex;gap:8px;align-items:center"><span style="font-family:ui-monospace,Consolas,monospace">{{ eg.rowName }}</span><span style="font-size:11px;font-weight:500">{{ eg.count }} 个问题</span></div>
+                <sc-for list="{{ eg.items }}" as="e" hint-placeholder-count="1">
+                  <button class="lm-item" onClick="{{ e.onClick }}" style="display:flex;flex-direction:column;gap:2px;width:100%;padding:6px 8px;border:0;border-top:1px solid #f7e0de;background:transparent;cursor:pointer;text-align:left;font-size:12px">
+                    <span><span style="font-family:ui-monospace,Consolas,monospace;font-weight:600">{{ e.col }}</span>　{{ e.message }}</span>
+                    <span style="color:#6a7280">建议：{{ e.suggestion }}　<span style="font-family:ui-monospace,Consolas,monospace;color:#9aa3b0">{{ e.code }}</span></span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-for>
+          </sc-if>
+
+          <!-- 冲突 -->
+          <sc-if value="{{ tabConflicts }}" hint-placeholder-val="{{ false }}">
+            <sc-if value="{{ conflictsEmpty }}" hint-placeholder-val="{{ true }}">
+              <div style="color:#9aa3b0;padding:16px 0;text-align:center;font-size:12px">没有冲突。</div>
+            </sc-if>
+            <sc-if value="{{ conflictsHas }}" hint-placeholder-val="{{ false }}">
+              <div data-testid="conflict-panel" style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-weight:600">已解决 {{ resolvedCount }} / {{ conflictCount }}</span>
+                  <div style="flex:1;height:4px;background:#eef0f3;border-radius:2px;overflow:hidden"><div style="height:100%;background:#7a3fb0;width:{{ resolvedPct }}%"></div></div>
+                  <span style="font-size:11px;color:#6a7280">没有强制覆盖</span>
+                </div>
+                <sc-for list="{{ conflictCards }}" as="k" hint-placeholder-count="2">
+                  <div style="{{ k.style }}">
+                    <button class="lm-item" onClick="{{ k.jump }}" title="跳到此格" style="display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border:0;background:transparent;cursor:pointer;text-align:left">
+                      <span style="font-size:10px;line-height:16px;padding:0 5px;border-radius:8px;background:#f3ecfb;color:#7a3fb0;font-weight:600">{{ k.kind }}</span>
+                      <span style="font-weight:600;font-family:ui-monospace,Consolas,monospace">{{ k.rowName }}</span>
+                      <span style="font-family:ui-monospace,Consolas,monospace;color:#6a7280">{{ k.col }}</span>
+                      <span style="flex:1"></span>
+                      <sc-if value="{{ k.done }}" hint-placeholder-val="{{ false }}"><span style="color:oklch(0.45 0.12 155);font-weight:600;font-size:12px">✓ {{ k.doneLabel }}</span></sc-if>
+                    </button>
+                    <sc-if value="{{ k.cell }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#eadff5;border-top:1px solid #eadff5;border-bottom:1px solid #eadff5">
+                        <div style="background:#fff;padding:6px 8px"><div style="font-size:10px;color:#9aa3b0">打开时</div><div style="font-family:ui-monospace,Consolas,monospace">{{ k.base }}</div></div>
+                        <div style="background:#fff;padding:6px 8px"><div style="font-size:10px;color:#9aa3b0">仓库当前</div><div style="font-family:ui-monospace,Consolas,monospace">{{ k.current }}</div></div>
+                        <div style="background:#fff;padding:6px 8px"><div style="font-size:10px;color:#9aa3b0">我的草稿</div><div style="font-family:ui-monospace,Consolas,monospace">{{ k.draft }}</div></div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ k.rowDeleted }}" hint-placeholder-val="{{ false }}">
+                      <div style="padding:6px 8px;border-top:1px solid #eadff5;font-size:12px;color:#6a7280">这一行已在仓库中删除，而你改了它的 <span style="font-family:ui-monospace,Consolas,monospace">{{ k.editedCols }}</span>。</div>
+                    </sc-if>
+                    <div role="radiogroup" style="display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;align-items:center">
+                      <sc-for list="{{ k.options }}" as="o" hint-placeholder-count="3">
+                        <button role="radio" aria-checked="{{ o.checked }}" onClick="{{ o.onClick }}" data-testid="{{ o.testid }}" style="{{ o.style }}">{{ o.label }}</button>
+                      </sc-for>
+                      <sc-if value="{{ k.inputOpen }}" hint-placeholder-val="{{ false }}">
+                        <input value="{{ k.inputValue }}" onChange="{{ k.onInput }}" onKeyDown="{{ k.onInputKey }}" placeholder="输入值后回车" aria-label="手工输入" style="height:24px;padding:0 6px;border:1px solid #7a3fb0;border-radius:4px;font-family:ui-monospace,Consolas,monospace;font-size:12px;width:120px"></input>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-for>
+                <div style="display:flex;gap:6px;justify-content:flex-end">
+                  <button class="lm-btn" onClick="{{ cancelSubmit }}" data-testid="conflict-cancel" style="height:28px;padding:0 12px;border:1px solid #cfd4dc;border-radius:4px;background:#fff;cursor:pointer">取消本次提交</button>
+                  <button class="lm-btn" onClick="{{ resubmit }}" disabled="{{ resubmitDisabled }}" data-testid="conflict-resubmit" style="height:28px;padding:0 12px;border:1px solid transparent;border-radius:4px;background:#7a3fb0;color:#fff;cursor:pointer;font-weight:600;opacity:{{ resubmitOpacity }}">重新预检并提交</button>
+                </div>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <!-- 改动（J3） -->
+          <sc-if value="{{ tabDiff }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="color:#6a7280;font-size:12px">对比</span>
+              <select value="{{ diffSince }}" onChange="{{ setDiffSince }}" aria-label="对比基准" style="height:26px;border:1px solid #cfd4dc;border-radius:4px;background:#fff;padding:0 6px;font-size:12px">
+                <option value="last">上次打开（9月2日 18:20 · a10eb3f）</option>
+                <option value="rev1">修订 b81e044 之前</option>
+                <option value="mine">仅我的未提交改动</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#6a7280"><input type="checkbox" checked="{{ diffMark }}" onChange="{{ toggleDiffMark }}"></input>在表格中标记</label>
+            </div>
+            <sc-for list="{{ diffGroups }}" as="d" hint-placeholder-count="2">
+              <div style="border:1px solid #e3e6eb;border-radius:4px;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#f6f7f9;font-size:12px">
+                  <span style="{{ d.tagStyle }}">{{ d.tag }}</span>
+                  <span style="font-family:ui-monospace,Consolas,monospace;color:#6a7280">{{ d.rev }}</span>
+                  <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">{{ d.msg }}</span>
+                  <span style="flex:1"></span>
+                  <span style="color:#9aa3b0;white-space:nowrap">{{ d.when }}</span>
+                </div>
+                <sc-for list="{{ d.lines }}" as="l" hint-placeholder-count="2">
+                  <button class="lm-item" onClick="{{ l.onClick }}" title="跳到此格" style="display:grid;grid-template-columns:110px 110px 1fr;gap:8px;width:100%;padding:3px 8px;border:0;border-top:1px solid #eef0f3;background:transparent;cursor:pointer;text-align:left;font-size:12px;font-family:ui-monospace,Consolas,monospace">
+                    <span style="font-weight:600">{{ l.row }}</span>
+                    <span style="color:#6a7280">{{ l.col }}</span>
+                    <span style="display:flex;gap:6px;min-width:0"><span style="color:#9aa3b0;text-decoration:line-through">{{ l.from }}</span><span style="color:#9aa3b0">→</span><span style="font-weight:600">{{ l.to }}</span></span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-for>
+            <div style="font-size:11px;color:#9aa3b0;border-top:1px dashed #e3e6eb;padding-top:6px">修订级差异需要 Host 新增历史接口（见设计稿 §9「需要 Host」）；「仅我的未提交改动」用现有投影即可。</div>
+          </sc-if>
+
+          <!-- 导出 -->
+          <sc-if value="{{ tabExport }}" hint-placeholder-val="{{ false }}">
+            <div data-testid="export-panel" style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;font-size:12px">
+              <span style="color:#6a7280">表</span>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <sc-for list="{{ exportTables }}" as="x" hint-placeholder-count="3">
+                  <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" checked="{{ x.checked }}" onChange="{{ x.onChange }}"></input>{{ x.name }}</label>
+                </sc-for>
+              </div>
+              <span style="color:#6a7280">格式</span>
+              <div style="display:flex;gap:2px"><sc-for list="{{ exportFormats }}" as="f" hint-placeholder-count="2"><button onClick="{{ f.onClick }}" aria-pressed="{{ f.on }}" style="{{ f.style }}">{{ f.label }}</button></sc-for></div>
+              <span style="color:#6a7280">来源</span>
+              <div style="display:flex;gap:2px"><sc-for list="{{ exportSources }}" as="f" hint-placeholder-count="2"><button onClick="{{ f.onClick }}" aria-pressed="{{ f.on }}" style="{{ f.style }}">{{ f.label }}</button></sc-for></div>
+              <span style="color:#6a7280">目标列</span>
+              <div style="display:flex;gap:2px"><sc-for list="{{ exportTargets }}" as="f" hint-placeholder-count="4"><button onClick="{{ f.onClick }}" aria-pressed="{{ f.on }}" style="{{ f.style }}">{{ f.label }}</button></sc-for></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="lm-btn" onClick="{{ doExport }}" disabled="{{ exporting }}" data-testid="btn-export" style="height:28px;padding:0 12px;border:1px solid transparent;border-radius:4px;background:oklch(0.52 0.12 155);color:#fff;cursor:pointer;font-weight:600">{{ exportLabel }}</button>
+              <span style="font-size:11px;color:#9aa3b0">单向生成物，不会导回仓库；输出到 build/export</span>
+            </div>
+            <sc-if value="{{ exportFilesHas }}" hint-placeholder-val="{{ false }}">
+              <div style="border:1px solid #e3e6eb;border-radius:4px;overflow:hidden;font-size:12px">
+                <sc-for list="{{ exportFiles }}" as="f" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-top:1px solid #eef0f3">
+                    <span style="font-family:ui-monospace,Consolas,monospace;flex:1">{{ f.name }}</span>
+                    <span style="color:#9aa3b0">{{ f.size }}</span>
+                    <a href="#" data-testid="export-link" onClick="{{ f.onClick }}" style="font-weight:600;text-decoration:none">下载</a>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </sc-if>
+
+        </div>
+      </sc-if>
+    </section>
+
+    <!-- 检查器 -->
+    <aside data-testid="inspector" aria-label="检查器" style="{{ inspectorStyle }}">
+      <sc-if value="{{ isA }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:center;height:32px;padding:0 12px;border-bottom:1px solid #e3e6eb;font-weight:600;font-size:12px;color:#6a7280;flex:none">检查器</div>
+      </sc-if>
+      <div style="flex:1;min-height:0;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:12px;font-size:12px">
+        <sc-if value="{{ inspEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="color:#9aa3b0;padding:16px 0;text-align:center">点一个格子或列头，这里显示它的含义、约束与改动。</div>
+        </sc-if>
+        <sc-if value="{{ inspHas }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <div style="font-size:10px;color:#9aa3b0;letter-spacing:.3px">{{ inspCrumb }}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:2px"><span style="font-weight:600;font-size:14px;font-family:ui-monospace,Consolas,monospace">{{ inspTitle }}</span><sc-if value="{{ inspRequired }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;color:#b3261e">必填</span></sc-if><sc-if value="{{ inspReadOnly }}" hint-placeholder-val="{{ false }}"><span style="font-size:10px;color:#6a7280">只读</span></sc-if></div>
+          </div>
+
+          <sc-if value="{{ inspInvalid }}" hint-placeholder-val="{{ false }}">
+            <div data-testid="invalid-reason" style="border:1px solid #f1c4c0;background:#fdecec;border-radius:4px;padding:6px 8px;color:#8f1d16">
+              <div style="font-weight:600">为什么无效</div>
+              <div>{{ inspInvalidMsg }}</div>
+              <div style="color:#b3261e;margin-top:2px">建议：{{ inspInvalidFix }}</div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ inspConflict }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px solid #d9c6ee;background:#f3ecfb;border-radius:4px;padding:6px 8px;color:#4d2a70">
+              <div style="font-weight:600">此格有冲突</div>
+              <div>仓库当前 <b style="font-family:ui-monospace,Consolas,monospace">{{ inspConflictCur }}</b>，你的草稿 <b style="font-family:ui-monospace,Consolas,monospace">{{ inspConflictMine }}</b>。</div>
+              <button class="lm-btn" onClick="{{ openConflicts }}" style="margin-top:4px;height:24px;padding:0 8px;border:1px solid #7a3fb0;border-radius:4px;background:#fff;color:#7a3fb0;cursor:pointer;font-size:12px">去冲突面板处理</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ inspIsCell }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;align-items:center;justify-content:space-between"><span style="color:#6a7280">当前值</span><span style="{{ inspStateStyle }}">{{ inspStateLabel }}</span></div>
+              <div data-testid="cell-value" style="{{ inspValueStyle }}">{{ inspValueText }}</div>
+              <sc-if value="{{ inspRefHint }}" hint-placeholder-val="{{ false }}"><div style="color:#6a7280">引用 <span style="font-family:ui-monospace,Consolas,monospace">{{ inspRefTarget }}</span> · {{ inspRefHint }}</div></sc-if>
+              <sc-if value="{{ inspEditable }}" hint-placeholder-val="{{ true }}"><div style="color:#9aa3b0;font-size:11px">改值请在格内编辑（双击 / F2 / 直接输入）。</div></sc-if>
+              <sc-if value="{{ inspDirty }}" hint-placeholder-val="{{ false }}">
+                <div data-testid="cell-baseline" style="display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;background:#fff7e0;color:#7a5410">
+                  <span style="font-family:ui-monospace,Consolas,monospace;text-decoration:line-through;color:#9c7a2a">{{ inspBase }}</span><span>→</span><span style="font-family:ui-monospace,Consolas,monospace;font-weight:600">{{ inspRawShown }}</span>
+                  <span style="flex:1"></span>
+                  <button class="lm-btn" onClick="{{ revertCell }}" style="height:22px;padding:0 8px;border:1px solid #e0c98a;border-radius:4px;background:#fff;cursor:pointer;font-size:11px">还原</button>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <span style="color:#6a7280">四态</span>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+                <sc-for list="{{ fourStateBtns }}" as="fs" hint-placeholder-count="4">
+                  <button class="lm-btn" onClick="{{ fs.onClick }}" disabled="{{ fs.disabled }}" title="{{ fs.title }}" data-testid="{{ fs.testid }}" style="{{ fs.style }}">{{ fs.label }}</button>
+                </sc-for>
+              </div>
+              <div style="color:#9aa3b0;font-size:11px">{{ deleteRule }}</div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span style="color:#6a7280">列约束</span>
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:3px 10px;font-family:ui-monospace,Consolas,monospace">
+              <sc-for list="{{ inspMeta }}" as="mm" hint-placeholder-count="4">
+                <span style="color:#9aa3b0;font-family:system-ui,sans-serif">{{ mm.k }}</span><span>{{ mm.v }}</span>
+              </sc-for>
+            </div>
+            <div style="color:#9aa3b0;font-size:11px">{{ inspDesc }}</div>
+          </div>
+
+          <sc-if value="{{ inspIsCell }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:4px;border-top:1px solid #eef0f3;padding-top:8px">
+              <span style="color:#6a7280">行</span>
+              <div style="display:flex;align-items:center;gap:8px"><span style="{{ inspRowBadgeStyle }}">{{ inspRowBadge }}</span><span style="font-family:ui-monospace,Consolas,monospace">{{ inspRowId }}</span><span style="flex:1"></span>
+                <sc-if value="{{ inspRowDeleted }}" hint-placeholder-val="{{ false }}"><button class="lm-btn" onClick="{{ undeleteRow }}" style="height:22px;padding:0 8px;border:1px solid #cfd4dc;border-radius:4px;background:#fff;cursor:pointer;font-size:11px">撤销删除</button></sc-if>
+                <sc-if value="{{ inspRowCanDelete }}" hint-placeholder-val="{{ true }}"><button class="lm-btn" onClick="{{ deleteRow }}" style="height:22px;padding:0 8px;border:1px solid #cfd4dc;border-radius:4px;background:#fff;cursor:pointer;font-size:11px;color:#b3261e">删除行</button></sc-if>
+              </div>
+            </div>
+          </sc-if>
+        </sc-if>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 状态条 -->
+  <footer data-testid="status-bar" style="display:flex;align-items:center;gap:14px;height:24px;padding:0 10px;background:#fff;border-top:1px solid #e3e6eb;font-size:11px;color:#6a7280;flex:none;font-variant-numeric:tabular-nums">
+    <span data-testid="status-table">{{ table }}</span>
+    <span data-testid="status-rows">{{ rowCount }} 行</span>
+    <span data-testid="status-draft">草稿 v{{ draftVersion }}</span>
+    <button data-testid="status-dirty" onClick="{{ openPatchTab }}" title="打开补丁预览" style="border:0;background:transparent;padding:0;cursor:pointer;color:{{ dirtyColor }};font-weight:{{ dirtyWeight }}">{{ dirtyLabel }}</button>
+    <sc-if value="{{ uncommitted }}" hint-placeholder-val="{{ false }}"><span style="color:#b7791f">{{ uncommitted }}</span></sc-if>
+    <span style="flex:1"></span>
+    <button data-testid="status-fingerprint" onClick="{{ copyFp }}" title="{{ fingerprint }}（点击复制全文）" style="border:0;background:transparent;padding:0;cursor:pointer;color:#6a7280;font-family:ui-monospace,Consolas,monospace">{{ fpShort }}</button>
+    <span data-testid="status-online" style="display:flex;align-items:center;gap:4px"><span style="width:6px;height:6px;border-radius:50%;background:{{ onlineColor }}"></span>{{ onlineLabel }}</span>
+  </footer>
+
+  <!-- 右键菜单 -->
+  <sc-if value="{{ ctx }}" hint-placeholder-val="{{ false }}">
+    <div role="menu" data-testid="context-menu" style="{{ ctxStyle }}">
+      <sc-for list="{{ ctxItems }}" as="mi" hint-placeholder-count="6">
+        <sc-if value="{{ mi.sep }}" hint-placeholder-val="{{ false }}"><div style="height:1px;background:#e3e6eb;margin:4px 0"></div></sc-if>
+        <sc-if value="{{ mi.head }}" hint-placeholder-val="{{ false }}"><div style="padding:2px 10px;font-size:10px;color:#9aa3b0">{{ mi.head }}</div></sc-if>
+        <sc-if value="{{ mi.item }}" hint-placeholder-val="{{ true }}">
+          <button role="menuitem" class="lm-item" onClick="{{ mi.onClick }}" disabled="{{ mi.disabled }}" title="{{ mi.title }}" data-testid="{{ mi.testid }}" style="display:flex;align-items:center;gap:12px;width:100%;padding:4px 10px;border:0;background:transparent;cursor:pointer;text-align:left;border-radius:3px;opacity:{{ mi.opacity }}"><span style="flex:1">{{ mi.label }}</span><span style="color:#9aa3b0;font-size:11px">{{ mi.key }}</span></button>
+        </sc-if>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- 更多菜单 -->
+  <sc-if value="{{ moreOpen }}" hint-placeholder-val="{{ false }}">
+    <div role="menu" style="position:absolute;top:40px;right:40px;z-index:30;min-width:200px;padding:4px;background:#fff;border:1px solid #e3e6eb;border-radius:4px;box-shadow:0 8px 24px rgba(20,24,32,.12)">
+      <sc-for list="{{ moreItems }}" as="mi" hint-placeholder-count="4">
+        <button role="menuitem" class="lm-item" onClick="{{ mi.onClick }}" style="display:flex;align-items:center;gap:12px;width:100%;padding:5px 10px;border:0;background:transparent;cursor:pointer;text-align:left;border-radius:3px"><span style="flex:1">{{ mi.label }}</span><span style="color:#9aa3b0;font-size:11px">{{ mi.key }}</span></button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- 命令面板 -->
+  <sc-if value="{{ palette }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closePopups }}" style="position:absolute;inset:0;z-index:40;background:rgba(20,24,32,.25);display:flex;justify-content:center;align-items:flex-start;padding-top:80px">
+      <div role="dialog" aria-label="命令面板" onClick="{{ stop }}" data-testid="command-palette" style="width:480px;max-width:90%;background:#fff;border-radius:6px;box-shadow:0 16px 48px rgba(20,24,32,.24);overflow:hidden;animation:lm-fade .12s ease-out">
+        <input ref="{{ paletteRef }}" value="{{ paletteQ }}" onChange="{{ setPaletteQ }}" onKeyDown="{{ onPaletteKey }}" placeholder="切换表或执行动作…" aria-label="命令" style="width:100%;height:42px;border:0;border-bottom:1px solid #e3e6eb;padding:0 14px;font-size:14px;outline:none"></input>
+        <div style="max-height:320px;overflow:auto;padding:4px">
+          <sc-for list="{{ paletteItems }}" as="pi" hint-placeholder-count="5">
+            <button class="lm-item" onClick="{{ pi.onClick }}" style="{{ pi.style }}"><span style="width:44px;font-size:10px;color:#9aa3b0">{{ pi.group }}</span><span style="flex:1">{{ pi.label }}</span><span style="color:#9aa3b0;font-size:11px;font-family:ui-monospace,Consolas,monospace">{{ pi.key }}</span></button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 对话框：提交确认 / 设置 / 快捷键 -->
+  <sc-if value="{{ dialog }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closePopups }}" style="position:absolute;inset:0;z-index:40;background:rgba(20,24,32,.25);display:grid;place-items:center">
+      <div role="dialog" aria-modal="true" aria-label="{{ dialogTitle }}" onClick="{{ stop }}" data-testid="dialog" style="width:460px;max-width:92%;background:#fff;border-radius:6px;box-shadow:0 16px 48px rgba(20,24,32,.24);padding:16px 18px;display:flex;flex-direction:column;gap:12px;animation:lm-fade .12s ease-out">
+        <div style="font-weight:600;font-size:14px">{{ dialogTitle }}</div>
+
+        <sc-if value="{{ dialogConfirm }}" hint-placeholder-val="{{ false }}">
+          <p style="margin:0;line-height:1.6">{{ confirmText }}</p>
+          <div style="display:flex;justify-content:flex-end;gap:6px">
+            <button class="lm-btn" onClick="{{ closePopups }}" style="height:30px;padding:0 12px;border:1px solid #cfd4dc;border-radius:4px;background:#fff;cursor:pointer">取消</button>
+            <button class="lm-btn" ref="{{ confirmRef }}" onClick="{{ doSubmit }}" data-testid="confirm-submit" style="height:30px;padding:0 14px;border:1px solid transparent;border-radius:4px;background:oklch(0.52 0.12 155);color:#fff;cursor:pointer;font-weight:600">提交</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ dialogSettings }}" hint-placeholder-val="{{ false }}">
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span>提交后自动 commit 到当前分支<div style="color:#6a7280;font-size:11px">关闭后只写工作树，状态条会提示「未提交」</div></span><input type="checkbox" data-testid="setting-autocommit" checked="{{ autoCommit }}" onChange="{{ toggleAutoCommit }}"></input></label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span>提交后自动导表<div style="color:#6a7280;font-size:11px">CSV / TSV 输出到 build/export</div></span><input type="checkbox" checked="{{ autoExport }}" onChange="{{ toggleAutoExport }}"></input></label>
+          <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;color:#9aa3b0"><span>深色主题<div style="font-size:11px">后续版本</div></span><input type="checkbox" disabled="{{ true }}"></input></label>
+          <div style="color:#9aa3b0;font-size:11px">这些设置只对这台电脑生效。</div>
+        </sc-if>
+
+        <sc-if value="{{ dialogKeys }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid;grid-template-columns:1fr auto;gap:4px 16px;font-size:12px">
+            <sc-for list="{{ shortcuts }}" as="s" hint-placeholder-count="8"><span>{{ s.label }}</span><span style="font-family:ui-monospace,Consolas,monospace;color:#6a7280">{{ s.key }}</span></sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- 整页阻断：离线 / 会话结束 -->
+  <sc-if value="{{ blocked }}" hint-placeholder-val="{{ false }}">
+    <div role="alertdialog" data-testid="blocked" style="position:absolute;inset:0;z-index:50;background:rgba(246,247,249,.92);display:grid;place-items:center">
+      <div style="width:420px;max-width:92%;background:#fff;border:1px solid #e3e6eb;border-radius:6px;padding:20px 22px;display:flex;flex-direction:column;gap:10px;box-shadow:0 16px 48px rgba(20,24,32,.12)">
+        <div style="font-weight:600;font-size:15px">{{ blockedTitle }}</div>
+        <p style="margin:0;color:#3c434c;line-height:1.6">{{ blockedText }}</p>
+        <ol style="margin:0;padding-left:18px;color:#3c434c;line-height:1.7">
+          <li>回到终端，重新运行 <code style="font-family:ui-monospace,Consolas,monospace;background:#f3f4f6;padding:0 4px;border-radius:3px">python tools/lumio_config.py serve</code></li>
+          <li>打开终端里打印的新链接（旧链接的令牌已失效）</li>
+        </ol>
+        <div style="color:#9aa3b0;font-size:11px">你的草稿已自动保存，重新打开后会恢复。</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- Toast -->
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div role="status" data-testid="toast" style="position:absolute;left:50%;bottom:36px;transform:translateX(-50%);z-index:45;background:#1c2230;color:#fff;padding:8px 14px;border-radius:4px;font-size:12px;box-shadow:0 8px 24px rgba(20,24,32,.24);animation:lm-fade .15s ease-out;display:flex;gap:10px;align-items:center">{{ toast }}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;layout&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;A&quot;,&quot;B&quot;],&quot;default&quot;:&quot;B&quot;,&quot;tsType&quot;:&quot;'A' | 'B'&quot;,&quot;section&quot;:&quot;布局&quot;},&quot;scenario&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;J1&quot;,&quot;J2&quot;,&quot;J3&quot;,&quot;J4&quot;,&quot;J5&quot;],&quot;default&quot;:&quot;J2&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;场景&quot;},&quot;phase&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;&quot;,&quot;Opening&quot;,&quot;ReadyClean&quot;,&quot;ReadyDirty&quot;,&quot;SavingDraft&quot;,&quot;Validating&quot;,&quot;ReadyToSubmit&quot;,&quot;Submitting&quot;,&quot;Conflicted&quot;,&quot;Stale&quot;,&quot;Failed&quot;,&quot;Closed&quot;,&quot;SCHEMA_CHANGED&quot;,&quot;DRAFT_VERSION_CONFLICT&quot;,&quot;OFFLINE&quot;],&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;状态覆盖&quot;}}">
+const MONO = 'ui-monospace,Consolas,monospace';
+const V = (r) => ({ state: 'value', raw: String(r) });
+const E = { state: 'empty', raw: '""' }, N = { state: 'null', raw: 'null' }, D = { state: 'default', raw: '@default' }, M = { state: 'missing', raw: '@missing' };
+const FIX = {
+  skills: {
+    fp: 'sha256:47f6f165261bffd277717d30342b6d724ffd070b8d7c223dbf1a54a496f2150e',
+    columns: [
+      { name: 'id', type: 'u32', required: true, visibility: 'SCV', readOnly: true },
+      { name: 'name', type: 'string', required: true, visibility: 'SCV' },
+      { name: 'display_name', type: 'string', required: true, visibility: 'C' },
+      { name: 'effect_id', type: 'ref', required: true, refTarget: 'effects', visibility: 'S' },
+      { name: 'damage', type: 'i32', required: true, minimum: 0, visibility: 'S', default: 0 },
+      { name: 'cooldown_frames', type: 'i32', required: true, minimum: 1, visibility: 'S' },
+      { name: 'icon', type: 'string', required: true, visibility: 'C', default: 'fx_none' },
+      { name: 'element', type: 'enum', enumValues: ['fire', 'ice', 'none'], required: false, visibility: 'S' },
+      { name: 'enabled', type: 'bool', required: false, visibility: 'S', default: true },
+    ],
+    rows: [
+      { id: 40001, name: 'fireball', cells: { display_name: V('Fireball'), effect_id: V('50001'), damage: V(120), cooldown_frames: V(150), icon: V('fx_fireball'), element: V('fire'), enabled: V('true') } },
+      { id: 40002, name: 'frostbolt', cells: { display_name: V('Frostbolt'), effect_id: V('50002'), damage: V(90), cooldown_frames: V(90), icon: V('fx_frostbolt'), element: M, enabled: M } },
+      { id: 40090, name: 'four_state_demo', cells: { display_name: E, effect_id: N, damage: D, cooldown_frames: M, icon: V('火球🔥'), element: M, enabled: D } },
+    ],
+  },
+  effects: {
+    fp: 'sha256:2b3649daeb13ee680fbb495175b35b576f64b8aa8c0e556cb54c1a4fa0287fea',
+    columns: [
+      { name: 'id', type: 'u32', required: true, visibility: 'SCV', readOnly: true },
+      { name: 'name', type: 'string', required: true, visibility: 'SCV' },
+      { name: 'duration_frames', type: 'i32', required: true, minimum: 1, visibility: 'S', default: 30 },
+      { name: 'fx_key', type: 'string', required: true, visibility: 'C' },
+      { name: 'formula_key', type: 'string', required: true, visibility: 'S' },
+    ],
+    rows: [
+      { id: 50001, name: 'burn', cells: { duration_frames: V(180), fx_key: V('fx_burn'), formula_key: V('damage_over_time') } },
+      { id: 50002, name: 'chill', cells: { duration_frames: V(120), fx_key: V('fx_chill'), formula_key: V('slow_percent') } },
+      { id: 50090, name: '冰霜印记', cells: { duration_frames: D, fx_key: E, formula_key: N } },
+    ],
+  },
+  drops: {
+    fp: 'sha256:a148ee0f2ffe4bbd79db23e0179e1da0355510bf5a34bc8091ecf867d364dbae',
+    columns: [
+      { name: 'id', type: 'u32', required: true, visibility: 'SCV', readOnly: true },
+      { name: 'name', type: 'string', required: true, visibility: 'SCV' },
+      { name: 'skill_id', type: 'ref', required: true, refTarget: 'skills', visibility: 'S' },
+      { name: 'chance_permille', type: 'i32', required: true, minimum: 0, maximum: 1000, visibility: 'S' },
+      { name: 'display_name', type: 'string', required: true, visibility: 'C' },
+    ],
+    rows: [
+      { id: 60001, name: 'ember_cache', cells: { skill_id: V('40001'), chance_permille: V(250), display_name: V('Ember Cache') } },
+      { id: 60002, name: 'winter_cache', cells: { skill_id: V('40002'), chance_permille: V(125), display_name: V('Winter Cache') } },
+      { id: 60090, name: 'emoji_cache', cells: { skill_id: M, chance_permille: N, display_name: V('余烬匣🔥') } },
+    ],
+  },
+};
+const AI_REVS = [
+  { rev: '3f2c9d1', msg: 'config(skills): 提高 fireball 伤害，补齐 frostbolt 元素', when: '今天 09:14 · AI 补丁', lines: [['fireball', 'damage', '120', '130'], ['frostbolt', 'element', '@missing', 'ice'], ['frostbolt', 'enabled', '@missing', 'true']] },
+  { rev: 'b81e044', msg: 'config(skills): 新增 ice_lance', when: '昨天 22:40 · AI 补丁', lines: [['ice_lance', '(新行)', '—', '40091'], ['ice_lance', 'damage', '—', '40']] },
+];
+const PHASE = {
+  Opening: ['正在打开…', 'muted', 1], ReadyClean: ['与仓库一致', 'ok'], ReadyDirty: ['{n} 格未提交', 'dirty'], SavingDraft: ['正在保存草稿…', 'muted', 1],
+  Validating: ['正在预检…', 'muted', 1], ReadyToSubmit: ['预检通过，可提交', 'ok'], Submitting: ['正在提交…', 'muted', 1], Conflicted: ['{c} 处冲突待处理', 'conf'],
+  Stale: ['仓库已更新，正在合并', 'new', 1], Failed: ['提交失败', 'del'], Closed: ['会话已结束', 'muted'],
+  SCHEMA_CHANGED: ['表结构已变化', 'del'], DRAFT_VERSION_CONFLICT: ['草稿已在别处更新', 'del'], OFFLINE: ['无法连接本机服务', 'del'],
+};
+const TONE = { ok: ['oklch(0.40 0.12 155)', 'oklch(0.96 0.03 155)'], dirty: ['#7a5410', '#fff7e0'], muted: ['#6a7280', '#eef0f3'], conf: ['#4d2a70', '#f3ecfb'], new: ['#1f4f8f', '#eaf2ff'], del: ['#8f1d16', '#fdecec'] };
+const STATE_LABEL = { value: '普通值', empty: '空字符串 ""', null: '明确空值 ∅', default: '吃默认 @default', missing: '缺列 @missing' };
+const SHORTCUTS = [['保存本地草稿', 'Ctrl+S'], ['预检', 'Ctrl+Enter'], ['提交补丁', 'Ctrl+Shift+Enter'], ['命令面板 / 切表', 'Ctrl+K'], ['折叠表列表', 'Ctrl+B'], ['折叠面板 / 检查器', 'Ctrl+J'], ['编辑当前格', 'F2'], ['右键菜单', 'Shift+F10'], ['清格（按四态规则）', 'Delete'], ['查找 / 替换', 'Ctrl+F / Ctrl+H'], ['撤销 / 重做', 'Ctrl+Z / Ctrl+Y'], ['关闭面板 / 弹层', 'Esc']];
+const ICON = {
+  undo: 'M6 4L2.5 7.5 6 11M3 7.5h6.5a4 4 0 010 8H8', redo: 'M10 4l3.5 3.5L10 11M13 7.5H6.5a4 4 0 000 8H8', find: 'M7 11.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9zM10.5 10.5L14 14',
+  filter: 'M2 3h12L9.5 8.5V13l-3 1V8.5z', sort: 'M4 2v12M4 14l-2-2M4 14l2-2M10 2h4M10 6h3M10 10h2', freeze: 'M2 6h12M6 2v12M2 2h12v12H2z', insert: 'M8 3v10M3 8h10',
+  del: 'M3 4h10M6 4V2.5h4V4M4 4l1 10h6l1-10', dup: 'M5 5h8v8H5zM3 11V3h8', zoom: 'M7 11.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9zM10.5 10.5L14 14M5 7h4M7 5v4',
+};
+const DESC = { id: '终身编号，由发号台在合入时分配。', name: '行的稳定名字，补丁按它定位；改名不换 id。', display_name: '展示名，客户端可见。', effect_id: '关联的效果行。', damage: '技能基础伤害。', cooldown_frames: '冷却帧数。', icon: '客户端图标键。', element: '元素属性。', enabled: '是否启用。', duration_frames: '效果持续帧数。', fx_key: '特效资源键。', formula_key: '数值公式键。', skill_id: '掉落对应的技能。', chance_permille: '千分比掉率。' };
+const short = (fp) => (fp || '').replace('sha256:', '').slice(0, 8);
+const tokText = (t) => !t ? '' : t.state === 'value' ? t.raw : '';
+const tokRaw = (t) => (t ? t.raw : '@missing');
+const uid = () => 'draft:' + Math.random().toString(16).slice(2, 10);
+const badgeStyle = (c) => ({ fontSize: '10px', lineHeight: '15px', padding: '0 4px', borderRadius: '3px', border: `1px solid ${c}`, color: c, fontFamily: MONO, flex: 'none', marginLeft: '4px' });
+
+class Component extends DCLogic {
+  constructor(p) { super(p); this.rootRef = React.createRef(); this.valueRef = React.createRef(); this.editRef = React.createRef(); this.paletteRef = React.createRef(); this.confirmRef = React.createRef(); this.timers = []; this.state = this.init(p); }
+  init(p) {
+    const sc = p.scenario || 'J2';
+    const tables = {};
+    for (const n of Object.keys(FIX)) tables[n] = { order: FIX[n].rows.map((r) => String(r.id)), fresh: {}, dirty: {}, deleted: [], override: {} };
+    const s = {
+      table: 'skills', tables, phase: 'ReadyClean', failKind: '', sel: { row: '40001', col: 'damage' }, sidebarOpen: true, rightOpen: true, panelOpen: false, tab: 'patch',
+      palette: false, paletteQ: '', ctx: null, moreOpen: false, dialog: '', toast: '', editing: null, editVal: '', tableQuery: '', errors: [], validated: false, result: null,
+      conflicts: [], resolved: {}, inputFor: '', inputVal: '', since: sc === 'J3', diffSince: 'last', diffMark: sc === 'J3', autoCommit: true, autoExport: false,
+      exp: { format: 'csv', source: 'repo', target: '', tables: { skills: true, effects: true, drops: true } }, exporting: false, exportFiles: [], draftVersion: 0,
+    };
+    const sk = tables.skills;
+    if (sc === 'J2') {
+      sk.dirty = { 40001: { damage: V(130) }, 40002: { element: V('ice') } };
+      const k = 'draft:3f9a1c2e'; sk.order.push(k);
+      sk.fresh[k] = { name: V('ice_lance'), display_name: V('Ice Lance'), effect_id: V('50002'), damage: V(40), cooldown_frames: M, icon: V('fx_ice_lance'), element: V('ice'), enabled: D };
+      s.phase = 'ReadyDirty'; s.draftVersion = 2; s.sel = { row: '40001', col: 'damage' };
+    }
+    if (sc === 'J3') {
+      sk.override = { 40001: { damage: V(130) }, 40002: { element: V('ice'), enabled: V('true') } };
+      sk.order.push('40091'); sk.override['40091'] = { __new: true, name: V('ice_lance'), display_name: V('Ice Lance'), effect_id: V('50002'), damage: V(40), cooldown_frames: V(60), icon: V('fx_ice_lance'), element: V('ice'), enabled: V('true') };
+      s.panelOpen = true; s.tab = 'diff';
+    }
+    if (sc === 'J4') {
+      sk.dirty = { 40001: { damage: V(133) }, 40002: { cooldown_frames: V(80) }, 40090: { icon: V('fx_demo') } };
+      s.phase = 'Stale'; s.draftVersion = 5;
+    }
+    if (sc === 'J5') { s.panelOpen = true; s.tab = 'export'; }
+    if (p.layout === 'A') s.panelOpen = sc === 'J3' || sc === 'J5';
+    else if (sc === 'J1' || sc === 'J2' || sc === 'J4') { s.panelOpen = true; s.tab = 'inspector'; }
+    return s;
+  }
+  componentDidMount() { this.kick(); }
+  componentDidUpdate(prev) { if (prev.scenario !== this.props.scenario || prev.layout !== this.props.layout) { this.clear(); this.setState(this.init(this.props), () => this.kick()); } }
+  componentWillUnmount() { this.clear(); }
+  clear() { this.timers.forEach(clearTimeout); this.timers = []; }
+  later(ms, fn) { this.timers.push(setTimeout(fn, ms)); }
+  kick() {
+    if ((this.props.scenario || 'J2') === 'J4') this.later(1600, () => this.setState({
+      phase: 'Conflicted', tab: 'conflicts', panelOpen: true,
+      conflicts: [
+        { key: '40001|damage', code: 'STALE_BASELINE', row: '40001', rowName: 'fireball', col: 'damage', base: '120', current: '140', draft: '133' },
+        { key: '40002|cooldown_frames', code: 'STALE_BASELINE', row: '40002', rowName: 'frostbolt', col: 'cooldown_frames', base: '90', current: '75', draft: '80' },
+        { key: '40090|', code: 'DELETED_ROW_CONFLICT', row: '40090', rowName: 'four_state_demo', col: '', edited: 'icon' },
+      ],
+    }));
+  }
+  toast(msg) { this.setState({ toast: msg }); this.later(2600, () => this.setState((s) => (s.toast === msg ? { toast: '' } : null))); }
+  // ---- data helpers
+  T() { return this.state.tables[this.state.table]; }
+  fix() { return FIX[this.state.table]; }
+  col(name) { return this.fix().columns.find((c) => c.name === name); }
+  baseRow(key) { return this.fix().rows.find((r) => String(r.id) === key); }
+  baseTok(key, col) {
+    const t = this.T(); const ov = t.override[key];
+    if (ov && ov[col]) return ov[col];
+    const r = this.baseRow(key); if (!r) return undefined;
+    if (col === 'id') return V(r.id); if (col === 'name') return V(r.name);
+    return r.cells[col] || M;
+  }
+  curTok(key, col) {
+    const t = this.T();
+    if (t.fresh[key]) return col === 'id' ? V('') : (t.fresh[key][col] || M);
+    return (t.dirty[key] && t.dirty[key][col]) || this.baseTok(key, col);
+  }
+  isNew(key) { const t = this.T(); return Boolean(t.fresh[key]) || Boolean(t.override[key] && t.override[key].__new); }
+  refName(target, raw) { const f = FIX[target]; const r = f && f.rows.find((x) => String(x.id) === String(raw)); return r ? r.name : ''; }
+  dirtyCount(name) { const t = this.state.tables[name]; let n = 0; for (const k in t.dirty) n += Object.keys(t.dirty[k]).length; for (const k in t.fresh) n += 1; n += t.deleted.length; return n; }
+  ops() {
+    const t = this.T(), ops = [];
+    for (const key of t.order) {
+      const r = this.baseRow(key);
+      if (t.deleted.includes(key) && r) ops.push({ op: 'delete', name: r.name, key, lines: [] });
+      else if (t.fresh[key]) ops.push({ op: 'create', name: tokText(t.fresh[key].name) || '(未命名)', key, lines: this.fix().columns.filter((c) => c.name !== 'id' && c.name !== 'name').map((c) => ({ col: c.name, from: '', to: tokRaw(t.fresh[key][c.name]) })) });
+      else if (t.dirty[key] && Object.keys(t.dirty[key]).length) {
+        const d = t.dirty[key]; const lines = Object.keys(d).filter((c) => c !== 'name').map((c) => ({ col: c, from: tokRaw(this.baseTok(key, c)), to: tokRaw(d[c]) }));
+        if (d.name) ops.push({ op: 'rename', name: r.name, to: d.name.raw, key, lines: [{ col: 'name', from: r.name, to: d.name.raw }] });
+        if (lines.length) ops.push({ op: 'update', name: r.name, key, lines });
+      }
+    }
+    return ops;
+  }
+  summary(ops) {
+    const p = [];
+    const up = ops.filter((o) => o.op === 'update'); if (up.length) p.push('更新 ' + up.map((o) => `${o.name} ${o.lines.length} 格`).join('、'));
+    const cr = ops.filter((o) => o.op === 'create'); if (cr.length) p.push('新增 ' + cr.map((o) => o.name).join('、'));
+    const rn = ops.filter((o) => o.op === 'rename'); if (rn.length) p.push('改名 ' + rn.map((o) => `${o.name} → ${o.to}`).join('、'));
+    const de = ops.filter((o) => o.op === 'delete'); if (de.length) p.push('删除 ' + de.map((o) => o.name).join('、'));
+    return p.join('；');
+  }
+  validate() {
+    const t = this.T(), errs = [];
+    const check = (key, rowName, col, tok) => {
+      const c = this.col(col); if (!c) return;
+      if (c.required && (tok.state === 'missing' || (tok.state === 'value' && tok.raw === ''))) errs.push({ row: key, rowName, col, code: 'REQUIRED_MISSING', message: `必填列不能为空或缺列`, suggestion: c.default !== undefined ? `填一个值，或恢复默认 ${c.default}` : '填一个值' });
+      if (tok.state === 'value' && (c.type === 'i32' || c.type === 'u32')) { const n = Number(tok.raw); if (!Number.isInteger(n)) errs.push({ row: key, rowName, col, code: 'TYPE_MISMATCH', message: `需要整数，得到「${tok.raw}」`, suggestion: '输入整数' }); else if (c.minimum !== undefined && n < c.minimum) errs.push({ row: key, rowName, col, code: 'RANGE_BELOW_MIN', message: `不能小于 ${c.minimum}`, suggestion: `改为 ≥ ${c.minimum}` }); else if (c.maximum !== undefined && n > c.maximum) errs.push({ row: key, rowName, col, code: 'RANGE_ABOVE_MAX', message: `不能大于 ${c.maximum}`, suggestion: `改为 ≤ ${c.maximum}` }); }
+      if (tok.state === 'value' && c.type === 'enum' && !c.enumValues.includes(tok.raw)) errs.push({ row: key, rowName, col, code: 'ENUM_INVALID', message: `「${tok.raw}」不在枚举里`, suggestion: c.enumValues.join(' / ') });
+    };
+    for (const key in t.fresh) for (const c of this.fix().columns) if (c.name !== 'id') check(key, tokText(t.fresh[key].name) || '(未命名)', c.name, t.fresh[key][c.name] || M);
+    for (const key in t.dirty) for (const c in t.dirty[key]) check(key, this.baseRow(key).name, c, t.dirty[key][c]);
+    return errs;
+  }
+  cellInvalid(key, col) {
+    const tok = this.curTok(key, col), c = this.col(col); if (!c || !tok || this.isNew(key) && !this.T().fresh[key]) return '';
+    if (c.required && tok.state === 'missing') return `必填列不能为缺列（REQUIRED_MISSING）`;
+    if (tok.state === 'value' && (c.type === 'i32' || c.type === 'u32') && tok.raw !== '') { const n = Number(tok.raw); if (!Number.isInteger(n)) return `需要整数，得到「${tok.raw}」（TYPE_MISMATCH）`; if (c.minimum !== undefined && n < c.minimum) return `不能小于 ${c.minimum}（RANGE_BELOW_MIN）`; if (c.maximum !== undefined && n > c.maximum) return `不能大于 ${c.maximum}（RANGE_ABOVE_MAX）`; }
+    return '';
+  }
+  // ---- mutations
+  phase() { return this.props.phase || this.state.phase; }
+  canEdit() { return ['ReadyClean', 'ReadyDirty', 'SavingDraft', 'ReadyToSubmit'].includes(this.phase()); }
+  mutate(fn) {
+    if (!this.canEdit()) { this.toast('当前状态不能编辑'); return; }
+    this.setState((s) => {
+      const tables = { ...s.tables }; const t = { ...tables[s.table], dirty: { ...tables[s.table].dirty }, fresh: { ...tables[s.table].fresh }, deleted: [...tables[s.table].deleted], order: [...tables[s.table].order] };
+      fn(t, s); tables[s.table] = t;
+      return { tables, validated: false, result: null, errors: [] };
+    }, () => { this.setState({ phase: this.dirtyCount(this.state.table) > 0 ? 'ReadyDirty' : 'ReadyClean' }); this.autosave(); });
+  }
+  autosave() { this.clear(); this.later(2000, () => { if (this.state.phase === 'ReadyDirty') { this.setState({ phase: 'SavingDraft' }); this.later(500, () => this.setState((s) => ({ phase: 'ReadyDirty', draftVersion: s.draftVersion + 1 }))); } }); }
+  setTok(key, col, tok) {
+    this.mutate((t) => {
+      if (t.fresh[key]) { t.fresh[key] = { ...t.fresh[key], [col]: tok }; return; }
+      const base = this.baseTok(key, col); const d = { ...(t.dirty[key] || {}) };
+      if (base && base.state === tok.state && base.raw === tok.raw) delete d[col]; else d[col] = tok;
+      if (Object.keys(d).length) t.dirty[key] = d; else delete t.dirty[key];
+    });
+  }
+  fourState(kind) {
+    const { sel } = this.state; if (!sel || !sel.row) return; const c = this.col(sel.col); if (!c || c.readOnly) return;
+    if (kind === 'missing' && c.required) { this.toast('必填列不能设为缺列'); return; }
+    if (kind === 'default' && c.default === undefined) { this.toast('这一列没有默认值'); return; }
+    this.setTok(sel.row, sel.col, { empty: E, null: N, default: D, missing: M }[kind]); this.setState({ ctx: null });
+  }
+  deleteKey() {
+    const { sel } = this.state; if (!sel || !sel.row) return; const c = this.col(sel.col); if (!c || c.readOnly) return;
+    if (c.default !== undefined) return this.setTok(sel.row, sel.col, D);
+    if (!c.required) return this.setTok(sel.row, sel.col, N);
+    this.toast(`${c.name} 是必填列且没有默认值，Delete 不改动它`);
+  }
+  insertRow(where) {
+    const key = uid(), { sel } = this.state;
+    this.mutate((t) => { const i = sel && sel.row ? t.order.indexOf(sel.row) : t.order.length - 1; t.order.splice(where === 'above' ? i : i + 1, 0, key); t.fresh[key] = { name: V(''), enabled: D, damage: D, icon: D, duration_frames: D }; });
+    this.setState({ sel: { row: key, col: 'name' }, ctx: null }, () => this.startEdit(''));
+  }
+  duplicateRow() {
+    const { sel } = this.state; if (!sel || !sel.row) return; const key = uid(), src = sel.row;
+    this.mutate((t) => { const cells = {}; for (const c of this.fix().columns) if (c.name !== 'id') cells[c.name] = this.curTok(src, c.name) || M; cells.name = V(tokText(cells.name) + '_copy'); t.order.splice(t.order.indexOf(src) + 1, 0, key); t.fresh[key] = cells; });
+    this.setState({ sel: { row: key, col: 'name' }, ctx: null });
+  }
+  deleteRow() {
+    const { sel } = this.state; if (!sel || !sel.row) return; const key = sel.row;
+    this.mutate((t) => { if (t.fresh[key]) { delete t.fresh[key]; t.order = t.order.filter((k) => k !== key); } else if (!t.deleted.includes(key)) t.deleted.push(key); });
+    this.setState({ ctx: null }); this.toast('已标记删除，提交时生效；可在检查器撤销');
+  }
+  undeleteRow() { const { sel } = this.state; this.mutate((t) => { t.deleted = t.deleted.filter((k) => k !== sel.row); }); }
+  doValidate() {
+    if (this.dirtyCount(this.state.table) === 0) return;
+    this.setState({ phase: 'Validating', panelOpen: true });
+    this.later(700, () => { const errors = this.validate(); this.setState({ errors, validated: errors.length === 0, phase: errors.length ? 'ReadyDirty' : 'ReadyToSubmit', tab: errors.length ? 'errors' : 'patch', panelOpen: true }); if (errors.length) this.toast(`预检发现 ${errors.length} 个问题`); });
+  }
+  doSubmit() {
+    this.setState({ dialog: '', phase: 'Submitting' });
+    this.later(1300, () => this.setState((s) => {
+      const tables = { ...s.tables }; const t = { ...tables[s.table] }; const fix = FIX[s.table]; const assigned = {}; let next = 40091; const override = { ...t.override };
+      for (const key in t.dirty) override[key] = { ...(override[key] || {}), ...t.dirty[key] };
+      const order = t.order.filter((k) => !t.deleted.includes(k)).map((k) => { if (t.fresh[k]) { const id = String(next++); assigned[tokText(t.fresh[k].name)] = id; override[id] = { __new: false, ...t.fresh[k] }; override[id].id = V(id); return id; } return k; });
+      tables[s.table] = { order, fresh: {}, dirty: {}, deleted: [], override };
+      const ids = Object.keys(assigned).map((n) => `${n} → ${assigned[n]}`).join('，') || '无新行';
+      return { tables, phase: 'ReadyClean', validated: false, draftVersion: 0, tab: 'patch', panelOpen: true, sel: null, result: { fp: 'sha256:9c1d3e2a7b0f44d1c8e2a6f0b3d5e7a9c1b2d3e4f5a6b7c8d9e0f1a2b3c4d5e6', ids, vcs: s.autoCommit ? 'main · commit 7b3e2a1' : '未 commit（已写入工作树）', exp: s.autoExport ? '3 个文件 → build/export' : '未导表' }, uncommitted: s.autoCommit ? 0 : 1 };
+    }, () => this.toast(this.state.autoCommit ? '已提交并 commit 到 main（7b3e2a1）' : '已合入表文件，未 commit')));
+  }
+  resolve(key, choice, value) {
+    const c = this.state.conflicts.find((k) => k.key === key); if (!c) return;
+    this.setState((s) => ({ resolved: { ...s.resolved, [key]: { choice, value } }, inputFor: choice === 'input' && value === undefined ? key : '' }));
+    if (choice === 'input' && value === undefined) return;
+    const apply = (t) => {
+      if (c.code === 'DELETED_ROW_CONFLICT') { if (choice === 'drop') { delete t.dirty[c.row]; t.order = t.order.filter((k) => k !== c.row); } return; }
+      const d = { ...(t.dirty[c.row] || {}) };
+      if (choice === 'warehouse') delete d[c.col]; else if (choice === 'mine') d[c.col] = V(c.draft); else if (choice === 'default') d[c.col] = D; else if (choice === 'null') d[c.col] = N; else if (choice === 'input') d[c.col] = V(value);
+      if (Object.keys(d).length) t.dirty[c.row] = d; else delete t.dirty[c.row];
+    };
+    this.setState((s) => { const tables = { ...s.tables }; const t = { ...tables[s.table], dirty: { ...tables[s.table].dirty }, order: [...tables[s.table].order] }; apply(t); tables[s.table] = t; return { tables }; });
+  }
+  jump(row, col) { this.setState({ sel: { row, col: col || 'name' }, ctx: null }); }
+  openCtx(e, row, col) { e.preventDefault(); e.stopPropagation(); const host = this.rootRef.current.getBoundingClientRect(); this.setState({ sel: row ? { row, col } : { col }, ctx: { x: e.clientX - host.left, y: e.clientY - host.top }, moreOpen: false }); }
+  onKey = (e) => {
+    const k = e.key, ctrl = e.ctrlKey || e.metaKey, tag = (e.target.tagName || '').toLowerCase(), typing = tag === 'input' || tag === 'select';
+    if (ctrl && k.toLowerCase() === 'k') { e.preventDefault(); this.setState({ palette: true, paletteQ: '' }, () => this.paletteRef.current && this.paletteRef.current.focus()); return; }
+    if (ctrl && k.toLowerCase() === 'b') { e.preventDefault(); this.setState((s) => ({ sidebarOpen: !s.sidebarOpen })); return; }
+    if (ctrl && k.toLowerCase() === 'j') { e.preventDefault(); this.togglePanel(); return; }
+    if (ctrl && k.toLowerCase() === 's') { e.preventDefault(); if (this.dirtyCount(this.state.table)) { this.clear(); this.setState((s) => ({ draftVersion: s.draftVersion + 1 })); this.toast(`草稿已保存（v${this.state.draftVersion + 1}）`); } else this.toast('没有需要保存的改动'); return; }
+    if (ctrl && k === 'Enter') { e.preventDefault(); if (e.shiftKey) { if (this.phase() === 'ReadyToSubmit') this.askSubmit(); } else this.doValidate(); return; }
+    if (k === 'Escape') { if (this.state.palette || this.state.dialog || this.state.ctx || this.state.moreOpen) this.setState({ palette: false, dialog: '', ctx: null, moreOpen: false }); else if (this.state.panelOpen) this.setState({ panelOpen: false }); this.rootRef.current.focus(); return; }
+    if (typing) return;
+    const { sel } = this.state; if (!sel || !sel.row) return;
+    if (k.length === 1 && !ctrl && !e.altKey) { e.preventDefault(); this.startEdit(k); return; }
+    const cols = this.fix().columns.map((c) => c.name), order = this.T().order;
+    let ri = order.indexOf(sel.row), ci = cols.indexOf(sel.col);
+    if (k === 'ArrowDown' || k === 'Enter') ri++; else if (k === 'ArrowUp') ri--; else if (k === 'ArrowRight' || k === 'Tab') ci++; else if (k === 'ArrowLeft') ci--;
+    else if (k === 'F2') { e.preventDefault(); this.startEdit(); return; }
+    else if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); this.deleteKey(); return; }
+    else if (k === 'F10' && e.shiftKey) { e.preventDefault(); this.setState({ ctx: { x: 320, y: 200 } }); return; }
+    else return;
+    e.preventDefault(); ri = Math.max(0, Math.min(order.length - 1, ri)); ci = Math.max(0, Math.min(cols.length - 1, ci)); this.setState({ sel: { row: order[ri], col: cols[ci] } });
+  };
+  togglePanel = () => this.setState((s) => ({ panelOpen: !s.panelOpen }));
+  startEdit(initial) {
+    const { sel } = this.state; if (!sel || !sel.row || !this.canEdit()) return; const c = this.col(sel.col); if (!c || c.readOnly || this.T().deleted.includes(sel.row)) return;
+    const tok = this.curTok(sel.row, sel.col); const base = initial !== undefined ? initial : (tok && tok.state === 'value' ? tok.raw : '');
+    this.setState({ editing: { row: sel.row, col: sel.col }, editVal: base, ctx: null }, () => { const el = this.editRef.current; if (el) { el.focus(); if (initial === undefined) el.select(); } });
+  }
+  commitEdit = () => { const e = this.state.editing; if (!e) return; const val = this.state.editVal; this.setState({ editing: null }); const tok = this.curTok(e.row, e.col); if (tok && tok.state === 'value' && tok.raw === val) return; this.setTok(e.row, e.col, V(val)); };
+  askSubmit = () => { if (this.phase() !== 'ReadyToSubmit') return; if (!this.state.autoCommit && !this.state.autoExport) { this.doSubmit(); return; } this.setState({ dialog: 'confirm', moreOpen: false }, () => this.confirmRef.current && this.confirmRef.current.focus()); };
+  // ---- render
+  renderVals() { try { return this.renderInner(); } catch (e) { console.error('renderVals failed: ' + (e && e.stack || e)); return {}; } }
+  renderInner() {
+    const s = this.state, layout = this.props.layout || 'B', isA = layout === 'A', phase = this.phase(), fix = this.fix(), t = this.T();
+    const editable = this.canEdit(), busy = ['Validating', 'Submitting', 'Opening', 'Stale'].includes(phase);
+    const blocked = phase === 'OFFLINE' || phase === 'Closed';
+    const dirtyN = this.dirtyCount(s.table), ops = this.ops(), errors = s.errors;
+    const conflictKeys = new Set(s.conflicts.map((c) => c.key));
+    const errKeys = new Set(errors.map((e) => e.row + '|' + e.col));
+    const aiKeys = new Set(); if (s.diffMark && s.since) for (const r of AI_REVS) for (const l of r.lines) { const row = fix.rows.find((x) => x.name === l[0]); aiKeys.add((row ? String(row.id) : l[0] === 'ice_lance' ? '40091' : '') + '|' + l[1]); }
+    const gap = (isA ? 'A' : 'B');
+    // phase pill
+    const ph = PHASE[phase] || PHASE.Failed; const tone = TONE[ph[1]];
+    const phaseLabel = ph[0].replace('{n}', dirtyN).replace('{c}', s.conflicts.length);
+    const phasePillStyle = { display: 'flex', alignItems: 'center', gap: '6px', height: '24px', padding: '0 10px', borderRadius: '12px', background: tone[1], color: tone[0], fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' };
+    // banner
+    let banner = false, bannerText = '', bannerTone = 'new', bannerActions = [];
+    const acts = [];
+    const act = (label, onClick, primary, disabled, testid) => { const a = { label, onClick, disabled: Boolean(disabled), testid: testid || '', primary }; acts.push(a); return a; };
+    const closeB = () => this.setState({ since: false });
+    if (phase === 'Stale') { banner = true; bannerText = '仓库已更新（main · 3f2c9d1）。正在把你的 3 处草稿改动合并到新底稿，草稿不会丢。'; bannerActions = [act('正在合并仓库改动…', () => {}, false, true)]; }
+    else if (phase === 'Conflicted') { banner = true; bannerTone = 'conf'; bannerText = `合并遇到 ${s.conflicts.length} 处冲突，需要逐格选择；没有强制覆盖。`; bannerActions = [act('处理冲突', () => this.setState({ panelOpen: true, tab: 'conflicts', rightOpen: true }), true), act('取消本次提交', () => this.cancelSubmit())]; }
+    else if (phase === 'Failed') { banner = true; bannerTone = 'del'; bannerText = '提交失败：改动已合入表文件，但 commit 未完成（VCS_COMMIT_FAILED）。请在终端手动提交。'; bannerActions = [act('查看详情', () => this.setState({ panelOpen: true, tab: 'errors' })), act('重试 commit', () => this.setState({ phase: 'ReadyClean' }), true)]; }
+    else if (phase === 'SCHEMA_CHANGED') { banner = true; bannerTone = 'del'; bannerText = '这张表的结构已变化（列定义被修改）。需要刷新后重放草稿；草稿已保存，不会丢。'; bannerActions = [act('刷新', () => this.toast('原型：这里会 reload'), true, false, 'draft-refresh')]; }
+    else if (phase === 'DRAFT_VERSION_CONFLICT') { banner = true; bannerTone = 'del'; bannerText = '另一个标签页保存了这张表的草稿。此页已停止编辑，刷新后接着改。'; bannerActions = [act('刷新', () => this.toast('原型：这里会 reload'), true, false, 'draft-refresh')]; }
+    else if (s.since && (this.props.scenario || 'J2') === 'J3') { banner = true; bannerText = '自你上次打开（9月2日 18:20）以来，这张表有 2 次提交：改了 3 格，新增 1 行。'; bannerActions = [act('查看改动', () => this.setState({ panelOpen: true, tab: 'diff', diffMark: true }), true), act('知道了', closeB)]; }
+    const bt = TONE[bannerTone];
+    for (const a of acts) a.style = { height: '26px', padding: '0 10px', borderRadius: '4px', border: `1px solid ${a.primary ? bt[0] : bt[0] + '99'}`, background: a.primary ? bt[0] : '#fff', color: a.primary ? '#fff' : bt[0], cursor: a.disabled ? 'default' : 'pointer', fontSize: '12px', fontWeight: 600, opacity: a.disabled ? 0.65 : 1 };
+    const bannerStyle = { display: 'flex', alignItems: 'center', gap: '10px', minHeight: '36px', padding: '4px 14px', background: bt[1], color: bt[0], borderBottom: `1px solid ${bt[0]}33`, fontSize: '12px', flex: 'none' };
+    // layout
+    const sideW = s.sidebarOpen ? '200px' : '44px';
+    const rightW = s.rightOpen ? (isA ? '260px' : (s.panelOpen ? '340px' : '0px')) : '0px';
+    const bodyStyle = { flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: `${sideW} 1fr ${rightW}`, gridTemplateRows: isA ? '1fr auto' : '1fr', gridTemplateAreas: isA ? '"side main insp" "side panel insp"' : '"side main right"' };
+    const sidebarStyle = { gridArea: 'side', borderRight: '1px solid #e3e6eb', background: '#f6f7f9', overflow: 'auto', minHeight: 0 };
+    const panelShown = isA ? true : (s.rightOpen && s.panelOpen);
+    const panelStyle = isA
+      ? { gridArea: 'panel', display: 'flex', flexDirection: 'column', height: s.panelOpen ? '240px' : '30px', borderTop: '1px solid #e3e6eb', background: '#fff', minHeight: 0 }
+      : { gridArea: 'right', display: panelShown ? 'flex' : 'none', flexDirection: 'column', borderLeft: '1px solid #e3e6eb', background: '#fff', minHeight: 0, minWidth: 0 };
+    const inspectorShown = isA ? s.rightOpen : (s.rightOpen && s.panelOpen && s.tab === 'inspector');
+    const inspectorStyle = isA
+      ? { gridArea: 'insp', display: inspectorShown ? 'flex' : 'none', flexDirection: 'column', borderLeft: '1px solid #e3e6eb', background: '#fff', minHeight: 0, minWidth: 0 }
+      : { gridArea: 'right', display: inspectorShown ? 'flex' : 'none', flexDirection: 'column', marginTop: '30px', background: '#fff', minHeight: 0, minWidth: 0, borderLeft: '1px solid #e3e6eb' };
+    const tabBarStyle = { display: 'flex', alignItems: 'center', gap: '2px', height: '30px', padding: '0 6px', borderBottom: s.panelOpen ? '1px solid #e3e6eb' : '0', flex: 'none', background: '#f6f7f9' };
+    const tabDefs = [...(isA ? [] : [['inspector', '检查器', 0]]), ['patch', '补丁', ops.length], ['errors', '错误', errors.length], ['conflicts', '冲突', s.conflicts.length], ...(s.since || (this.props.scenario || 'J2') === 'J3' ? [['diff', '改动', 0]] : []), ['export', '导出', 0]];
+    const tabs = tabDefs.map(([id, label, count]) => { const active = s.panelOpen && s.tab === id; const warn = id === 'errors' || id === 'conflicts'; return { label, count, active, testid: 'tab-' + id, onClick: () => this.setState({ tab: id, panelOpen: true, rightOpen: true }), style: { display: 'flex', alignItems: 'center', gap: '5px', height: '24px', padding: '0 8px', border: 0, borderRadius: '4px', background: active ? '#fff' : 'transparent', boxShadow: active ? '0 0 0 1px #e3e6eb' : 'none', cursor: 'pointer', fontSize: '12px', fontWeight: active ? 600 : 500, color: active ? '#1c2230' : '#6a7280' }, countStyle: { fontSize: '10px', lineHeight: '15px', minWidth: '16px', textAlign: 'center', padding: '0 4px', borderRadius: '8px', background: warn && count ? (id === 'errors' ? '#fdecec' : '#f3ecfb') : '#eceff3', color: warn && count ? (id === 'errors' ? '#b3261e' : '#7a3fb0') : '#6a7280', fontWeight: 600 } }; });
+    // sidebar tables
+    const tables = Object.keys(FIX).filter((n) => n.includes(s.tableQuery.trim())).map((n) => { const cur = n === s.table; const dirty = this.dirtyCount(n); return { name: n, testid: 'table-' + n, rows: FIX[n].rows.length + (s.tables[n].order.length - FIX[n].rows.length), dirty, dirtyTitle: `${dirty} 格未提交`, conflict: cur && s.conflicts.length > 0, current: cur ? 'true' : 'false', weight: cur ? 600 : 500, initial: n[0].toUpperCase(), onClick: () => this.setState({ table: n, sel: null, ctx: null, palette: false, errors: [], validated: false, result: null }), style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', width: '100%', height: '28px', padding: '0 8px', border: 0, borderRadius: '4px', background: cur ? '#fff' : 'transparent', boxShadow: cur ? '0 0 0 1px #e3e6eb' : 'none', cursor: 'pointer', textAlign: 'left', fontSize: '13px' }, railStyle: { position: 'relative', width: '32px', height: '32px', border: 0, borderRadius: '4px', background: cur ? '#fff' : 'transparent', boxShadow: cur ? '0 0 0 1px #e3e6eb' : 'none', cursor: 'pointer', fontWeight: 600, color: cur ? '#1c2230' : '#6a7280' } }; });
+    // toolbar
+    const tb = (label, d, title, onClick, disabled, text, bg) => ({ btn: true, label, d: ICON[d], title, onClick, disabled: Boolean(disabled), opacity: disabled ? 0.4 : 1, text: text || '', bg: bg || 'transparent' });
+    const toolbar = [
+      tb('撤销', 'undo', '撤销（Ctrl+Z）', () => this.toast('撤销由 Univer 处理'), !editable), tb('重做', 'redo', '重做（Ctrl+Y）', () => this.toast('重做由 Univer 处理'), !editable), { sep: true },
+      tb('查找替换', 'find', '查找 / 替换（Ctrl+F / Ctrl+H）', () => this.toast('原型：打开 Univer 查找替换'), false), { sep: true },
+      tb('筛选', 'filter', '筛选（只影响视图）', () => this.toast('原型：Univer 筛选'), false), tb('排序', 'sort', '视图排序（不写回行序）', () => this.toast('原型：Univer 排序'), false), tb('冻结', 'freeze', '冻结首列 / 首行', () => this.toast('原型：冻结'), false), { sep: true },
+      tb('新增行', 'insert', '在下方插入行', () => this.insertRow('below'), !editable, '新增行'), tb('复制行', 'dup', '复制当前行为新行（取新草稿键）', () => this.duplicateRow(), !editable || !(s.sel && s.sel.row)), tb('删除行', 'del', '删除当前行（提交时生效）', () => this.deleteRow(), !editable || !(s.sel && s.sel.row)), { sep: true },
+      tb('缩放', 'zoom', '缩放', () => this.toast('原型：缩放'), false, '100%'),
+    ];
+    // headers
+    const widths = { id: 96, name: 150, display_name: 140, effect_id: 130, skill_id: 130, cooldown_frames: 124, chance_permille: 130, duration_frames: 130, formula_key: 130 };
+    const headers = fix.columns.map((c) => { const selCol = s.sel && !s.sel.row && s.sel.col === c.name; const vis = c.visibility || ''; return { name: c.name, required: Boolean(c.required), readOnly: Boolean(c.readOnly), type: c.type === 'ref' ? 'ref→' + c.refTarget : c.type === 'string' ? 'str' : c.type, vis, title: `${c.name} · ${c.type}${c.required ? ' · 必填' : ''}${c.default !== undefined ? ' · 默认 ' + c.default : ''}${c.minimum !== undefined ? ' · ≥' + c.minimum : ''}${c.maximum !== undefined ? ' · ≤' + c.maximum : ''} · 可见 ${vis}\n${DESC[c.name] || ''}`, onClick: () => this.setState({ sel: { col: c.name }, ctx: null }), onCtx: (e) => this.openCtx(e, null, c.name), style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: '1px', width: (widths[c.name] || 110) + 'px', flex: 'none', height: '36px', padding: '0 6px', border: 0, borderRight: '1px solid #e3e6eb', background: selCol ? 'oklch(0.96 0.03 155)' : 'transparent', cursor: 'pointer', fontSize: '12px', textAlign: 'left', color: c.readOnly ? '#6a7280' : '#1c2230' } }; });
+    // rows
+    const blanks = editable && phase !== 'Opening' ? 3 : 0;
+    const rows = [];
+    const cellBase = (w) => ({ position: 'relative', display: 'flex', alignItems: 'center', width: w + 'px', flex: 'none', height: '26px', padding: '0 6px', borderRight: '1px solid #eef0f3', borderBottom: '1px solid #eef0f3', whiteSpace: 'nowrap', overflow: 'hidden', cursor: 'cell', fontSize: '12px' });
+    t.order.forEach((key, i) => {
+      const isNew = this.isNew(key), fresh = Boolean(t.fresh[key]), del = t.deleted.includes(key);
+      const cells = fix.columns.map((c) => {
+        const tok = this.curTok(key, c.name) || M, num = c.type === 'i32' || c.type === 'u32', dirty = Boolean(t.dirty[key] && t.dirty[key][c.name]);
+        const selected = s.sel && s.sel.row === key && s.sel.col === c.name; const inv = errKeys.has(key + '|' + c.name) ? '预检错误' : this.cellInvalid(key, c.name); const conf = conflictKeys.has(key + '|' + c.name) || (conflictKeys.has(key + '|') && c.name === 'id'); const ai = aiKeys.has(key + '|' + c.name) || (isNew && aiKeys.has(key + '|(新行)') && c.name === 'id');
+        let text = tokText(tok), badge = '', badgeColor = '#9aa3b0', ghost = false;
+        if (c.name === 'id' && fresh) { text = '合入时发号'; ghost = true; }
+        else if (c.type === 'ref' && tok.state === 'value') { const n = this.refName(c.refTarget, tok.raw); text = n ? `${n}` : tok.raw; if (!n && tok.raw) inv || (badge = ''); }
+        if (tok.state === 'empty') badge = '""'; else if (tok.state === 'null') badge = '∅'; else if (tok.state === 'default') { badge = '默认'; text = c.default !== undefined ? String(c.default) : ''; ghost = true; } else if (tok.state === 'missing') { badge = 'missing'; }
+        const style = { ...cellBase(widths[c.name] || 110), fontFamily: num || c.name === 'id' ? MONO : 'inherit', justifyContent: num ? 'flex-end' : 'flex-start', color: del ? '#9aa3b0' : ghost ? '#9aa3b0' : c.readOnly ? '#6a7280' : '#1c2230', fontStyle: ghost ? 'italic' : 'normal', textDecoration: del ? 'line-through' : inv ? 'underline wavy #b3261e' : 'none', textUnderlineOffset: '3px', background: selected ? 'oklch(0.96 0.03 155)' : conf ? '#f3ecfb' : dirty ? '#fff7e0' : c.readOnly ? '#f6f7f9' : 'transparent', boxShadow: selected ? 'inset 0 0 0 2px oklch(0.52 0.12 155)' : conf ? 'inset 0 0 0 1px #b48ad8' : 'none' };
+        const marks = [];
+        if (dirty) marks.push({ title: `已改：${tokRaw(this.baseTok(key, c.name))} → ${tokRaw(tok)}`, text: '', style: { position: 'absolute', top: 0, right: 0, width: 0, height: 0, borderTop: '7px solid #b7791f', borderLeft: '7px solid transparent' } });
+        if (inv) marks.push({ title: inv, text: '!', style: { position: 'absolute', bottom: '1px', right: '2px', width: '11px', height: '11px', borderRadius: '50%', background: '#b3261e', color: '#fff', fontSize: '9px', lineHeight: '11px', textAlign: 'center', fontWeight: 700 } });
+        if (conf) marks.push({ title: '与仓库冲突，去冲突面板处理', text: '⚑', style: { position: 'absolute', top: 0, right: '2px', color: '#7a3fb0', fontSize: '10px', lineHeight: '12px' } });
+        if (ai) marks.push({ title: 'AI 补丁改动（自上次打开）', text: '', style: { position: 'absolute', top: '2px', left: '2px', width: '6px', height: '6px', borderRadius: '50%', background: '#4a4cc7' } });
+        const editing = Boolean(s.editing && s.editing.row === key && s.editing.col === c.name);
+        return { text, badge, badgeStyle: badgeStyle(tok.state === 'missing' ? '#9aa3b0' : '#6a7280'), marks, editing, align: num ? 'right' : 'left', title: inv || (dirty ? '已改，未提交' : ''), testid: `cell-${key}-${c.name}`, style, onClick: (e) => { e.stopPropagation(); if (editing) return; this.setState({ sel: { row: key, col: c.name }, ctx: null, moreOpen: false }); }, onDbl: () => this.setState({ sel: { row: key, col: c.name } }, () => this.startEdit()), onCtx: (e) => this.openCtx(e, key, c.name) };
+      });
+      rows.push({ testid: 'row-' + key, num: isNew ? '新' : String(i + 1), numTitle: isNew ? '新行，合入时发号' : del ? '已标记删除' : '', style: { display: 'flex', background: del ? '#fdecec66' : isNew && fresh ? '#eaf2ff' : 'transparent' }, numStyle: { width: '44px', flex: 'none', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRight: '1px solid #e3e6eb', borderBottom: '1px solid #eef0f3', background: '#f6f7f9', color: isNew ? '#1f5fb3' : '#9aa3b0', fontSize: '11px', fontWeight: isNew ? 700 : 400, fontFamily: MONO }, cells });
+    });
+    for (let b = 0; b < blanks; b++) rows.push({ testid: 'row-blank-' + b, num: '', numTitle: '', style: { display: 'flex' }, numStyle: { width: '44px', flex: 'none', height: '26px', borderRight: '1px solid #e3e6eb', borderBottom: '1px solid #f3f4f6', background: '#fafbfc' }, cells: fix.columns.map((c, ci) => ({ text: b === 0 && ci === 1 ? '在此输入名称新增一行…' : '', badge: '', badgeStyle: {}, marks: [], editing: false, align: 'left', title: '', testid: '', style: { ...cellBase(widths[c.name] || 110), borderBottom: '1px solid #f3f4f6', color: '#c3c8d1', fontStyle: 'italic' }, onClick: (e) => { e.stopPropagation(); if (b === 0) this.insertRow('end'); }, onDbl: () => {}, onCtx: (e) => e.preventDefault() })) });
+    // inspector
+    const sel = s.sel, selCol = sel ? this.col(sel.col) : null, isCell = Boolean(sel && sel.row && selCol);
+    const tok = isCell ? (this.curTok(sel.row, sel.col) || M) : null;
+    const fresh = isCell && Boolean(t.fresh[sel.row]); const rowDel = isCell && t.deleted.includes(sel.row);
+    const dirty = isCell && Boolean(t.dirty[sel.row] && t.dirty[sel.row][sel.col]);
+    const invMsg = isCell ? (errors.find((e) => e.row === sel.row && e.col === sel.col) || null) : null;
+    const invText = invMsg ? `${invMsg.message}（${invMsg.code}）` : isCell ? this.cellInvalid(sel.row, sel.col) : '';
+    const conflict = isCell ? s.conflicts.find((c) => c.row === sel.row && c.col === sel.col) : null;
+    const inspMeta = selCol ? [['类型', selCol.type + (selCol.refTarget ? ' → ' + selCol.refTarget : '')], ['必填', selCol.required ? '是' : '否'], ['默认值', selCol.default !== undefined ? String(selCol.default) : '无'], ...(selCol.enumValues ? [['枚举', selCol.enumValues.join(' / ')]] : []), ...(selCol.minimum !== undefined ? [['最小', String(selCol.minimum)]] : []), ...(selCol.maximum !== undefined ? [['最大', String(selCol.maximum)]] : []), ['可见性', (selCol.visibility || '').split('').map((v) => ({ S: 'S 服务器', C: 'C 客户端', V: 'V 校验' }[v] || v)).join(' · ')]].map(([k, v]) => ({ k, v })) : [];
+    const fsDef = [['empty', '设为空字符串 ""'], ['null', '设为 null ∅'], ['default', '恢复默认'], ['missing', '设为缺列']];
+    const fourStateBtns = fsDef.map(([kind, label]) => { const dis = !isCell || !editable || Boolean(selCol && selCol.readOnly) || (kind === 'missing' && selCol && selCol.required) || (kind === 'default' && selCol && selCol.default === undefined); const on = tok && tok.state === kind; return { label, testid: 'four-state-' + kind, disabled: dis, title: kind === 'missing' && selCol && selCol.required ? '必填列不能设为缺列' : kind === 'default' && selCol && selCol.default === undefined ? '这一列没有默认值' : label, onClick: () => this.fourState(kind), style: { height: '26px', padding: '0 6px', border: `1px solid ${on ? 'oklch(0.52 0.12 155)' : '#cfd4dc'}`, borderRadius: '4px', background: on ? 'oklch(0.96 0.03 155)' : '#fff', cursor: dis ? 'default' : 'pointer', fontSize: '11px', opacity: dis ? 0.45 : 1, fontFamily: MONO } }; });
+    const deleteRule = selCol ? (selCol.default !== undefined ? `Delete 键：这一列有默认值，清格后为「默认」。` : !selCol.required ? 'Delete 键：这一列可选且无默认，清格后为 ∅。' : 'Delete 键：必填且无默认，清格不生效。') : '';
+    const refHint = isCell && selCol.type === 'ref' && tok.state === 'value' ? (this.refName(selCol.refTarget, tok.raw) ? `${tok.raw} = ${this.refName(selCol.refTarget, tok.raw)}` : `${tok.raw} 在 ${selCol.refTarget} 里找不到`) : '';
+    const inspRowBadge = !isCell ? '' : fresh ? '新行' : rowDel ? '已标记删除' : this.isNew(sel.row) ? '本次新增' : '已有行';
+    const rb = fresh ? ['#1f5fb3', '#eaf2ff'] : rowDel ? ['#b3261e', '#fdecec'] : ['#6a7280', '#eef0f3'];
+    // conflicts
+    const cards = s.conflicts.map((c) => { const r = s.resolved[c.key]; const done = r && !(r.choice === 'input' && r.value === undefined); const optDef = c.code === 'DELETED_ROW_CONFLICT' ? [['drop', '放弃我的改动']] : [['warehouse', `采仓库值 ${c.current}`], ['mine', `采我的值 ${c.draft}`], ['input', '手工输入'], ['default', '恢复默认'], ['null', '设为 ∅']]; const map = { warehouse: '采仓库值', mine: '采我的值', input: '手工输入', default: '恢复默认', null: '设为 ∅', drop: '放弃我的改动' }; return { kind: c.code === 'DELETED_ROW_CONFLICT' ? '行已删除' : '值冲突', rowName: c.rowName, col: c.col, cell: c.code !== 'DELETED_ROW_CONFLICT', rowDeleted: c.code === 'DELETED_ROW_CONFLICT', editedCols: c.edited || '', base: c.base, current: c.current, draft: c.draft, done, doneLabel: r ? (r.choice === 'input' ? `手工输入 ${r.value}` : map[r.choice]) : '', inputOpen: s.inputFor === c.key, inputValue: s.inputVal, onInput: (e) => this.setState({ inputVal: e.target.value }), onInputKey: (e) => { if (e.key === 'Enter') { this.resolve(c.key, 'input', s.inputVal); this.setState({ inputVal: '' }); } }, jump: () => this.jump(c.row, c.col || 'id'), style: { border: `1px solid ${done ? '#e3e6eb' : '#d9c6ee'}`, borderRadius: '4px', overflow: 'hidden', background: '#fff', opacity: 1 }, options: optDef.map(([id, label]) => { const on = r && r.choice === id; return { label, checked: on ? 'true' : 'false', testid: 'conflict-' + id, onClick: () => this.resolve(c.key, id, id === 'input' ? undefined : null), style: { height: '24px', padding: '0 8px', border: `1px solid ${on ? '#7a3fb0' : '#cfd4dc'}`, borderRadius: '4px', background: on ? '#f3ecfb' : '#fff', color: on ? '#4d2a70' : '#1c2230', cursor: 'pointer', fontSize: '11px', fontWeight: on ? 600 : 500 } }; }) }; });
+    const resolvedCount = cards.filter((k) => k.done).length;
+    // patch
+    const opColor = { update: ['#7a5410', '#fff7e0', '更新'], create: ['#1f5fb3', '#eaf2ff', '新增'], rename: ['#6a7280', '#eef0f3', '改名'], delete: ['#b3261e', '#fdecec', '删除'] };
+    const patchGroups = ops.map((o) => ({ opLabel: opColor[o.op][2], opStyle: { fontSize: '10px', lineHeight: '16px', padding: '0 5px', borderRadius: '3px', background: opColor[o.op][1], color: opColor[o.op][0], fontWeight: 600 }, name: o.op === 'rename' ? `${o.name} → ${o.to}` : o.name, meta: o.op === 'update' ? `${o.lines.length} 格` : o.op === 'create' ? '合入时发号' : o.op === 'delete' ? '合入后登记墓碑' : '', onClick: () => this.jump(o.key, 'name'), lines: o.lines.map((l) => ({ col: l.col, from: l.from, to: l.to, onClick: () => this.jump(o.key, l.col) })) }));
+    const target = `→ main · a10eb3f${s.autoCommit ? ' · 自动 commit' : ' · 不 commit'}${s.autoExport ? ' · 自动导表' : ''}`;
+    const patchSummary = ops.length ? `${dirtyN} 处改动：${this.summary(ops)}${s.validated ? '' : '（尚未预检）'}` : '';
+    // errors
+    const errorGroups = []; for (const e of errors) { let g = errorGroups.find((x) => x.row === e.row); if (!g) { g = { row: e.row, rowName: e.rowName, items: [], count: 0 }; errorGroups.push(g); } g.count++; g.items.push({ col: e.col, message: e.message, suggestion: e.suggestion, code: e.code, onClick: () => this.jump(e.row, e.col) }); }
+    // diff
+    const mineLines = ops.flatMap((o) => o.lines.map((l) => ({ row: o.name, col: l.col, from: l.from || '—', to: l.to, onClick: () => this.jump(o.key, l.col) })));
+    const revs = s.diffSince === 'mine' ? [] : s.diffSince === 'rev1' ? AI_REVS.slice(0, 1) : AI_REVS;
+    const diffGroups = [...(mineLines.length ? [{ tag: '我的', tagStyle: { fontSize: '10px', lineHeight: '16px', padding: '0 5px', borderRadius: '3px', background: '#fff7e0', color: '#7a5410', fontWeight: 600 }, rev: '未提交', msg: '我的草稿改动', when: '', lines: mineLines }] : []), ...revs.map((r) => ({ tag: 'AI', tagStyle: { fontSize: '10px', lineHeight: '16px', padding: '0 5px', borderRadius: '3px', background: '#ecedff', color: '#4a4cc7', fontWeight: 600 }, rev: r.rev, msg: r.msg, when: r.when, lines: r.lines.map(([row, col, from, to]) => { const br = fix.rows.find((x) => x.name === row); return { row, col, from, to, onClick: () => this.jump(br ? String(br.id) : '40091', col === '(新行)' ? 'id' : col) }; }) }))];
+    // export
+    const seg = (on) => ({ height: '24px', padding: '0 10px', border: `1px solid ${on ? 'oklch(0.52 0.12 155)' : '#cfd4dc'}`, borderRadius: '4px', background: on ? 'oklch(0.96 0.03 155)' : '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: on ? 600 : 500 });
+    const setExp = (k, v) => this.setState((st) => ({ exp: { ...st.exp, [k]: v } }));
+    const exportFormats = [['csv', 'CSV'], ['tsv', 'TSV']].map(([v, l]) => ({ label: l, on: s.exp.format === v ? 'true' : 'false', style: seg(s.exp.format === v), onClick: () => setExp('format', v) }));
+    const exportSources = [['repo', '仓库'], ['draft', '含我的草稿']].map(([v, l]) => ({ label: l, on: s.exp.source === v ? 'true' : 'false', style: seg(s.exp.source === v), onClick: () => setExp('source', v) }));
+    const exportTargets = [['', '全部'], ['S', 'S 服务器'], ['C', 'C 客户端'], ['V', 'V 校验']].map(([v, l]) => ({ label: l, on: s.exp.target === v ? 'true' : 'false', style: seg(s.exp.target === v), onClick: () => setExp('target', v) }));
+    const exportTables = Object.keys(FIX).map((n) => ({ name: n, checked: Boolean(s.exp.tables[n]), onChange: () => this.setState((st) => ({ exp: { ...st.exp, tables: { ...st.exp.tables, [n]: !st.exp.tables[n] } } })) }));
+    // ctx menu
+    const ctxCol = sel ? this.col(sel.col) : null, ctxRow = sel && sel.row;
+    const mi = (label, onClick, key, disabled, title, testid) => ({ item: true, label, onClick: () => { onClick(); this.setState({ ctx: null }); }, key: key || '', disabled: Boolean(disabled), opacity: disabled ? 0.4 : 1, title: title || '', testid: testid || '' });
+    const ctxItems = [
+      ...(ctxRow && ctxCol && !ctxCol.readOnly ? [{ head: '单元格' }, mi('设为空字符串 ""', () => this.fourState('empty'), '', !editable, '', 'four-state-empty'), mi('设为 null ∅', () => this.fourState('null'), '', !editable, '', 'four-state-null'), mi('恢复默认', () => this.fourState('default'), 'Delete', !editable || ctxCol.default === undefined, ctxCol.default === undefined ? '这一列没有默认值' : '', 'four-state-default'), mi('设为缺列', () => this.fourState('missing'), '', !editable || ctxCol.required, ctxCol.required ? '必填列不能设为缺列' : '', 'four-state-missing'), { sep: true }] : []),
+      ...(ctxRow ? [{ head: '行' }, mi('在上方插入行', () => this.insertRow('above'), '', !editable), mi('在下方插入行', () => this.insertRow('below'), '', !editable), mi('复制此行', () => this.duplicateRow(), '', !editable), mi(t.deleted.includes(ctxRow) ? '撤销删除' : '删除行', () => (t.deleted.includes(ctxRow) ? this.undeleteRow() : this.deleteRow()), '', !editable), { sep: true }] : []),
+      ...(!ctxRow && ctxCol ? [{ head: '列（视图）' }, mi('按此列排序', () => this.toast('原型：视图排序'), ''), mi('筛选此列', () => this.toast('原型：筛选'), ''), mi('冻结到此列', () => this.toast('原型：冻结'), ''), mi('隐藏此列', () => this.toast('原型：隐藏列（视图状态）'), ''), { sep: true }] : []),
+      mi('剪切', () => this.toast('原型：剪切'), 'Ctrl+X', !editable), mi('复制', () => this.toast('原型：复制'), 'Ctrl+C'), mi('粘贴', () => this.toast('原型：粘贴'), 'Ctrl+V', !editable),
+    ];
+    // palette
+    const cmds = [...Object.keys(FIX).map((n) => ({ group: '切表', label: `打开 ${n}`, key: '', run: () => this.setState({ table: n, sel: null, errors: [], validated: false, result: null }) })), { group: '动作', label: '预检', key: 'Ctrl+Enter', run: () => this.doValidate() }, { group: '动作', label: '提交补丁', key: 'Ctrl+Shift+Enter', run: () => this.askSubmit() }, { group: '动作', label: '保存本地草稿', key: 'Ctrl+S', run: () => this.toast('草稿已保存') }, { group: '动作', label: '导出 CSV / TSV', key: '', run: () => this.setState({ panelOpen: true, tab: 'export', rightOpen: true }) }, { group: '表格', label: '新增行', key: '', run: () => this.insertRow('below') }, { group: '表格', label: '查找 / 替换', key: 'Ctrl+F', run: () => this.toast('原型：查找替换') }, { group: '视图', label: '折叠 / 展开表列表', key: 'Ctrl+B', run: () => this.setState((st) => ({ sidebarOpen: !st.sidebarOpen })) }, { group: '视图', label: '打开补丁预览', key: '', run: () => this.setState({ panelOpen: true, tab: 'patch', rightOpen: true }) }, { group: '帮助', label: '快捷键', key: '', run: () => this.setState({ dialog: 'keys' }) }, { group: '设置', label: '设置', key: '', run: () => this.setState({ dialog: 'settings' }) }];
+    const q = s.paletteQ.trim().toLowerCase();
+    const paletteItems = cmds.filter((c) => !q || (c.label + c.group).toLowerCase().includes(q)).map((c, i) => ({ group: c.group, label: c.label, key: c.key, onClick: () => { this.setState({ palette: false }); c.run(); }, style: { display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '7px 10px', border: 0, borderRadius: '4px', background: i === 0 ? '#f3f5f8' : 'transparent', cursor: 'pointer', textAlign: 'left', fontSize: '13px' } }));
+    const confirmText = `将把 ${dirtyN} 处改动提交到 main（a10eb3f）${s.autoCommit ? `，并以「config(${s.table}): ${this.summary(ops)}」自动 commit` : '，只写入工作树、不 commit'}；${s.autoExport ? '随后自动导表到 build/export' : '不导表'}。`;
+    const moreItems = [{ label: '设置', key: '', onClick: () => this.setState({ moreOpen: false, dialog: 'settings' }) }, { label: '快捷键', key: '?', onClick: () => this.setState({ moreOpen: false, dialog: 'keys' }) }, { label: '命令面板', key: 'Ctrl+K', onClick: () => this.setState({ moreOpen: false, palette: true }, () => this.paletteRef.current && this.paletteRef.current.focus()) }];
+    const validateDisabled = !editable || busy || dirtyN === 0 || phase === 'Conflicted';
+    const submitDisabled = phase !== 'ReadyToSubmit';
+    return {
+      rootRef: this.rootRef, valueRef: this.valueRef, paletteRef: this.paletteRef, confirmRef: this.confirmRef, onKey: this.onKey, stop: (e) => e.stopPropagation(), doValidate: () => this.doValidate(), askSubmit: this.askSubmit, openExport: () => this.setState({ panelOpen: true, tab: 'export', rightOpen: true, moreOpen: false }),
+      table: s.table, revisionLabel: 'main · a10eb3f', revisionTitle: '分支 main，修订 a10eb3f9c2… · 底稿指纹见状态条', isA, layout,
+      phaseLabel, phaseTitle: `阶段：${phase}`, phasePillStyle, phaseSpin: Boolean(ph[2]), phaseDot: !ph[2],
+      validateDisabled, validateOpacity: validateDisabled ? 0.45 : 1, validateTitle: dirtyN === 0 ? '没有改动可预检' : '预检（Ctrl+Enter）：让机器门检查这些改动',
+      submitDisabled, submitOpacity: submitDisabled ? 0.45 : 1, submitTitle: submitDisabled ? '先预检通过才能提交' : '提交补丁（Ctrl+Shift+Enter）',
+      toggleSidebar: () => this.setState((st) => ({ sidebarOpen: !st.sidebarOpen })), openPalette: () => this.setState({ palette: true, paletteQ: '' }, () => this.paletteRef.current && this.paletteRef.current.focus()),
+      toggleMore: () => this.setState((st) => ({ moreOpen: !st.moreOpen, ctx: null })), toggleRight: () => this.setState((st) => (isA ? { rightOpen: !st.rightOpen } : { rightOpen: true, panelOpen: !st.panelOpen })),
+      rightToggleTitle: isA ? '显示 / 隐藏检查器（Ctrl+J）' : '显示 / 隐藏面板（Ctrl+J）', rightToggleColor: (isA ? s.rightOpen : s.panelOpen) ? 'oklch(0.45 0.12 155)' : '#6a7280',
+      banner, bannerText, bannerStyle, bannerActions,
+      bodyStyle, sidebarStyle, sidebarOpen: s.sidebarOpen, sidebarClosed: !s.sidebarOpen, tableQuery: s.tableQuery, setTableQuery: (e) => this.setState({ tableQuery: e.target.value }), tables,
+      toolbar, gridHint: `${fix.columns.length} 列 · 排序 / 筛选只影响视图`, gridReady: phase !== 'Opening', gridSkeleton: phase === 'Opening', gridLocked: busy || phase === 'Conflicted' || phase === 'Failed' || phase === 'SCHEMA_CHANGED' || phase === 'DRAFT_VERSION_CONFLICT',
+      headers, rows, closePopups: () => this.setState({ ctx: null, moreOpen: false, palette: false, dialog: '' }),
+      panelStyle, tabBarStyle, tabs, togglePanel: this.togglePanel, panelToggleTitle: s.panelOpen ? '收起（Esc）' : '展开', panelChevron: isA ? (s.panelOpen ? 'M3 4.5l3 3 3-3' : 'M3 7.5l3-3 3 3') : 'M4.5 3l3 3-3 3', panelBodyOpen: panelShown && s.panelOpen,
+      tabPatch: s.tab === 'patch', tabErrors: s.tab === 'errors', tabConflicts: s.tab === 'conflicts', tabDiff: s.tab === 'diff', tabExport: s.tab === 'export', tabInspectorInPanel: false, inspectorOnce: [],
+      resultCard: Boolean(s.result), resultFp: s.result ? short(s.result.fp) + '…' : '', resultIds: s.result ? s.result.ids : '', resultVcs: s.result ? s.result.vcs : '', resultExport: s.result ? s.result.exp : '',
+      patchEmpty: ops.length === 0 && !s.result, patchHas: ops.length > 0, patchSummary, patchTarget: target, patchGroups,
+      errorsEmpty: errors.length === 0, errorsEmptyText: s.validated ? '预检通过，没有问题。' : dirtyN ? '还没预检。预检后这里列出机器门发现的问题。' : '没有改动，也就没有错误。', errorGroups,
+      conflictsEmpty: s.conflicts.length === 0, conflictsHas: s.conflicts.length > 0, conflictCards: cards, resolvedCount, conflictCount: s.conflicts.length, resolvedPct: s.conflicts.length ? Math.round(resolvedCount / s.conflicts.length * 100) : 0,
+      cancelSubmit: () => this.cancelSubmit(), resubmit: () => { this.setState({ conflicts: [], resolved: {}, phase: 'Validating' }); this.later(700, () => { this.setState({ phase: 'Submitting' }); this.later(1000, () => this.doSubmit()); }); }, resubmitDisabled: resolvedCount < s.conflicts.length, resubmitOpacity: resolvedCount < s.conflicts.length ? 0.45 : 1,
+      diffSince: s.diffSince, setDiffSince: (e) => this.setState({ diffSince: e.target.value }), diffMark: s.diffMark, toggleDiffMark: () => this.setState((st) => ({ diffMark: !st.diffMark })), diffGroups,
+      exportTables, exportFormats, exportSources, exportTargets, exporting: s.exporting, exportLabel: s.exporting ? '正在导出…' : '导出', doExport: () => { this.setState({ exporting: true, exportFiles: [] }); this.later(900, () => this.setState((st) => ({ exporting: false, exportFiles: [...Object.keys(st.exp.tables).filter((n) => st.exp.tables[n]).map((n) => ({ name: `${n}.${st.exp.format}`, size: `${(FIX[n].rows.length * 0.4 + 0.3).toFixed(1)} KB`, onClick: (e) => { e.preventDefault(); this.toast(`原型：下载 ${n}.${st.exp.format}`); } })), { name: 'README.txt', size: '0.6 KB', onClick: (e) => { e.preventDefault(); this.toast('原型：下载 README.txt'); } }] }))); }, exportFiles: s.exportFiles, exportFilesHas: s.exportFiles.length > 0,
+      inspectorStyle, inspEmpty: !sel, inspHas: Boolean(sel), inspCrumb: sel ? `${s.table} · ${isCell ? (fresh ? tokText(t.fresh[sel.row].name) || '(未命名)' : (this.baseRow(sel.row) || {}).name || tokText(this.curTok(sel.row, 'name'))) : '列'}` : '', inspTitle: sel ? sel.col : '', inspRequired: Boolean(selCol && selCol.required), inspReadOnly: Boolean(selCol && selCol.readOnly),
+      inspInvalid: Boolean(invText), inspInvalidMsg: invText, inspInvalidFix: invMsg ? invMsg.suggestion : selCol && selCol.default !== undefined ? `恢复默认 ${selCol.default}，或填一个值` : '填一个值', inspConflict: Boolean(conflict), inspConflictCur: conflict ? conflict.current : '', inspConflictMine: conflict ? conflict.draft : '', openConflicts: () => this.setState({ panelOpen: true, tab: 'conflicts', rightOpen: true }),
+      inspIsCell: isCell, inspStateLabel: tok ? STATE_LABEL[tok.state] : '', inspStateStyle: { fontSize: '10px', padding: '0 5px', lineHeight: '16px', borderRadius: '3px', background: '#eef0f3', color: '#6a7280', fontFamily: MONO },
+      inspEditable: isCell && editable && !selCol.readOnly && !rowDel, inspRawShown: tok ? tokRaw(tok) : '',
+      inspValueText: isCell ? (selCol.readOnly && fresh ? '合入时发号' : rowDel ? '行已标记删除' : tok.state === 'value' ? (tok.raw === '' ? '（空文本）' : tok.raw) : tok.state === 'default' && selCol.default !== undefined ? `${selCol.default}（默认）` : tokRaw(tok)) : '',
+      inspValueStyle: { minHeight: '28px', display: 'flex', alignItems: 'center', padding: '4px 8px', border: `1px ${isCell && (selCol.readOnly || rowDel) ? 'dashed' : 'solid'} #e3e6eb`, borderRadius: '4px', background: isCell && (selCol.readOnly || rowDel) ? '#f3f4f6' : '#fff', color: isCell && (selCol.readOnly || rowDel || tok.state !== 'value') ? '#6a7280' : '#1c2230', fontFamily: MONO, fontStyle: isCell && tok.state === 'default' ? 'italic' : 'normal', wordBreak: 'break-all' },
+      editRef: this.editRef, editVal: s.editVal, onEditChange: (e) => this.setState({ editVal: e.target.value }), commitEdit: this.commitEdit, onEditKey: (e) => { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); this.commitEdit(); this.rootRef.current.focus(); const ev = { key: e.key === 'Tab' ? 'ArrowRight' : 'ArrowDown', ctrlKey: false, metaKey: false, target: this.rootRef.current, preventDefault() {} }; this.onKey(ev); } else if (e.key === 'Escape') { this.setState({ editing: null }); this.rootRef.current.focus(); } },
+      inspRefTarget: selCol && selCol.refTarget || '', inspRefHint: refHint, inspDirty: dirty, inspBase: isCell && dirty ? tokRaw(this.baseTok(sel.row, sel.col)) : '', revertCell: () => { if (!isCell) return; this.mutate((tt) => { const d = { ...(tt.dirty[sel.row] || {}) }; delete d[sel.col]; if (Object.keys(d).length) tt.dirty[sel.row] = d; else delete tt.dirty[sel.row]; }); },
+      fourStateBtns, deleteRule, inspMeta, inspDesc: selCol ? (DESC[selCol.name] || '（Schema 未提供描述）') : '',
+      inspRowBadge, inspRowBadgeStyle: { fontSize: '10px', padding: '0 5px', lineHeight: '16px', borderRadius: '3px', background: rb[1], color: rb[0], fontWeight: 600 }, inspRowId: isCell ? (fresh ? '合入时发号' : `id ${sel.row}`) : '', inspRowDeleted: rowDel, inspRowCanDelete: isCell && !rowDel && editable, deleteRow: () => this.deleteRow(), undeleteRow: () => this.undeleteRow(),
+      rowCount: t.order.length, draftVersion: s.draftVersion, dirtyLabel: dirtyN ? `${dirtyN} 格未提交` : '无未提交改动', dirtyColor: dirtyN ? '#b7791f' : '#6a7280', dirtyWeight: dirtyN ? 600 : 400, openPatchTab: () => this.setState({ panelOpen: true, tab: 'patch', rightOpen: true }),
+      uncommitted: s.uncommitted ? '1 次合入未 commit' : '', fingerprint: fix.fp, fpShort: short(fix.fp), copyFp: () => { try { navigator.clipboard.writeText(fix.fp); } catch (e) {} this.toast('已复制完整指纹'); }, onlineColor: phase === 'OFFLINE' ? '#b3261e' : 'oklch(0.55 0.15 155)', onlineLabel: phase === 'OFFLINE' ? '离线' : '在线',
+      ctx: Boolean(s.ctx), ctxStyle: { position: 'absolute', left: (s.ctx ? s.ctx.x : 0) + 'px', top: (s.ctx ? s.ctx.y : 0) + 'px', zIndex: 30, minWidth: '200px', padding: '4px', background: '#fff', border: '1px solid #e3e6eb', borderRadius: '4px', boxShadow: '0 8px 24px rgba(20,24,32,.12)', fontSize: '12px' }, ctxItems,
+      moreOpen: s.moreOpen, moreItems, palette: s.palette, paletteQ: s.paletteQ, setPaletteQ: (e) => this.setState({ paletteQ: e.target.value }), onPaletteKey: (e) => { if (e.key === 'Enter' && paletteItems[0]) paletteItems[0].onClick(); }, paletteItems,
+      dialog: Boolean(s.dialog), dialogTitle: s.dialog === 'confirm' ? '提交补丁' : s.dialog === 'settings' ? '设置' : '快捷键', dialogConfirm: s.dialog === 'confirm', dialogSettings: s.dialog === 'settings', dialogKeys: s.dialog === 'keys', confirmText, doSubmit: () => this.doSubmit(),
+      autoCommit: s.autoCommit, autoExport: s.autoExport, toggleAutoCommit: () => { this.setState((st) => ({ autoCommit: !st.autoCommit })); this.toast('已保存到本机设置'); }, toggleAutoExport: () => { this.setState((st) => ({ autoExport: !st.autoExport })); this.toast('已保存到本机设置'); }, shortcuts: SHORTCUTS.map(([label, key]) => ({ label, key })),
+      blocked, blockedTitle: phase === 'OFFLINE' ? '无法连接本机服务' : '会话已结束', blockedText: phase === 'OFFLINE' ? '编辑器连不上本机的 serve 进程，可能是终端已关闭或令牌失效。' : '这个编辑会话已由服务端关闭。', toast: s.toast,
+    };
+  }
+  cancelSubmit() { this.setState({ conflicts: [], resolved: {}, phase: 'ReadyDirty', tab: 'patch' }); this.toast('已取消本次提交，草稿保留'); }
+}
+</script>
+</body>
+</html>

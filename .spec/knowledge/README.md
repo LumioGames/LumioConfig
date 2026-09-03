@@ -27,6 +27,7 @@ metadata:
 | [features/_TEMPLATE.md](features/_TEMPLATE.md) | 新增功能设计文档模板——记录工具或表管线能力时查 |
 | [features/integration-vertical-chains.md](features/integration-vertical-chains.md) | R-00327 混合可见性投影与 AI 五动作集成链——改 tests/integration 或导表/补丁 CLI 时查 |
 | [features/editor-ui-primitives.md](features/editor-ui-primitives.md) | editor/ 面板共享的 Button/Panel/DataTable 基础组件与 design token——改 editor/src/panels 或新增面板时查 |
+| [features/web-editor-ux.md](features/web-editor-ux.md) | 网页编辑器 v3 界面设计（IA、状态映射、令牌、抽屉、检查器、快捷键、文案表）——改 editor/ 布局、面板或用户文案时查 |
 
 ## lessons（经验）
 

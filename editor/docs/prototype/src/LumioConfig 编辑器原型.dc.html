@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<title>LumioConfig 网页编辑器 · 重设计原型</title>
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="oklch(0.52 0.12 155)"></rect><rect x="60" y="60" width="80" height="80" rx="6" fill="none" stroke="#fff" stroke-width="6"></rect><path d="M60 88h80M60 112h80M88 60v80" stroke="#fff" stroke-width="6"></path></svg></template>
+<style>
+  html,body{margin:0;height:100%;background:#e9ebef;color:#1c2230}
+  a{color:oklch(0.45 0.12 155)}a:hover{color:oklch(0.35 0.12 155)}
+  *{box-sizing:border-box}
+  button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div ref="{{ hostRef }}" style="display:flex;flex-direction:column;height:100%;min-height:0;font:13px/1.45 system-ui,-apple-system,'PingFang SC','Microsoft YaHei','Segoe UI',sans-serif;background:#e9ebef">
+  <div style="display:flex;align-items:center;gap:12px 18px;min-height:44px;padding:8px 14px;background:#1c2230;color:#e6e9ef;flex:none;font-size:12px;flex-wrap:wrap">
+    <span style="font-weight:600;white-space:nowrap">原型控制</span>
+    <label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><span style="color:#9aa3b0">布局</span>
+      <span style="display:flex;background:#2b3345;border-radius:4px;padding:2px;gap:2px">
+        <sc-for list="{{ layoutOpts }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</button></sc-for>
+      </span>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><span style="color:#9aa3b0">旅程</span>
+      <span style="display:flex;background:#2b3345;border-radius:4px;padding:2px;gap:2px">
+        <sc-for list="{{ scenarioOpts }}" as="o" hint-placeholder-count="5"><button onClick="{{ o.onClick }}" title="{{ o.title }}" style="{{ o.style }}">{{ o.label }}</button></sc-for>
+      </span>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><span style="color:#9aa3b0">状态覆盖</span>
+      <select value="{{ phase }}" onChange="{{ setPhase }}" style="height:24px;border:1px solid #3a4358;border-radius:4px;background:#2b3345;color:#e6e9ef;padding:0 6px;font-size:12px">
+        <sc-for list="{{ phaseOpts }}" as="p" hint-placeholder-count="12"><option value="{{ p.value }}">{{ p.label }}</option></sc-for>
+      </select>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;white-space:nowrap"><span style="color:#9aa3b0">视口</span>
+      <span style="display:flex;background:#2b3345;border-radius:4px;padding:2px;gap:2px">
+        <sc-for list="{{ sizeOpts }}" as="o" hint-placeholder-count="2"><button onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</button></sc-for>
+      </span>
+    </label>
+    <span style="flex:1"></span>
+    <span style="color:#9aa3b0;white-space:nowrap">{{ scenarioHint }}</span>
+  </div>
+
+  <div style="flex:1;min-height:0;overflow:auto;padding:16px;display:flex;justify-content:center;align-items:flex-start">
+    <div style="{{ outerStyle }}">
+    <div style="{{ stageStyle }}">
+      <sc-for list="{{ frames }}" as="f" hint-placeholder-count="1">
+        <div style="{{ f.wrapStyle }}">
+          <div style="display:flex;align-items:center;gap:8px;height:24px;font-size:12px;color:#3c434c">
+            <span style="font-weight:700;padding:0 6px;border-radius:3px;background:#1c2230;color:#fff;font-size:11px">{{ f.badge }}</span>
+            <span>{{ f.caption }}</span>
+          </div>
+          <div style="{{ f.frameStyle }}">
+            <dc-import name="EditorShell" layout="{{ f.layout }}" scenario="{{ scenario }}" phase="{{ phase }}" hint-size="100%,100%" style="width:100%;height:100%"></dc-import>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const SC = { J1: '看表：列含义、四态、只读、无效格原因', J2: '微调几格：脏格 → 预检（先遇 1 个错误）→ 修好 → 预检 → 提交', J3: '核对 AI 改了什么：横幅 + 改动页签（修订级需 Host）', J4: '过期 → 自动合并 → 3 处冲突逐格处理 → 重新提交', J5: '导出：表 / 格式 / 来源 / 目标列' };
+const PH = ['', 'Opening', 'ReadyClean', 'ReadyDirty', 'SavingDraft', 'Validating', 'ReadyToSubmit', 'Submitting', 'Conflicted', 'Stale', 'Failed', 'Closed', 'SCHEMA_CHANGED', 'DRAFT_VERSION_CONFLICT', 'OFFLINE'];
+const PH_LABEL = { '': '跟随旅程', Opening: 'Opening · 正在打开', ReadyClean: 'ReadyClean · 与仓库一致', ReadyDirty: 'ReadyDirty · N 格未提交', SavingDraft: 'SavingDraft · 正在保存草稿', Validating: 'Validating · 正在预检', ReadyToSubmit: 'ReadyToSubmit · 可提交', Submitting: 'Submitting · 正在提交', Conflicted: 'Conflicted · 有冲突', Stale: 'Stale · 正在合并', Failed: 'Failed · 提交失败', Closed: 'Closed · 会话结束', SCHEMA_CHANGED: 'SCHEMA_CHANGED · 表结构变化', DRAFT_VERSION_CONFLICT: 'DRAFT_VERSION_CONFLICT · 别处已保存', OFFLINE: '离线 / 令牌失效' };
+class Component extends DCLogic {
+  constructor(p) { super(p); this.hostRef = React.createRef(); let saved = {}; try { saved = JSON.parse(localStorage.getItem('lumio-proto:v3') || '{}'); } catch (e) {} this.state = { mode: saved.mode || 'A', scenario: saved.scenario || 'J2', phase: saved.phase || '', size: saved.size || '1440', avail: 1400 }; }
+  componentDidMount() { this.onResize = () => this.setState({ avail: (this.hostRef.current ? this.hostRef.current.clientWidth : window.innerWidth) - 32 }); this.onResize(); window.addEventListener('resize', this.onResize); }
+  componentWillUnmount() { window.removeEventListener('resize', this.onResize); }
+  set(patch) { this.setState(patch, () => { try { const { mode, scenario, phase, size } = this.state; localStorage.setItem('lumio-proto:v3', JSON.stringify({ mode, scenario, phase, size })); } catch (e) {} }); }
+  renderVals() {
+    const s = this.state; const W = Number(s.size), H = s.size === '1440' ? 900 : 720;
+    const seg = (on) => ({ height: '20px', padding: '0 10px', border: 0, borderRadius: '3px', background: on ? '#e6e9ef' : 'transparent', color: on ? '#1c2230' : '#c3c8d1', cursor: 'pointer', fontSize: '12px', fontWeight: on ? 600 : 500, whiteSpace: 'nowrap' });
+    const layouts = s.mode === 'AB' ? ['A', 'B'] : [s.mode];
+    const gapPx = 24, total = layouts.length * W + (layouts.length - 1) * gapPx; const scale = Math.min(1, s.avail / total);
+    const frames = layouts.map((l) => ({ layout: l, badge: l, caption: l === 'A' ? '三栏 + 底部抽屉：检查器常驻右侧，补丁 / 错误 / 冲突 / 改动 / 导出走底部抽屉（5 个实体）' : '两栏 + 右侧多功能面板：检查器 / 补丁 / 错误 / 冲突 / 改动 / 导出同一面板分页签（4 个实体）', wrapStyle: { display: 'flex', flexDirection: 'column', gap: '6px', width: W + 'px' }, frameStyle: { width: W + 'px', height: H + 'px', background: '#fff', border: '1px solid #cfd4dc', borderRadius: '6px', overflow: 'hidden', boxShadow: '0 12px 32px rgba(20,24,32,.12)' } }));
+    return {
+      hostRef: this.hostRef, scenario: s.scenario, phase: s.phase, scenarioHint: SC[s.scenario],
+      layoutOpts: [['A', 'A 三栏+抽屉'], ['B', 'B 两栏+面板'], ['AB', '并排对比']].map(([v, label]) => ({ label, onClick: () => this.set({ mode: v }), style: seg(s.mode === v) })),
+      scenarioOpts: Object.keys(SC).map((v) => ({ label: v + ' ' + ['看表', '微调', '核对 AI', '冲突', '导出'][Number(v[1]) - 1], title: SC[v], onClick: () => this.set({ scenario: v, phase: '' }), style: seg(s.scenario === v) })),
+      phaseOpts: PH.map((v) => ({ value: v, label: PH_LABEL[v] })), setPhase: (e) => this.set({ phase: e.target.value }),
+      sizeOpts: [['1440', '1440×900'], ['1280', '1280×720']].map(([v, label]) => ({ label, onClick: () => this.set({ size: v }), style: seg(s.size === v) })),
+      outerStyle: { position: 'relative', width: Math.round(total * scale) + 'px', height: Math.round((H + 30) * scale) + 'px', flex: 'none' },
+      stageStyle: { position: 'absolute', left: 0, top: 0, display: 'flex', gap: gapPx + 'px', alignItems: 'flex-start', transform: `scale(${scale})`, transformOrigin: 'top left', width: total + 'px' },
+      frames,
+    };
+  }
+}
+</script>
+</body>
+</html>
