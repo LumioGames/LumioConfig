@@ -1,0 +1,15 @@
+:root {
+  --color-bg-app: #f6f7f9;
+  --color-bg-surface: #fff;
+  --color-border: #d8dee6;
+  --color-border-subtle: #e6ebf1;
+  --color-border-faint: #eef2f6;
+  --color-text: #3c434c;
+  --color-text-muted: #5c6570;
+  --color-danger-text: #a1260d;
+  --color-accent-bg: #e8f1ff;
+  --color-accent-border: #8ab4f8;
+  --color-warning-bg: #fff8e5;
+  --color-warning-border: #f0d78c;
+  --color-warning-border-subtle: #f3e6b8;
+}

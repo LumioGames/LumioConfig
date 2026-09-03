@@ -1,0 +1,75 @@
+.btn--nav {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn--nav.is-active {
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent-border);
+}
+
+.btn--menu {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.btn--menu:hover {
+  background: var(--color-accent-bg);
+}
+
+.btn--primary {
+  margin: 6px 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-accent-border);
+  background: var(--color-accent-bg);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.panel {
+  padding: 6px 12px;
+  font-size: 12px;
+  background: var(--color-bg-surface);
+  border-top: 1px solid var(--color-border-subtle);
+  --data-table-border-color: var(--color-border-faint);
+}
+
+.panel--boxed {
+  margin: 8px 12px;
+  padding: 8px 12px;
+  font-size: inherit;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+}
+
+.panel--warning {
+  padding: 8px 12px;
+  background: var(--color-warning-bg);
+  border-top-color: var(--color-warning-border);
+  max-height: 220px;
+  overflow: auto;
+  --data-table-border-color: var(--color-warning-border-subtle);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--data-table-border-color, var(--color-border-faint));
+}
