@@ -14,18 +14,19 @@ import type {
   TableResponse,
 } from "../api/types";
 import { FIXTURES, loadFixture } from "../fixtures/catalog";
-import { ConflictPanel } from "../panels/ConflictPanel";
-import { DiffPreview } from "../panels/DiffPreview";
-import { ExportPanel } from "../panels/ExportPanel";
-import { ErrorPanel } from "../panels/ErrorPanel";
-import { SettingsPanel } from "../panels/SettingsPanel";
+import { Drawer } from "../panels/drawer/Drawer";
+import { PatchTab, groupPatch } from "../panels/drawer/PatchTab";
+import { ErrorTab } from "../panels/drawer/ErrorTab";
+import { ConflictTab, conflictKey, type Resolution } from "../panels/drawer/ConflictTab";
+import { ExportTab, type ExportRequest, type ExportResult } from "../panels/drawer/ExportTab";
+import { SettingsDialog, type EditorSettings } from "../panels/SettingsDialog";
 import { StatusBar } from "../panels/StatusBar";
 import { TableList } from "../panels/TableList";
 import { TopBar } from "../panels/TopBar";
 import { Banner } from "../panels/Banner";
 import { GridToolbar } from "../panels/GridToolbar";
 import { Inspector } from "../panels/Inspector";
-import { Button, ToastProvider } from "../components/ui";
+import { ToastProvider } from "../components/ui";
 import { applyEditors, editorKinds, type EditorKind } from "../spreadsheet/editors";
 import { installLumioBadges } from "../spreadsheet/badges";
 import type { CellMeta } from "../spreadsheet/cellMeta";
@@ -34,8 +35,17 @@ import { tokenForDeleteKey, tokenForMenu, type FourStateKind } from "../spreadsh
 import { COMMAND, installInterceptors, newDraftRowKey } from "../spreadsheet/interceptors";
 import { applyDraft, applyRebase, buildCell, workbookFromWarehouse } from "../spreadsheet/projection";
 import { createSheetsUniver, loadWorkbook, type SheetsUniver } from "../spreadsheet/univer";
-import { applyViewState, captureViewState, load as loadView, save as saveView, uiFlags } from "../spreadsheet/viewState";
-import { INITIAL_EDITOR_STATE, canEdit, canRefreshOnly, canSave, canSubmit, canValidate, reducer, type EditorAction } from "./state";
+import {
+  applyViewState,
+  captureViewState,
+  changedSinceSeen,
+  load as loadView,
+  readSeen,
+  save as saveView,
+  uiFlags,
+  writeSeen,
+} from "../spreadsheet/viewState";
+import { INITIAL_EDITOR_STATE, canEdit, canSave, reducer, type EditorAction } from "./state";
 import { phaseView } from "./phaseView";
 import { COPY } from "./copy";
 
@@ -97,11 +107,18 @@ export function App() {
   const [patchPreview, setPatchPreview] = useState<PatchObject | null>(null);
   const [summary, setSummary] = useState("");
   const [revision, setRevision] = useState<{ vcs: string; id: string; branch: string } | null>(null);
+  const revisionRef = useRef<{ vcs: string; id: string; branch: string } | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [selection, setSelection] = useState<{ row: number; column: string; rowKey: string } | null>(null);
   // autoCommit=false 且本次会话有合入未 commit 时,状态条常显「N 次合入未 commit」(§12)。
   const [uncommittedMerges, setUncommittedMerges] = useState(0);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState("patch");
+  const [submitResult, setSubmitResult] = useState<import("../api/draftSession").SubmitResult | null>(null);
+  const [conflictResolved, setConflictResolved] = useState<Record<string, Resolution>>({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [seenBannerOpen, setSeenBannerOpen] = useState(false);
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoExport, setAutoExport] = useState(false);
   const patchRef = useRef<PatchObject | null>(null);
@@ -133,6 +150,7 @@ export function App() {
 
   const rebaseNowRef = useRef<() => Promise<unknown>>(async () => undefined);
   stateRef.current = state;
+  revisionRef.current = revision;
   uiFlagsRef.current = { inspectorOpen, sidebarCollapsed };
 
   const persistView = useCallback((table: string) => {
@@ -424,6 +442,15 @@ export function App() {
         createWorkbookMs: paintedAt - projectedAt,
       };
       dispatch(openAction);
+      if (hostMode) {
+        const current = { revisionId: revisionRef.current?.id ?? "", fingerprint: warehouse.sourceFingerprint };
+        if (!readSeen(REPO_NAME, warehouse.table)) {
+          // 首次打开种入当前值,横幅自此 armed(E3 移交说明)。
+          writeSeen(REPO_NAME, warehouse.table, current);
+        } else if (changedSinceSeen(REPO_NAME, warehouse.table, current)) {
+          setSeenBannerOpen(true);
+        }
+      }
       if (staleHint) {
         dispatch({ type: "stale", hint: staleHint });
       } else {
@@ -454,6 +481,12 @@ export function App() {
       }
       if (mapRef.current) {
         persistView(mapRef.current.table);
+        if (mapRef.current.table !== name) {
+          // 切表才清 ephemeral;同表 reload(提交后)保留结果卡。
+          setSubmitResult(null);
+          setConflictResolved({});
+          setSeenBannerOpen(false);
+        }
       }
       disposeSheet();
       const loadStarted = performance.now();
@@ -598,6 +631,16 @@ export function App() {
         return result;
       }
       dispatch({ type: "submitted", fingerprint: result.result?.sourceFingerprint ?? stateRef.current.fingerprint });
+      setSubmitResult(result);
+      setDrawerTab("patch");
+      setDrawerOpen(true);
+      // 自己的提交即「已看过」:刷新 seen,避免 J3 横幅把自家 commit 误报为外部变化。
+      if (tableRef.current) {
+        writeSeen(REPO_NAME, tableRef.current.table, {
+          revisionId: result.result?.vcs?.id ?? revisionRef.current?.id ?? "",
+          fingerprint: result.result?.sourceFingerprint ?? tableRef.current.sourceFingerprint,
+        });
+      }
       if (result.result?.vcs?.action === "none" && patch.ops.length > 0) {
         pendingHintRef.current = COPY.status.uncommittedMerges(1);
         setUncommittedMerges(1);
@@ -912,6 +955,27 @@ export function App() {
     };
   }, [currentPatch, markDirty, mountWorkbook, persistDraft, rebaseNow, state.draftVersion, state.hint, state.phase, state.table, submitNow, validateNow, writeToken]);
 
+  /** 跳格:按 rowKey/列名把选区移到目标格(补丁/错误/冲突/改动页签共用)。 */
+  const jumpToCell = useCallback((rowKey: string, column: string) => {
+    const map = mapRef.current;
+    const apiHost = instanceRef.current?.univerAPI as {
+      executeCommand?: (id: string, params?: unknown) => unknown;
+    } | undefined;
+    if (!map || !apiHost?.executeCommand) {
+      return;
+    }
+    const row = map.rowKeys.indexOf(rowKey);
+    const col = map.columns.indexOf(column);
+    if (row < 0 || col < 0) {
+      return;
+    }
+    apiHost.executeCommand("sheet.command.set-selection", {
+      range: { startRow: row + 1, endRow: row + 1, startColumn: col, endColumn: col },
+    });
+    setSelection({ row: row + 1, column, rowKey });
+    setInspectorOpen((open) => open);
+  }, []);
+
   /** 检查器开合/侧栏折叠写入视图状态(localStorage)。 */
   const persistUiFlags = useCallback((table: string, patch: { inspectorOpen?: boolean; sidebarCollapsed?: boolean }) => {
     const current = loadView(REPO_NAME, table);
@@ -1037,6 +1101,14 @@ export function App() {
     };
   }, [conflicts, errors, selection]);
 
+  // Conflicted 自动切冲突页签并展开(§5 Conflicted 只允许冲突面板动作与取消)。
+  useEffect(() => {
+    if (state.phase === "Conflicted") {
+      setDrawerTab("conflicts");
+      setDrawerOpen(true);
+    }
+  }, [state.phase]);
+
   const view = phaseView(state, {
     revision: revision ?? undefined,
     conflictCount: conflicts.length,
@@ -1060,7 +1132,8 @@ export function App() {
           /* 命令面板随 M6-J 接线 */
         }}
         onExport={() => {
-          document.querySelector("[data-testid='btn-export']")?.scrollIntoView({ block: "center" });
+          setDrawerTab("export");
+          setDrawerOpen(true);
         }}
         onValidate={() => {
           void validateNow();
@@ -1069,7 +1142,7 @@ export function App() {
           void submitNow();
         }}
         onOpenSettings={() => {
-          document.querySelector("[data-testid='setting-autocommit']")?.scrollIntoView({ block: "center" });
+          setSettingsOpen(true);
         }}
         onOpenShortcuts={() => {
           /* 快捷键对话框随 M6-J 接线 */
@@ -1152,97 +1225,194 @@ export function App() {
           ) : null}
         </div>
       </div>
-      <div className="app-legacy">
-        {state.phase === "Conflicted" ? (
-          <ConflictPanel
-            conflicts={conflicts}
-            onAction={(conflict, action, value) => {
-              const finishConflicts = (next: RebaseConflict[]) => {
-                setConflicts(next);
-                if (next.length === 0) {
-                  dispatch({ type: "conflictsResolved" });
-                  stateRef.current = { ...stateRef.current, phase: "ReadyDirty" };
-                }
-              };
-              if (action === "cancel") {
-                finishConflicts([]);
+      <Drawer
+        tabs={[
+          { id: "patch", label: "补丁", count: state.dirtyCount },
+          { id: "errors", label: "错误", count: errors.length, tone: errors.length > 0 ? "danger" : undefined },
+          {
+            id: "conflicts",
+            label: "冲突",
+            count: conflicts.length,
+            tone: conflicts.length > 0 ? "conflict" : undefined,
+          },
+          { id: "export", label: "导出" },
+        ]}
+        active={drawerTab}
+        open={drawerOpen}
+        onSelect={(id) => {
+          setDrawerTab(id);
+          setDrawerOpen(true);
+        }}
+        onToggle={() => setDrawerOpen((open) => !open)}
+      >
+        {drawerTab === "patch" ? (
+          <PatchTab
+            patch={patchPreview}
+            summary={summary}
+            target={{
+              branch: revision?.branch ?? null,
+              sha: revision?.id ?? "",
+              autoCommit,
+              autoExport,
+            }}
+            result={submitResult}
+            onJump={(row, column) => {
+              // row = groupPatch 的 1 基分组序号(E1 口径);分组只带 op 名,按
+              // map 行键解析(已有行 name==rowKey,新行走 tokens/草稿键)。
+              const groups = patchPreview ? groupPatch(patchPreview) : [];
+              const group = groups[row - 1];
+              const map = mapRef.current;
+              if (!group || !map) {
                 return;
               }
-              if (action === "drop") {
-                const map = mapRef.current;
+              const rowKey =
+                map.rowKeys.find((key) => key === group.name) ??
+                map.rowKeys.find((key) => key.startsWith("draft:")) ??
+                group.name;
+              jumpToCell(rowKey, column);
+            }}
+          />
+        ) : null}
+        {drawerTab === "errors" ? (
+          <ErrorTab
+            errors={errors as never}
+            state={
+              errors.length > 0
+                ? "errors"
+                : state.phase === "ReadyToSubmit"
+                  ? "clean"
+                  : state.dirtyCount > 0
+                    ? "not-validated"
+                    : "no-changes"
+            }
+            dirtyCount={state.dirtyCount}
+            onJump={(row, column) => {
+              const map = mapRef.current;
+              const rowKey = map?.rowKeys.find((key) => key === row);
+              jumpToCell(rowKey ?? row, column);
+            }}
+          />
+        ) : null}
+        {drawerTab === "conflicts" ? (
+          <ConflictTab
+            conflicts={conflicts as never}
+            resolved={conflictResolved}
+            onResolve={(key, r) => {
+              const conflict = conflicts.find((item) => conflictKey(item) === key);
+              setConflictResolved((prev) => ({ ...prev, [key]: r }));
+              if (!conflict) {
+                return;
+              }
+              const map = mapRef.current;
+              if (r.kind === "drop") {
                 if (conflict.rowId && map) {
                   if (conflict.code === "DELETED_ROW_CONFLICT") {
                     delete map.currentCells[conflict.rowId];
-                    map.rowKeys = map.rowKeys.filter((key) => key !== conflict.rowId);
+                    map.rowKeys = map.rowKeys.filter((k) => k !== conflict.rowId);
                   } else {
                     map.deleted.delete(conflict.rowId);
                   }
                 }
-                finishConflicts(conflicts.filter((item) => item.rowId !== conflict.rowId));
-                return;
+              } else {
+                const raw =
+                  r.kind === "repo"
+                    ? (conflict.current ?? "")
+                    : r.kind === "mine"
+                      ? (conflict.draft ?? "")
+                      : r.kind === "default"
+                        ? "@default"
+                        : r.kind === "null"
+                          ? "null"
+                          : (r.value ?? "");
+                const token: CellToken =
+                  raw === '""'
+                    ? { state: "empty", raw, effective: "" }
+                    : raw === "null"
+                      ? { state: "null", raw, effective: null }
+                      : raw === "@default"
+                        ? { state: "default", raw, effective: null }
+                        : raw === "@missing"
+                          ? { state: "missing", raw, effective: null }
+                          : { state: "value", raw, effective: raw };
+                if (conflict.rowId && conflict.column) {
+                  void writeToken(conflict.rowId, conflict.column, token, true);
+                }
               }
-              const raw =
-                action === "warehouse"
-                  ? (conflict.current ?? "")
-                  : action === "mine"
-                    ? (conflict.draft ?? "")
-                    : action === "default"
-                      ? "@default"
-                      : action === "null"
-                        ? "null"
-                        : (value ?? "");
-              const token: CellToken =
-                raw === '""'
-                  ? { state: "empty", raw, effective: "" }
-                  : raw === "null"
-                    ? { state: "null", raw, effective: null }
-                    : raw === "@default"
-                      ? { state: "default", raw, effective: null }
-                      : raw === "@missing"
-                        ? { state: "missing", raw, effective: null }
-                        : { state: "value", raw, effective: raw };
+              // 页签契约(E2):conflicts 列表保留,解决态走 resolved 记录;
+              // 全部解决后由 conflict-resubmit 触发 conflictsResolved + 重新提交。
+            }}
+            onResubmit={async () => {
+              // 0-8 §4:冲突解决后重新生成完整补丁并重跑 validate+apply,
+              // 不得复用首次提交的过期 patchRef。成功后按合并完成口径提示
+              // 「已合入仓库 N 处改动」(E2 冲突页签验收语义)。
+              patchRef.current = null;
+              dispatch({ type: "conflictsResolved" });
+              stateRef.current = { ...stateRef.current, phase: "ReadyDirty" };
+              const preview = currentPatch();
+              const merged = preview?.ops.length ?? 0;
+              const result = await submitNow();
+              if (result && typeof result === "object" && "ok" in result && result.ok) {
+                pendingHintRef.current = `已合入仓库 ${merged} 处改动`;
+              }
+            }}
+            onCancel={() => {
+              setConflicts([]);
+              setConflictResolved({});
+              dispatch({ type: "conflictsResolved" });
+              stateRef.current = { ...stateRef.current, phase: "ReadyDirty" };
+            }}
+            onJump={(conflict) => {
               if (conflict.rowId && conflict.column) {
-                void writeToken(conflict.rowId, conflict.column, token, true);
+                jumpToCell(conflict.rowId, conflict.column);
               }
-              finishConflicts(
-                conflicts.filter((item) => !(item.rowId === conflict.rowId && item.column === conflict.column)),
-              );
             }}
           />
         ) : null}
-        {hostMode ? (
-          <DiffPreview
-            patch={patchPreview}
-            summary={summary}
-            revision={revision ? `${revision.branch ?? revision.vcs}/${revision.id}` : ""}
-            autoCommit={autoCommit}
-            autoExport={autoExport}
-            canValidate={canValidate(state)}
-            canSubmit={canSubmit(state)}
-            disabled={state.phase === "Submitting" || state.phase === "Validating" || state.phase === "Conflicted"}
-            onValidate={() => {
-              void validateNow();
-            }}
-            onSubmit={() => {
-              void submitNow();
+        {drawerTab === "export" ? (
+          <ExportTab
+            tables={hostMode ? (tableNames?.map((item) => item.name) ?? [state.table]) : FIXTURES.map((f) => f.name)}
+            onExport={async (req: ExportRequest): Promise<ExportResult> => {
+              const result = await api<{ exportId: string; files: ExportResult["files"] }>("/api/export", {
+                method: "POST",
+                body: JSON.stringify(req),
+              });
+              return result;
             }}
           />
         ) : null}
-        {hostMode ? (
-          <ExportPanel tables={tableNames?.map((item) => item.name) ?? [state.table]} selected={state.table} />
-        ) : null}
-        <SettingsPanel enabled={hostMode} />
-        {canRefreshOnly(state) ? (
-          <Button
-            variant="primary"
-            data-testid="draft-refresh-fallback"
-            onClick={() => window.location.reload()}
-          >
-            {COPY.bannerActions.refresh}
-          </Button>
-        ) : null}
-        <ErrorPanel errors={errors} />
-      </div>
+      </Drawer>
+      {settingsOpen ? (
+        <SettingsDialog
+          open={settingsOpen}
+          settings={{ autoCommit, autoExport }}
+          onChange={async (next: EditorSettings) => {
+            await api("/api/settings/local", {
+              method: "PUT",
+              body: JSON.stringify({ submit: { autoCommit: next.autoCommit, autoExport: next.autoExport } }),
+            });
+            setAutoCommit(next.autoCommit);
+            setAutoExport(next.autoExport);
+          }}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
+      {seenBannerOpen ? (
+        <Banner
+          banner={{
+            text: COPY.banner.changedSinceSeen,
+            actions: [{ label: COPY.bannerActions.ack, action: "ack" }],
+          }}
+          onAction={() => {
+            if (mapRef.current && tableRef.current) {
+              writeSeen(REPO_NAME, mapRef.current.table, {
+                revisionId: revisionRef.current?.id ?? "",
+                fingerprint: tableRef.current.sourceFingerprint,
+              });
+            }
+            setSeenBannerOpen(false);
+          }}
+        />
+      ) : null}
       <StatusBar
         tableName={state.table}
         rowCount={state.rowCount}
@@ -1253,7 +1423,8 @@ export function App() {
         online={state.online}
         liveText={state.hint}
         onOpenPatchTab={() => {
-          document.querySelector("[data-testid='btn-validate']")?.scrollIntoView({ block: "center" });
+          setDrawerTab("patch");
+          setDrawerOpen(true);
         }}
       />
     </div>

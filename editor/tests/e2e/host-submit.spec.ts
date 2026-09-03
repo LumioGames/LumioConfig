@@ -25,7 +25,7 @@ async function gitInit(root: string) {
       const child = spawn("git", args, { cwd: root, stdio: "ignore" });
       child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`git ${args.join(" ")} -> ${code}`))));
     });
-  await run(["init"]);
+  await run(["init", "-b", "main"]);
   await run(["config", "user.email", "e2e@test"]);
   await run(["config", "user.name", "e2e"]);
   await run(["add", "-A"]);
