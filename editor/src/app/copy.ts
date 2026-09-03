@@ -94,6 +94,63 @@ export const COPY = {
   cellMenu: {
     setNull: "设为 null ∅",
   },
+  /** §3:表格首空行 name 格占位,只由渲染层画(不进 v / token)。 */
+  grid: {
+    placeholderNewRow: "在此输入名称新增一行…",
+  },
+  /** §6/§7:只读检查器文案。 */
+  inspector: {
+    emptyHint: "选中单元格后，此处显示详情",
+    requiredTag: "必填",
+    readonlyTag: "只读",
+    stateLabels: {
+      empty: "空字符串",
+      null: "null ∅",
+      default: "默认",
+      missing: "缺列",
+      value: "普通值",
+    },
+    currentValue: "当前值",
+    baseline: "基线",
+    revert: "还原",
+    goToConflicts: "去冲突面板",
+    deleteRulePrefix: "按 Delete 会落到：",
+    rowStatus: {
+      existing: "已有行",
+      new: "新行",
+      deleted: "已删行",
+    },
+    deleteRow: "删除行",
+    undeleteRow: "撤销删除",
+    close: "关闭",
+    noDefaultReason: "这一列没有默认值",
+    constraintTitle: "列约束",
+    constraintLabels: {
+      type: "类型",
+      required: "必填",
+      default: "默认值",
+      enum: "枚举",
+      range: "范围",
+      visibility: "可见性",
+      description: "描述",
+    },
+    constraintValues: {
+      yes: "是",
+      no: "否",
+      none: "无",
+    },
+    invalid: {
+      requiredMissing: "必填列不能是缺列",
+      requiredMissingSuggestion: "填一个值，或改设为 null ∅",
+      typeMismatch: "这一列需要数字",
+      typeMismatchSuggestion: "改成数字再提交",
+      boolMismatch: "这一列只能是 true 或 false",
+      enumInvalid: "不在枚举选项内",
+      enumInvalidSuggestion: "从下拉选项中选择",
+      outOfRange: "数值超出允许范围",
+      outOfRangeSuggestion: "改回允许范围内",
+    },
+  },
   /** §8 抽屉空态。 */
   drawer: {
     patchEmpty: "还没有改动…",
