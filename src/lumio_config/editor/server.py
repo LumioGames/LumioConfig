@@ -114,6 +114,9 @@ def serve(root: Path, port: int, open_browser: bool) -> None:
 
 def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
     class EditorHandler(BaseHTTPRequestHandler):
+        # extension routes registered via register() read the host from the handler instance
+        editor_host = host
+
         def log_message(self, format: str, *args: object) -> None:
             return
 
@@ -455,3 +458,7 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(data)
 
     return EditorHandler
+
+
+# importing the module registers its extension route via register()
+from . import history  # noqa: E402,F401
