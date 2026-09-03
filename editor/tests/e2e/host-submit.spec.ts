@@ -145,5 +145,7 @@ test.describe("host submit", () => {
     expect(cardText).not.toContain("sha256:");
     expect(cardText).toContain("commit");
     expect(cardText).toContain("main");
+    // 快审 P1-2 回归:自家提交不得触发「表已变化」横幅(seen 与会话修订同源)。
+    await expect(page.getByTestId("banner")).toHaveCount(0);
   });
 });

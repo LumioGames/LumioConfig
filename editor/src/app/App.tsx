@@ -634,12 +634,23 @@ export function App() {
       setSubmitResult(result);
       setDrawerTab("patch");
       setDrawerOpen(true);
-      // 自己的提交即「已看过」:刷新 seen,避免 J3 横幅把自家 commit 误报为外部变化。
-      if (tableRef.current) {
-        writeSeen(REPO_NAME, tableRef.current.table, {
-          revisionId: result.result?.vcs?.id ?? revisionRef.current?.id ?? "",
-          fingerprint: result.result?.sourceFingerprint ?? tableRef.current.sourceFingerprint,
-        });
+      // 自己的提交即「已看过」:刷新 seen。修订 id 必须与重开后比较所用的
+      // /api/session 同源(快审 P1-2),先重取会话再写,否则恒被误报为外部变化。
+      const submittedTable = tableRef.current?.table ?? stateRef.current.table;
+      if (submittedTable) {
+        // 必须先于 openTable 的 reload 完成,否则 mountWorkbook 的 seen 比较
+        // 会读到旧修订/旧 seen(快审 P1-2 竞态)。
+        try {
+          const session = await api<SessionResponse>("/api/session");
+          setRevision(session.revision);
+          revisionRef.current = session.revision;
+          writeSeen(REPO_NAME, submittedTable, {
+            revisionId: session.revision.id,
+            fingerprint: result.result?.sourceFingerprint ?? "",
+          });
+        } catch {
+          /* 会话不可达则保留旧 seen,重开时按指纹兜底比较 */
+        }
       }
       if (result.result?.vcs?.action === "none" && patch.ops.length > 0) {
         pendingHintRef.current = COPY.status.uncommittedMerges(1);
@@ -1257,19 +1268,22 @@ export function App() {
             }}
             result={submitResult}
             onJump={(row, column) => {
-              // row = groupPatch 的 1 基分组序号(E1 口径);分组只带 op 名,按
-              // map 行键解析(已有行 name==rowKey,新行走 tokens/草稿键)。
+              // row = groupPatch 的 1 基分组序号(E1 口径)。rowKeys 是行 id,
+              // op.name 是行名:经 tokens 的 name 原文反查行键(快审 P1-1)。
               const groups = patchPreview ? groupPatch(patchPreview) : [];
               const group = groups[row - 1];
               const map = mapRef.current;
-              if (!group || !map) {
+              const univerAPI = instanceRef.current?.univerAPI;
+              if (!group || !map || !univerAPI) {
                 return;
               }
-              const rowKey =
-                map.rowKeys.find((key) => key === group.name) ??
-                map.rowKeys.find((key) => key.startsWith("draft:")) ??
-                group.name;
-              jumpToCell(rowKey, column);
+              const tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
+              const rowKey = map.rowKeys.find(
+                (key) => key === group.name || tokens[key]?.name?.raw === group.name,
+              );
+              if (rowKey) {
+                jumpToCell(rowKey, column);
+              }
             }}
           />
         ) : null}
