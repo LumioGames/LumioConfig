@@ -17,3 +17,5 @@ registry/.issue.lock
 testdata/unicode/rust/target/
 testdata/unicode/csharp/bin/
 testdata/unicode/csharp/obj/
+# Claude Code agent worktrees (parallel workers)
+.claude/worktrees/
