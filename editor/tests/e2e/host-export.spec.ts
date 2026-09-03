@@ -79,12 +79,16 @@ test.describe("host export", () => {
     host?.child.kill();
   });
 
-  test("export panel writes csv with bom and readme", async ({ page }) => {
+  test("drawer export tab writes csv with bom and readme, downloads via export-link", async ({ page }) => {
     if (!host) {
       throw new Error("host missing");
     }
     await page.goto(host.url);
     await page.getByTestId("univer-root").waitFor();
+    // §8 导出页签:顶栏「导出」直达导出页签,页签内的 [导出] 发起导出。
+    // (App 接线抽屉前 btn-export-top 为滚动定位、btn-export 在旧 ExportPanel,
+    //  接线后 btn-export-top 打开导出页签、btn-export 在 ExportTab 内,两态都可走。)
+    await page.getByTestId("btn-export-top").click();
     await page.getByTestId("btn-export").click();
     await expect(page.getByTestId("export-link").first()).toBeVisible();
     const hrefs = await page.locator("[data-testid=export-link]").evaluateAll((nodes) =>
@@ -110,5 +114,11 @@ test.describe("host export", () => {
     }, readmeHref);
     expect(readme).toContain("GENERATED / NOT AUTHORITATIVE — do not import back");
     expect(readme).toContain("source: repo");
+    // 下载 export-link:点击锚点走 blob 下载(Authorization fetch → a[download])。
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.locator('[data-testid="export-link"][href$="skills.csv"]').click(),
+    ]);
+    expect(download.suggestedFilename()).toBe("skills.csv");
   });
 });
