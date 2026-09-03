@@ -35,6 +35,245 @@ body,
   min-width: 0;
 }
 
+/* 横幅横跨整行(快审 P1-1:不落格会被压进 200px 侧栏列)。 */
+.app-shell > [data-testid="banner"] {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+/* ---- 表列表(设计稿 §10;200px 展开 / 44px 折叠首字母栏) ---- */
+.table-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px 8px 12px;
+  gap: 8px;
+  overflow: hidden;
+  font-size: var(--font-size-12);
+  color: var(--color-text);
+}
+
+.table-list__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-4);
+  background: var(--color-bg-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.table-list__toggle:hover {
+  background: var(--color-bg-app);
+}
+
+.table-list__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.table-list__search-box {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.table-list__search {
+  width: 100%;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-4);
+  background: var(--color-bg-surface);
+  color: var(--color-text);
+  font-size: var(--font-size-12);
+}
+
+.table-list__search::placeholder {
+  color: var(--color-text-faint);
+}
+
+.table-list__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.table-list__items li {
+  display: block;
+}
+
+.table-list__items > li > button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-4);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.table-list__items > li > button:hover {
+  background: var(--color-bg-app);
+}
+
+.table-list__items > li > button.is-active,
+.table-list__items > li > button[aria-current="true"] {
+  background: var(--color-bg-surface);
+  border-color: var(--color-accent-border);
+}
+
+.table-list__name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-list__rows {
+  flex: 0 0 auto;
+  font-size: var(--font-size-11);
+  color: var(--color-text-muted);
+}
+
+.table-list__badge {
+  flex: 0 0 auto;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-4);
+  font-size: var(--font-size-10);
+  line-height: 16px;
+  text-align: center;
+}
+
+.table-list__badge--dirty {
+  background: var(--color-dirty-bg);
+  color: var(--color-dirty);
+}
+
+.table-list__badge--conflict {
+  background: var(--color-conflict-bg);
+  color: var(--color-conflict);
+}
+
+/* 折叠 44px 首字母栏 */
+.table-list--collapsed {
+  padding: 8px 4px;
+  align-items: stretch;
+}
+
+.table-list--collapsed .table-list__rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.table-list__rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  border-radius: var(--radius-4);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-11);
+}
+
+.table-list__rail-item.is-active {
+  background: var(--color-bg-surface);
+  border-color: var(--color-accent-border);
+  color: var(--color-text);
+}
+
+.table-list__rail-dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-dirty);
+}
+
+/* ---- 表格区工具栏(32px,原型 README「表格区工具栏」段) ---- */
+.grid-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  overflow: hidden;
+}
+
+.grid-toolbar__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-4);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-11);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.grid-toolbar__button:hover:not(:disabled) {
+  background: var(--color-bg-app);
+  color: var(--color-text);
+}
+
+.grid-toolbar__button:disabled {
+  color: var(--color-text-faint);
+  cursor: default;
+}
+
+.grid-toolbar__button-text {
+  display: inline-block;
+}
+
+.grid-toolbar__sep {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: var(--color-border);
+}
+
+.grid-toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.grid-toolbar__hint {
+  flex: 0 0 auto;
+  font-size: var(--font-size-11);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
 .table-list {
   grid-column: 1;
   grid-row: 3;

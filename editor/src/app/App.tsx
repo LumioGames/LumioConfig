@@ -1025,7 +1025,11 @@ export function App() {
       column: desc,
       current,
       baseline,
-      remoteErrors: errors as CellMeta["remoteErrors"],
+      // 快审 P1-3:预检错误按行过滤,只给当前行的远端错误(串显他行是缺陷)。
+      remoteErrors: errors.filter((item) => {
+        const err = item as { row?: unknown; rowId?: unknown };
+        return String(err.rowId ?? err.row ?? "") === selection.rowKey;
+      }) as CellMeta["remoteErrors"],
       conflict: conflictCell ? { code: conflictCell.code ?? "", message: conflictCell.message ?? "" } : null,
     };
   }, [conflicts, errors, selection]);
