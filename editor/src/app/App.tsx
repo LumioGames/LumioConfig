@@ -29,7 +29,7 @@ import { COMMAND, installInterceptors, newDraftRowKey } from "../spreadsheet/int
 import { applyDraft, applyRebase, buildCell, workbookFromWarehouse } from "../spreadsheet/projection";
 import { createSheetsUniver, loadWorkbook, type SheetsUniver } from "../spreadsheet/univer";
 import { applyViewState, captureViewState, load as loadView, save as saveView } from "../spreadsheet/viewState";
-import { INITIAL_EDITOR_STATE, canEdit, canRefreshOnly, canSave, canSubmit, canValidate, reducer } from "./state";
+import { INITIAL_EDITOR_STATE, canEdit, canRefreshOnly, canSave, canSubmit, canValidate, reducer, type EditorAction } from "./state";
 
 const REPO_NAME = "LumioConfig";
 const AUTOSAVE_MS = 2000;
@@ -272,6 +272,18 @@ export function App() {
       loadWorkbook(instance.univerAPI, workbook);
       void applyEditors(instance.univerAPI, displayed, refOptionsRef.current);
       const paintedAt = performance.now();
+      const openAction: EditorAction = {
+        type: "open",
+        table: warehouse.table,
+        fingerprint: warehouse.sourceFingerprint,
+        rowCount: displayed.rows.length,
+        draftVersion,
+      };
+      // dispatch 的结果要等下一次渲染才会同步进 stateRef；先用纯 reducer 投影出 open 后
+      // 的最新快照，让 installInterceptors 的 canEdit 闭包在安装窗口内读到 ReadyClean 而
+      // 非 Opening（评审 P2-2：启动误打「另一个标签页已保存，请刷新」）。渲染后
+      // stateRef.current = state 会用同一 reducer 结果覆盖，二者一致。
+      stateRef.current = reducer(stateRef.current, openAction);
       interceptorsRef.current = installInterceptors(instance.univerAPI, map, {
         onHint: (hint) => {
           if (rebasingRef.current || stateRef.current.phase === "Stale" || stateRef.current.phase === "Conflicted") {
@@ -303,13 +315,7 @@ export function App() {
         firstPaintMs: paintedAt - (timingsRef.current.loadStarted ?? paintedAt),
         createWorkbookMs: paintedAt - projectedAt,
       };
-      dispatch({
-        type: "open",
-        table: warehouse.table,
-        fingerprint: warehouse.sourceFingerprint,
-        rowCount: displayed.rows.length,
-        draftVersion,
-      });
+      dispatch(openAction);
       if (staleHint) {
         dispatch({ type: "stale", hint: staleHint });
       } else {

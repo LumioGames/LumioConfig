@@ -37,3 +37,4 @@
 | [0005](0005-session-phase-user-facing-mapping.md) | 会话阶段以用户口径呈现：预检无改动置灰、提交只在有副作用时确认、阻断态横幅化、`failKind` 取代 hint 子串判断 | 生效 |
 | [0006](0006-four-state-rendering-spike-and-j3-scope.md) | 四态呈现由 spike 决定；J3 本轮只做指纹变化横幅；`invalid` 红字为前端守卫缺失；深色主题后续 | 生效 |
 | [0007](0007-redesign-delivery-strategy.md) | 重设计叠在已交付的 UI 原语与令牌上、修复卡先行、`App.tsx` 由主 loop 每 wave 接线，不采用一卡一会话流程 | 生效 |
+| [0008](0008-four-state-rendering.md) | 四态徽标走 Univer 渲染扩展（CELL_CONTENT 拦截器 + customRender），徽标仍不进 `v` / token；升版受阻时降级样式 + 检查器 | 生效 |

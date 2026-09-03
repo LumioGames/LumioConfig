@@ -8,6 +8,7 @@ import {
   HINTS,
   installInterceptors,
 } from "../src/spreadsheet/interceptors";
+import { extractTokens } from "../src/spreadsheet/extract";
 import { buildWorkbook } from "../src/spreadsheet/projection";
 import { FakeUniver } from "./helpers/fake-univer";
 
@@ -23,8 +24,31 @@ function setup() {
     onHint: (hint) => hints.push(hint),
     randomBytes: () => Uint8Array.from([0x3f, 0x9a, 0x1c, 0x2e]),
     executeCommand: (id, params) => univer.executeCommand(id, params),
+    tableColumns: skills.columns,
   });
   return { map, univer, hints, installed };
+}
+
+/** 模拟 univerAPI 的当前活动选区(键盘 Delete 的 clear 命令不带 range 时依赖它)。 */
+function withActiveSelection(
+  univer: FakeUniver,
+  range: { startRow: number; endRow: number; startColumn: number; endColumn: number },
+) {
+  Object.assign(univer, {
+    getActiveWorkbook: () => ({
+      getActiveSheet: () => ({
+        getSelection: () => ({
+          getActiveRange: () => ({
+            getRow: () => range.startRow,
+            getLastRow: () => range.endRow,
+            getColumn: () => range.startColumn,
+            getLastColumn: () => range.endColumn,
+          }),
+        }),
+      }),
+    }),
+  });
+  return univer;
 }
 
 describe("installInterceptors", () => {
@@ -142,5 +166,99 @@ describe("installInterceptors", () => {
     expect(event.cancel).toBeFalsy();
     expect(map.currentCells["40001"]?.display_name?.raw).toBe('""');
     expect(map.currentCells["40001"]?.display_name?.state).toBe("empty");
+  });
+
+  /**
+   * Univer 的键盘提交(set-range-values)从 getCellRaw 起步,value 携带整格旧
+   * custom.lumio。P1-1 回归:四态格被真实键盘覆写时必须转成 value token。
+   */
+  it("keyboard submit over a null-state cell becomes a value token", () => {
+    const { univer, map } = setup();
+    const params = {
+      range: { startRow: 1, startColumn: 2, endRow: 1, endColumn: 2 },
+      value: {
+        v: "fx_new",
+        t: 1,
+        custom: {
+          lumio: { state: "null", raw: "null", effective: null, column: "display_name", rowKey: "40001" },
+        },
+      },
+    };
+    const event = univer.emit(COMMAND.setRangeValues, params);
+    expect(event.cancel).toBeFalsy();
+    expect(map.currentCells["40001"]?.display_name).toEqual({
+      state: "value",
+      raw: "fx_new",
+      effective: "fx_new",
+    });
+    // 拦截器重写过 cell.custom,真实 extractTokens(经 workbook 快照)也必须读到 value。
+    const snapshot = {
+      sheetOrder: ["skills"],
+      sheets: { skills: { cellData: { 1: { 2: params.value } } } },
+    };
+    expect(extractTokens(snapshot, map)["40001"]?.display_name).toEqual({
+      state: "value",
+      raw: "fx_new",
+      effective: "fx_new",
+    });
+  });
+
+  it("keyboard submit that leaves the effective value unchanged keeps the four-state token", () => {
+    const { univer, map } = setup();
+    const event = univer.emit(COMMAND.setRangeValues, {
+      range: { startRow: 1, startColumn: 4, endRow: 1, endColumn: 4 },
+      value: {
+        v: 0,
+        t: 2,
+        custom: {
+          lumio: { state: "default", raw: "@default", effective: 0, column: "damage", rowKey: "40001" },
+        },
+      },
+    });
+    expect(event.cancel).toBeFalsy();
+    expect(map.currentCells["40001"]?.damage?.state).toBe("default");
+    expect(map.currentCells["40001"]?.damage?.raw).toBe("@default");
+  });
+
+  /**
+   * P1-2 回归:键盘 Delete 的 clear-selection-content 不带 range,必须取
+   * univerAPI 当前活动选区,再按 0-7 §5 逐格分派。
+   */
+  it("clear without range blocks a required column without default and hints", () => {
+    const { univer, map, hints } = setup();
+    withActiveSelection(univer, { startRow: 1, endRow: 1, startColumn: 5, endColumn: 5 });
+    const event = univer.emit(COMMAND.clearSelectionContent, {});
+    expect(event.cancel).toBe(true);
+    expect(hints.at(-1)).toBeTruthy();
+    expect(map.currentCells["40001"]?.cooldown_frames?.raw).toBe("150");
+    expect(univer.executed.filter((item) => item.id === COMMAND.setRangeValues)).toHaveLength(0);
+  });
+
+  it("clear without range writes @default on a column with default", () => {
+    const { univer, map } = setup();
+    withActiveSelection(univer, { startRow: 1, endRow: 1, startColumn: 4, endColumn: 4 });
+    const event = univer.emit(COMMAND.clearSelectionContent, {});
+    expect(event.cancel).toBe(true);
+    expect(map.currentCells["40001"]?.damage).toEqual({ state: "default", raw: "@default", effective: 0 });
+    expect(univer.executed.some((item) => item.id === COMMAND.setRangeValues)).toBe(true);
+  });
+
+  it("clear without range writes null on an optional column without default", () => {
+    const { univer, map } = setup();
+    withActiveSelection(univer, { startRow: 1, endRow: 1, startColumn: 7, endColumn: 7 });
+    const event = univer.emit(COMMAND.clearSelectionContent, {});
+    expect(event.cancel).toBe(true);
+    expect(map.currentCells["40001"]?.element).toEqual({ state: "null", raw: "null", effective: null });
+  });
+
+  it("a {v:null} mutation is not recorded as an empty value token", () => {
+    const { univer, map } = setup();
+    const before = map.currentCells["40001"]?.display_name;
+    const event = univer.emit(COMMAND.setRangeValuesMutation, {
+      cellValue: { 1: { 2: { v: null, p: null, f: null, si: null, custom: null } } },
+    });
+    expect(event.cancel).toBeFalsy();
+    expect(map.currentCells["40001"]?.display_name).toEqual(before);
+    expect(map.currentCells["40001"]?.display_name?.raw).not.toBe("");
   });
 });
