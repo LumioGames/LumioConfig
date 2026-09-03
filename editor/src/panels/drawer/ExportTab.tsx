@@ -94,6 +94,11 @@ function download(href: string): void {
 
 export function ExportTab({ tables, onExport }: ExportTabProps) {
   const [selected, setSelected] = useState<string[]>(tables);
+  // 键盘可达(J5):挂载即聚焦主按钮——Univer 网格会吞 Tab,纯 Tab 遍历
+  // 无法从顶栏跨到抽屉,命令面板切页签后直接落焦点。
+  useEffect(() => {
+    document.querySelector<HTMLButtonElement>('[data-testid="btn-export"]')?.focus();
+  }, []);
   const [format, setFormat] = useState<"csv" | "tsv">("csv");
   const [source, setSource] = useState<"repo" | "draft">("repo");
   const [target, setTarget] = useState<"" | "S" | "C" | "V">("");

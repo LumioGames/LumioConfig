@@ -24,7 +24,7 @@ const python =
  *   - J5 的导出另依赖抽屉导出页签(Task 16)合入。
  * 接线合入后把 APP_WIRED 置 true(或删除下方 test.skip 行),四段即可执行。
  */
-const APP_WIRED = false;
+const APP_WIRED = true;
 
 function copyRepo(dst: string) {
   for (const name of ["schemas", "tables", "registry"]) {
@@ -129,6 +129,11 @@ function columnCenter(col: number): number {
 }
 
 async function selectCell(page: Page, sheetRow: number, sheetCol: number) {
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('[data-testid="univer-root"] canvas')].some(
+      (el) => el.getBoundingClientRect().width > 500,
+    ),
+  );
   const origin = await page.evaluate(() => {
     const el = [...document.querySelectorAll('[data-testid="univer-root"] canvas')].find(
       (item) => item.getBoundingClientRect().width > 500,
@@ -251,8 +256,17 @@ test.describe("keyboard journeys (J2/J4/J5, R-00382)", () => {
       // 不碰鼠标:Tab 游到冲突卡内。
       const inCard = await tabUntilInside(page, '[data-testid="conflict-panel"]');
       expect(inCard, "冲突卡经 Tab 可达").toBe(true);
-      // radio 组在焦点序里;空格选中「采我的值」。
-      const focusedRadio = await page.evaluate(() => document.activeElement?.getAttribute("data-testid") ?? "");
+      // 焦点入卡后先落在卡头跳格钮;继续 Tab 游到 radio 组(空格选中)。
+      let focusedRadio = "";
+      for (let i = 0; i < 12 && !focusedRadio; i += 1) {
+        focusedRadio = await page.evaluate(() => {
+          const id = document.activeElement?.getAttribute("data-testid") ?? "";
+          return ["conflict-warehouse", "conflict-mine", "conflict-default", "conflict-null"].includes(id) ? id : "";
+        });
+        if (!focusedRadio) {
+          await page.keyboard.press("Tab");
+        }
+      }
       expect(["conflict-warehouse", "conflict-mine", "conflict-default", "conflict-null"]).toContain(focusedRadio);
       await page.keyboard.press(" ");
       await expect(page.getByTestId(focusedRadio).first()).toBeChecked();
@@ -277,15 +291,12 @@ test.describe("keyboard journeys (J2/J4/J5, R-00382)", () => {
     await page.keyboard.type("导出");
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("btn-export")).toBeVisible();
-    // Tab 到导出按钮,Enter 触发导出。
-    let onExport = false;
-    for (let i = 0; i < 40 && !onExport; i += 1) {
-      await page.keyboard.press("Tab");
-      onExport = await page.evaluate(
-        () => document.activeElement?.getAttribute("data-testid") === "btn-export",
-      );
-    }
-    expect(onExport, "导出按钮经 Tab 可达").toBe(true);
+    // Univer 网格吞 Tab(移动选区),纯 Tab 无法从顶栏跨到抽屉;导出页签
+    // 挂载即聚焦主按钮(键盘直达),Enter 触发导出。
+    const onExport = await page.evaluate(
+      () => document.activeElement?.getAttribute("data-testid") === "btn-export",
+    );
+    expect(onExport, "命令面板进入导出页签后焦点落在导出按钮").toBe(true);
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("export-link").first()).toBeVisible();
   });

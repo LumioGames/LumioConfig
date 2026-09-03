@@ -65,16 +65,12 @@ test.describe("a11y scans (axe, no serious or higher)", () => {
   });
 
   test("drawer expanded state has no serious+ violations", async ({ page }) => {
-    // E 阵列(panels/drawer/**)未合入接线 —— 主 loop 接线后删除下一行 test.skip 跑。
-    test.skip(true, "drawer (panels/drawer/**, E array) not merged/wired into App yet");
     await waitApp(page);
-    // 接线后:点开底部抽屉(默认「补丁」页签)再扫。
+    await page.getByTestId("tab-patch").click();
     await scanWithAxe(page);
   });
 
   test("conflict state has no serious+ violations", async ({ page }) => {
-    // 冲突面板(M6-I 冲突页签)未接线 —— 主 loop 接线后删除下一行 test.skip 跑。
-    test.skip(true, "conflict drawer tab (M6-I) not wired into App yet");
     await waitApp(page);
     // 接线后:经 bridge 注入 Conflicted(online=true),冲突卡渲染后扫。
     await page.evaluate(() => window.__lumioPoc?.setPhase("Conflicted", undefined, true));
