@@ -26,6 +26,11 @@ function seriousViolations(results: AxeResults): string[] {
 }
 
 async function waitApp(page: Page) {
+  // 快审 P1-1:首开 onboarding toast 有 150ms 入场动画,axe 落在半透明窗口
+  // 会误判 color-contrast;预置 onboarded 键让 toast 不出现(竞态消除)。
+  await page.addInitScript(() => {
+    window.localStorage.setItem("lumio-config-editor:onboarded", "1");
+  });
   await page.goto("/");
   await page.getByTestId("univer-root").waitFor();
   await page.waitForFunction(() => Boolean(window.__lumioPoc?.map?.()));
