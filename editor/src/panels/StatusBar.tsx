@@ -134,7 +134,8 @@ export function StatusBar({
         {liveText}
       </span>
       <button type="button" data-testid="status-fingerprint" title={fingerprint} style={FINGERPRINT_STYLE} onClick={copyFingerprint}>
-        {fingerprint.slice(0, 8)}
+        {/* 指纹 8 位(§12):剥掉源格式 sha256: 前缀后截取,title 保留全文。 */}
+        {fingerprint.replace(/^sha256:/, "").slice(0, 8)}
       </button>
       <span data-testid="status-online" style={SEGMENT_STYLE}>
         <span

@@ -100,6 +100,8 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [selection, setSelection] = useState<{ row: number; column: string; rowKey: string } | null>(null);
+  // autoCommit=false 且本次会话有合入未 commit 时,状态条常显「N 次合入未 commit」(§12)。
+  const [uncommittedMerges, setUncommittedMerges] = useState(0);
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoExport, setAutoExport] = useState(false);
   const patchRef = useRef<PatchObject | null>(null);
@@ -598,6 +600,7 @@ export function App() {
       dispatch({ type: "submitted", fingerprint: result.result?.sourceFingerprint ?? stateRef.current.fingerprint });
       if (result.result?.vcs?.action === "none" && patch.ops.length > 0) {
         pendingHintRef.current = COPY.status.uncommittedMerges(1);
+        setUncommittedMerges(1);
         dispatch({ type: "hint", hint: COPY.status.uncommittedMerges(1) });
       }
       setDirtyCounts((current) => ({ ...current, [stateRef.current.table]: 0 }));
@@ -1245,7 +1248,7 @@ export function App() {
         rowCount={state.rowCount}
         draftVersion={state.draftVersion}
         dirtyCount={state.dirtyCount}
-        uncommittedMerges={0}
+        uncommittedMerges={uncommittedMerges}
         fingerprint={state.fingerprint}
         online={state.online}
         liveText={state.hint}
