@@ -175,7 +175,17 @@ test.describe("host rebase", () => {
       await expect(page.getByTestId("conflict-panel")).toContainText("140");
       await expect(page.getByTestId("conflict-panel")).toContainText("133");
       await page.getByTestId("conflict-mine").click();
-      await expect(page.getByTestId("conflict-panel")).toHaveCount(0);
+      // 新冲突页签:单选即解决,全部解决后页签留驻显示「已解决 1 / 1」并放开
+      // conflict-resubmit;接线前旧面板:解决即收面板。两种接线都不再挡提交。
+      await expect
+        .poll(async () => {
+          const panel = page.getByTestId("conflict-panel");
+          if ((await panel.count()) === 0) {
+            return true;
+          }
+          return (await panel.first().textContent())?.includes("1 / 1") ?? false;
+        })
+        .toBe(true);
       const submitted = await page.evaluate(async () => {
         await window.__lumioPoc?.validateNow?.();
         return window.__lumioPoc?.submitNow?.();
@@ -185,6 +195,65 @@ test.describe("host rebase", () => {
       ).toBeTruthy();
       const skills = fs.readFileSync(path.join(isolated, "tables", "skills.txt"), "utf8");
       expect(skills).toContain("133");
+      expect(skills).not.toContain("| 140 ");
+    } finally {
+      isolatedHost.child.kill();
+    }
+  });
+
+  test("resolve all then resubmit keeps both sides", async ({ page }) => {
+    const isolated = fs.mkdtempSync(path.join(os.tmpdir(), "lumio-r363-resubmit-"));
+    copyRepo(isolated);
+    await gitInit(isolated);
+    const isolatedHost = await startHost(isolated);
+    try {
+      await waitReady(page, isolatedHost.url);
+      // 草稿两处:fireball.damage 与 CLI 同格(冲突),frostbolt.cooldown_frames 独立格(自动合并)。
+      const version = await page.evaluate(async () => {
+        await window.__lumioPoc?.executeCommand("sheet.command.set-range-values", {
+          range: { startRow: 1, startColumn: 4, endRow: 1, endColumn: 4 },
+          value: { v: 133, t: 2 },
+        });
+        await window.__lumioPoc?.executeCommand("sheet.command.set-range-values", {
+          range: { startRow: 2, startColumn: 5, endRow: 2, endColumn: 5 },
+          value: { v: 100, t: 2 },
+        });
+        return window.__lumioPoc?.saveDraftNow();
+      });
+      expect(version).toBeGreaterThan(0);
+      // CLI 两处:fireball.damage 同格冲突,frostbolt.display_name 独立格。
+      await applyCli(isolated, [
+        { op: "update", name: "fireball", set: { damage: 140 } },
+        { op: "update", name: "frostbolt", set: { display_name: "Frosty" } },
+      ]);
+      const rebase = await page.evaluate(async () => window.__lumioPoc?.rebaseNow?.());
+      expect(rebase).toEqual(expect.objectContaining({ ok: false }));
+      await expect(page.getByTestId("conflict-panel")).toBeVisible();
+      const resubmit = page.getByTestId("conflict-resubmit");
+      if (await resubmit.count()) {
+        // 新冲突页签:全部解决 → conflict-resubmit 可用 → 点它重跑预检并提交。
+        await page.getByTestId("conflict-mine").click();
+        await expect(resubmit).toBeEnabled();
+        await resubmit.click();
+        await expect(page.getByTestId("status-hint")).toContainText("已合入仓库", { timeout: 15_000 });
+      } else {
+        // 接线前过渡:旧面板没有 resubmit,走桥接 validate+submit(App 接线后此分支不再走到)。
+        await page.getByTestId("conflict-mine").click();
+        const submitted = await page.evaluate(async () => {
+          await window.__lumioPoc?.validateNow?.();
+          return window.__lumioPoc?.submitNow?.();
+        });
+        expect(
+          submitted && typeof submitted === "object" && "ok" in submitted
+            ? (submitted as { ok: boolean }).ok
+            : false,
+        ).toBeTruthy();
+      }
+      // 仓库含双方改动:我的 133 / 100 与 CLI 的 Frosty,冲突格不得落 140。
+      const skills = fs.readFileSync(path.join(isolated, "tables", "skills.txt"), "utf8");
+      expect(skills).toContain("| 133 ");
+      expect(skills).toContain("| 100 ");
+      expect(skills).toContain("Frosty");
       expect(skills).not.toContain("| 140 ");
     } finally {
       isolatedHost.child.kill();
