@@ -4,7 +4,7 @@ status: pending
 
 # 网页编辑器重设计 v3 · 实现计划
 
-设计：`.spec/knowledge/features/web-editor-ux.md`（`status: 设计中`）。取舍：`.spec/decisions/0003`–`0007`。原型：`editor/docs/prototype/`。Workflow 需求卡：RM-00009 的 M6-F～M6-K（蓝图标记 `workflow-plan:lumioconfig-m6-editor-ux-20260903/r1/<卡>`）。
+设计：`.spec/knowledge/features/web-editor-ux.md`（`status: 设计中`）。取舍：`.spec/decisions/0003`–`0007`。原型：`editor/docs/prototype/`。Workflow 需求卡（RM-00009，蓝图标记 `workflow-plan:lumioconfig-m6-editor-ux-20260903/r1/<卡>`，2026-09-03 落单，落单基线 `42692fd`）：M6-F = R-00378、M6-G = R-00379、M6-H = R-00380、M6-I = R-00381、M6-J = R-00382、M6-K = R-00383。
 
 约束：不改 0-7 / 0-8；不加运行时依赖；不引 `@univerjs-pro/*`；CSP 下不引外链；Host 只在 M6-K 改；每张 Workflow 卡在仓内按 `writing-plans` 再拆成文件集互斥的任务卡并行扇出；`App.tsx` 不进 worker 卡，每 wave 合入时由主 loop 接线；每卡只跑覆盖本卡的测试，统一合入后跑全量：
 
