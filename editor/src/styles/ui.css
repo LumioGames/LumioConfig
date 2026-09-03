@@ -109,6 +109,15 @@
   color: var(--color-text-muted);
 }
 
+/* Tabs tone 变体(错误/冲突计数着色,B3 契约) */
+.tabs__item--danger .tabs__count {
+  color: var(--color-danger-text);
+}
+
+.tabs__item--conflict .tabs__count {
+  color: var(--color-conflict);
+}
+
 /* ---- Dialog（宽 460，padding 16 18，圆角 6，对话框阴影） ---- */
 
 .dialog__backdrop {
@@ -218,6 +227,11 @@
 
 .menu__item.is-disabled:hover {
   background: transparent;
+}
+
+.menu__item.is-active {
+  background: var(--color-accent-bg);
+  color: var(--color-text);
 }
 
 .menu__shortcut {
