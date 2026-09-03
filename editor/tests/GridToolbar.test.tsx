@@ -259,11 +259,12 @@ describe("GridToolbar hint and disabled states", () => {
     expect(button(el, "tb-insert-row").disabled).toBe(false);
   });
 
-  it("renders role=toolbar with the aria label", () => {
+  it("renders a labeled region landmark (Task 20: toolbar→region, axe landmark 覆盖)", () => {
     const { univerAPI } = makeUniverAPI(1);
     const el = mount(<GridToolbar univerAPI={univerAPI} columnCount={9} canEdit />);
     const toolbar = el.querySelector('[data-testid="grid-toolbar"]');
-    expect(toolbar?.getAttribute("role")).toBe("toolbar");
+    // 未实现 roving tabindex,role=region + aria-label 更诚实,且满足 axe region 规则。
+    expect(toolbar?.getAttribute("role")).toBe("region");
     expect(toolbar?.getAttribute("aria-label")).toBe(COPY.toolbar.ariaLabel);
   });
 });

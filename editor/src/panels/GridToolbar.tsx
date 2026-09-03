@@ -163,7 +163,7 @@ export function GridToolbar({ univerAPI, columnCount, canEdit }: GridToolbarProp
 
   return (
     <div
-      role="toolbar"
+      role="region"
       aria-label={COPY.toolbar.ariaLabel}
       className="grid-toolbar"
       data-testid="grid-toolbar"

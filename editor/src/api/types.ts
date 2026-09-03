@@ -95,6 +95,8 @@ export interface SessionCapabilities {
   commit: boolean;
   export: string[];
   events: boolean;
+  /** §9:修订历史能力;Host 端 `vcs == "git"` 才为 true,svn / none 为 false(页签不渲染)。 */
+  history: boolean;
 }
 
 export interface SessionResponse {
@@ -179,6 +181,19 @@ export interface Draft {
   rows: Record<string, Record<string, DraftCell | string>>;
   renamed?: Record<string, string>;
   deleted?: string[];
+}
+
+/** §9 Host 修订级差异:`GET /api/tables/{t}/history?since=&limit=20` 的 items 元素。 */
+export interface HistoryEntry {
+  revision: string;
+  message: string;
+  time: string;
+  author: string;
+  /** row 是行名字符串(运行时),跳格请用同域的 rowId;「我的改动」行号在 MyChange 自有类型。 */
+  cells: Array<{ row: string; rowId: string; column: string; from: string; to: string }>;
+  created: string[];
+  deleted: string[];
+  schemaChanged: boolean;
 }
 
 export type EditorPhase =

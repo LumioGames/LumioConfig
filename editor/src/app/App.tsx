@@ -31,10 +31,14 @@ import { CommandPalette } from "../panels/CommandPalette";
 import { SubmitConfirm } from "../panels/SubmitConfirm";
 import { ShortcutsDialog } from "../panels/ShortcutsDialog";
 import { Blocked } from "../panels/Blocked";
+import { DiffTab, type MyChange } from "../panels/drawer/DiffTab";
+import type { HistoryEntry } from "../api/types";
+import { history as fetchHistory } from "../api/client";
 import { applyEditors, editorKinds, type EditorKind } from "../spreadsheet/editors";
 import { installLumioBadges } from "../spreadsheet/badges";
 import type { CellMeta } from "../spreadsheet/cellMeta";
 import { buildDraft, buildPatch, countDirty, extractTokens, mergeCurrentCells, rememberToken } from "../spreadsheet/extract";
+import { tokenEqual } from "../spreadsheet/tokens";
 import { tokenForDeleteKey, tokenForMenu, type FourStateKind } from "../spreadsheet/fourState";
 import { COMMAND, installInterceptors, newDraftRowKey } from "../spreadsheet/interceptors";
 import { applyDraft, applyRebase, buildCell, workbookFromWarehouse } from "../spreadsheet/projection";
@@ -81,6 +85,9 @@ export interface PocBridge {
   validateNow: () => Promise<unknown>;
   submitNow: () => Promise<unknown>;
   rebaseNow: () => Promise<unknown>;
+  lastJump: () => { rowKey: string; column: string } | null;
+  /** 真实 Univer 选区(facade 读回),e2e 断言跳格最终生效用。 */
+  activeSelection: () => { rowKey: string; column: string } | null;
 }
 
 declare global {
@@ -125,6 +132,8 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  const [historyEnabled, setHistoryEnabled] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [seenBannerOpen, setSeenBannerOpen] = useState(false);
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoExport, setAutoExport] = useState(false);
@@ -132,6 +141,8 @@ export function App() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<SheetsUniver | null>(null);
   const mapRef = useRef<ProjectionMap | null>(null);
+  /** 最近一次 jumpToCell 的目标(e2e 断言跳格真实生效用,快审 P1-1)。 */
+  const lastJumpRef = useRef<{ rowKey: string; column: string } | null>(null);
   const tableRef = useRef<TableResponse | null>(null);
   const interceptorsRef = useRef<{ dispose: () => void } | null>(null);
   const badgesRef = useRef<{ dispose: () => void } | null>(null);
@@ -777,6 +788,7 @@ export function App() {
         setTableNames(session.tables.map((item: SessionTableSummary) => ({ name: item.name, label: item.name })));
         setTableSummaries(session.tables);
         setRevision(session.revision);
+        setHistoryEnabled(Boolean((session as { capabilities?: { history?: boolean } }).capabilities?.history));
         setAutoCommit(session.settings.submit.autoCommit);
         setAutoExport(session.settings.submit.autoExport);
         dispatch({ type: "online", online: true });
@@ -963,21 +975,27 @@ export function App() {
       validateNow: () => validateNow(),
       submitNow: () => submitNow(),
       rebaseNow: () => rebaseNow(),
+      lastJump: () => lastJumpRef.current,
+      activeSelection: () => selectionRowColumn(),
       draftVersion: () => state.draftVersion,
       phase: () => state.phase,
     };
     return () => {
       delete window.__lumioPoc;
     };
-  }, [currentPatch, markDirty, mountWorkbook, persistDraft, rebaseNow, state.draftVersion, state.hint, state.phase, state.table, submitNow, validateNow, writeToken]);
+  }, [currentPatch, markDirty, mountWorkbook, persistDraft, rebaseNow, selectionRowColumn, state.draftVersion, state.hint, state.phase, state.table, submitNow, validateNow, writeToken]);
 
-  /** 跳格:按 rowKey/列名把选区移到目标格(补丁/错误/冲突/改动页签共用)。 */
+  /** 跳格:按 rowKey/列名把选区移到目标格(补丁/错误/冲突/改动页签共用)。
+   * Univer 0.25.1 没有 sheet.command.set-selection(快审 P1-1R:静默失败),
+   * 真实命令是 sheet.command.select-range,成功才记 lastJump 供 e2e 断言。 */
   const jumpToCell = useCallback((rowKey: string, column: string) => {
     const map = mapRef.current;
+    const workbook = instanceRef.current?.univerAPI?.getActiveWorkbook?.();
+    const sheet = workbook?.getActiveSheet?.();
     const apiHost = instanceRef.current?.univerAPI as {
-      executeCommand?: (id: string, params?: unknown) => unknown;
+      executeCommand?: (id: string, params?: unknown) => Promise<unknown>;
     } | undefined;
-    if (!map || !apiHost?.executeCommand) {
+    if (!map || !apiHost?.executeCommand || !workbook || !sheet) {
       return;
     }
     const row = map.rowKeys.indexOf(rowKey);
@@ -985,11 +1003,21 @@ export function App() {
     if (row < 0 || col < 0) {
       return;
     }
-    apiHost.executeCommand("sheet.command.set-selection", {
-      range: { startRow: row + 1, endRow: row + 1, startColumn: col, endColumn: col },
-    });
-    setSelection({ row: row + 1, column, rowKey });
-    setInspectorOpen((open) => open);
+    void apiHost
+      .executeCommand("sheet.command.select-range", {
+        unitId: workbook.getId(),
+        subUnit: sheet.getSheetId(),
+        range: { startRow: row + 1, endRow: row + 1, startColumn: col, endColumn: col },
+        reveal: true,
+      })
+      .then((result) => {
+        if (!result) {
+          return;
+        }
+        lastJumpRef.current = { rowKey, column };
+        setSelection({ row: row + 1, column, rowKey });
+        setInspectorOpen((open) => open);
+      });
   }, []);
 
   /** 检查器开合/侧栏折叠写入视图状态(localStorage)。 */
@@ -1156,6 +1184,28 @@ export function App() {
     };
   }, [conflicts, errors, selection]);
 
+  // 「改动」页签:进入时取修订级差异(Host history 端点,git 才有)。
+  useEffect(() => {
+    if (!hostMode || !historyEnabled || drawerTab !== "diff" || !drawerOpen) {
+      return;
+    }
+    let alive = true;
+    void fetchHistory(state.table)
+      .then((result: { items: HistoryEntry[] }) => {
+        if (alive) {
+          setHistoryEntries(result.items);
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setHistoryEntries([]);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [drawerOpen, drawerTab, historyEnabled, hostMode, state.table]);
+
   // Conflicted 自动切冲突页签并展开(§5 Conflicted 只允许冲突面板动作与取消)。
   useEffect(() => {
     if (state.phase === "Conflicted") {
@@ -1163,6 +1213,41 @@ export function App() {
       setDrawerOpen(true);
     }
   }, [state.phase]);
+
+  /** 「改动」页签的我的未提交改动:baseCells 与当前 token 的格级差。 */
+  const myChanges = useCallback((): MyChange[] => {
+    const map = mapRef.current;
+    const univerAPI = instanceRef.current?.univerAPI;
+    if (!map || !univerAPI) {
+      return [];
+    }
+    const tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
+    const changes: MyChange[] = [];
+    for (const rowKey of map.rowKeys) {
+      const rowIndex = map.rowKeys.indexOf(rowKey) + 1;
+      const current = tokens[rowKey] ?? {};
+      const base = map.baseCells?.[rowKey] ?? {};
+      const columns = new Set([...Object.keys(base), ...Object.keys(current)]);
+      for (const column of columns) {
+        if (column === "id" || column === "name") {
+          continue;
+        }
+        const now = current[column];
+        const before = base[column];
+        if (!now || tokenEqual(now, before)) {
+          continue;
+        }
+        changes.push({
+          row: rowIndex,
+          rowId: rowKey,
+          column,
+          from: before?.raw ?? "@missing",
+          to: now.raw,
+        });
+      }
+    }
+    return changes;
+  }, []);
 
   const view = phaseView(state, {
     revision: revision ?? undefined,
@@ -1234,7 +1319,7 @@ export function App() {
           columnCount={mapRef.current?.columns.length ?? 0}
           canEdit={canEdit(state)}
         />
-        <div className="app-grid-body">
+        <div className="app-grid-body" role="main">
           <div ref={containerRef} className="univer-root" data-testid="univer-root" />
           {inspectorOpen ? (
             <Inspector
@@ -1285,6 +1370,7 @@ export function App() {
             tone: conflicts.length > 0 ? "conflict" : undefined,
           },
           { id: "export", label: "导出" },
+          ...(historyEnabled ? [{ id: "diff" as const, label: "改动" }] : []),
         ]}
         active={drawerTab}
         open={drawerOpen}
@@ -1416,6 +1502,45 @@ export function App() {
             onJump={(conflict) => {
               if (conflict.rowId && conflict.column) {
                 jumpToCell(conflict.rowId, conflict.column);
+              }
+            }}
+          />
+        ) : null}
+        {drawerTab === "diff" ? (
+          <DiffTab
+            enabled={historyEnabled}
+            mine={myChanges()}
+            history={historyEntries}
+            basis="last-seen"
+            onBasisChange={() => {
+              /* 基准切换的下拉细化随后续需求;默认上次打开 */
+            }}
+            mark={false}
+            onMarkChange={() => {
+              /* 网格内高亮标记随后续需求(§8「在表格中标记」) */
+            }}
+            onJump={(rowValue, column) => {
+              const map = mapRef.current;
+              if (!map) {
+                return;
+              }
+              // 我的改动 row 是 1 基行号;历史条目传出 rowId(与 rowKeys 同域)。
+              // 兜底顺序(快审 P1-1):数字行号 → rowId 直命中 → 行名反查
+              // (tokens name.raw,M6-I 补丁页签同型)。
+              let rowKey: string | undefined;
+              if (typeof rowValue === "number") {
+                rowKey = map.rowKeys[rowValue - 1];
+              } else if (map.rowKeys.includes(rowValue)) {
+                rowKey = rowValue;
+              } else {
+                const univerAPI = instanceRef.current?.univerAPI;
+                if (univerAPI) {
+                  const tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
+                  rowKey = map.rowKeys.find((key) => tokens[key]?.name?.raw === rowValue);
+                }
+              }
+              if (rowKey) {
+                jumpToCell(rowKey, column);
               }
             }}
           />

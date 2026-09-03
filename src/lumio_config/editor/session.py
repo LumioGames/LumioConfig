@@ -179,6 +179,7 @@ class Session:
                 "commit": self.commit_allowed,
                 "export": ["csv", "tsv"],
                 "events": True,
+                "history": self.settings.vcs == "git",
             },
         }
 
