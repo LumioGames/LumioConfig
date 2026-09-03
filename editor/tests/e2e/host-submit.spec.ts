@@ -134,5 +134,16 @@ test.describe("host submit", () => {
       log.on("exit", () => resolve(out.trim()));
     });
     expect(subject.startsWith("config(skills):")).toBeTruthy();
+    // Task 14(E1):提交成功后,抽屉补丁页签顶部出现结果卡——新指纹 8 位裸 hex、
+    // 版本库动作、发号映射。依赖主 loop 把 Drawer/PatchTab 接进 App.tsx;
+    // 接线合入前 [data-testid=panel] 尚未挂载,本断言在接线后才能跑绿。
+    await page.getByTestId("tab-patch").click();
+    const card = page.getByTestId("submit-result");
+    await expect(card).toBeVisible();
+    const cardText = (await card.textContent()) ?? "";
+    expect(cardText).toMatch(/[0-9a-f]{8}/);
+    expect(cardText).not.toContain("sha256:");
+    expect(cardText).toContain("commit");
+    expect(cardText).toContain("main");
   });
 });
