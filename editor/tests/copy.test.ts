@@ -14,6 +14,8 @@ const sampleArgs: Record<string, unknown[]> = {
   patchTarget: ["main", "a10eb3f", true],
   submitConfirm: [3, "main", "a10eb3f", "skills", "update skills", true, false],
   requiredNoDefault: ["cost"],
+  rowCount: [4],
+  viewHint: [9],
 };
 
 interface CopyEntry {
