@@ -51,7 +51,7 @@ const FOUR_STATE_COMMAND_PREFIX = "lumio.four-state.";
 const STAMP_SCAN_MS = 1500;
 const STAMP_INTERVAL_MS = 120;
 
-function stampFourStateTestids(): void {
+function stampFourStateTestids(availability: FourStateHandlers["availability"]): void {
   const labelToKind = new Map(FOUR_STATE_MENU.map((item) => [item.label, item.kind] as const));
   for (const button of Array.from(document.querySelectorAll("button"))) {
     const kind = labelToKind.get((button.textContent ?? "").trim());
@@ -60,13 +60,34 @@ function stampFourStateTestids(): void {
     }
     button.setAttribute("data-lumio-four-state", kind);
     button.setAttribute("data-testid", `four-state-${kind}`);
-    // 0.25.1 的非 compact 菜单不渲染 tooltip → title 属性(runtime 实核
-    // ContextMenuPanel 项渲染),禁用项的 title 在此补盖。
     if (button.disabled) {
       const title = FOUR_STATE_DISABLED_TITLE[kind];
       if (title) {
         button.setAttribute("title", title);
       }
+    }
+  }
+  // 右键后选区更新晚于菜单构建(menuItemFactory 构建时读到旧选区),构建期的
+  // disabled$ 不可靠;菜单打开后的 stamp 轮询里按最新 availability 现场补盖
+  // 禁用态与 title,点击 handler 侧仍会兜底校验。
+  if (!availability) {
+    return;
+  }
+  const current = availability();
+  for (const [kind, available] of Object.entries(current) as Array<[FourStateKind, boolean]>) {
+    const button = document.querySelector<HTMLButtonElement>(`[data-lumio-four-state="${kind}"]`);
+    if (!button) {
+      continue;
+    }
+    const disabled = !available;
+    if (button.disabled !== disabled) {
+      button.disabled = disabled;
+    }
+    const title = FOUR_STATE_DISABLED_TITLE[kind];
+    if (disabled && title) {
+      button.setAttribute("title", title);
+    } else if (!disabled) {
+      button.removeAttribute("title");
     }
   }
 }
@@ -129,7 +150,7 @@ export function registerFourStateMenu(
     stamping = true;
     const startedAt = Date.now();
     const tick = () => {
-      stampFourStateTestids();
+      stampFourStateTestids(handlers.availability);
       if (Date.now() - startedAt < STAMP_SCAN_MS) {
         stampTimer = setTimeout(tick, STAMP_INTERVAL_MS);
       } else {

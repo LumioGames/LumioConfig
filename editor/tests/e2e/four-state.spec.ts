@@ -154,16 +154,40 @@ test.describe("four-state nine actions", () => {
   });
 
   test("native context menu drives four-state via four-state-* items", async ({ page }) => {
-    // 主 loop 接线前 createSheetsUniver(container) 不带 fourState handlers,
-    // 原生右键不会出现「单元格」分组;App.tsx 传参接线后删除下一行 skip。
-    test.skip(true, "等待主 loop 接线 createSheetsUniver(container, { fourState }) 后启用");
     await waitPoc(page);
-    const canvas = page.locator('[data-testid="univer-root"] canvas:visible').first();
-    await canvas.waitFor();
-    const box = await canvas.boundingBox();
-    expect(box).toBeTruthy();
-    // display_name 列(id 110 + name 140 + 60),中部数据行
-    await page.mouse.click(box!.x + 310, box!.y + box!.height * 0.5, { button: "right" });
+    // 坐标口径与 keyboard.spec 相同:canvas 原点 + 24px 列标带 + 24px 行高,
+    // 列宽 [110, 140, 其余 120]。右键数据行 1(40001),不用 height*0.5——
+    // fixture 只有 3 行数据,半高会落在 sheet 空行(rowKeys 之外)。
+    const origin = await page
+      .waitForFunction(() =>
+        [...document.querySelectorAll('[data-testid="univer-root"] canvas')].some(
+          (el) => el.getBoundingClientRect().width > 500,
+        ),
+      )
+      .then(() =>
+        page.evaluate(() => {
+          const el = [...document.querySelectorAll('[data-testid="univer-root"] canvas')].find(
+            (item) => item.getBoundingClientRect().width > 500,
+          );
+          const rect = el?.getBoundingClientRect();
+          if (!rect) {
+            throw new Error("grid canvas missing");
+          }
+          return { x: rect.x, y: rect.y };
+        }),
+      );
+    const columnCenter = (col: number) => {
+      const widths = [110, 140];
+      let x = 0;
+      for (let i = 0; i < col; i += 1) {
+        x += widths[i] ?? 120;
+      }
+      return x + (widths[col] ?? 120) / 2;
+    };
+    const row1Y = origin.y + 24 + 24 + 12;
+
+    // display_name 列(必填,有值)右键:四项全部可见
+    await page.mouse.click(origin.x + columnCenter(2), row1Y, { button: "right" });
     await expect(page.getByText("单元格")).toBeVisible();
     await expect(page.getByTestId("four-state-empty")).toBeVisible();
     await expect(page.getByTestId("four-state-null")).toBeVisible();
@@ -172,18 +196,13 @@ test.describe("four-state nine actions", () => {
     await page.getByTestId("four-state-empty").click();
     await expect
       .poll(() =>
-        page.evaluate(() => {
-          const tokens = window.__lumioPoc?.extractTokens() ?? {};
-          return Object.values(tokens).some((row) => row.display_name?.raw === '""');
-        }),
+        page.evaluate(() => window.__lumioPoc?.extractTokens()?.["40001"]?.display_name?.raw),
       )
-      .toBe(true);
+      .toBe('""');
 
     // 必填列(cooldown_frames)右键:设为缺列应禁用并带 title 提示
-    const columns = await page.evaluate(() => window.__lumioPoc?.map()?.columns ?? []);
-    const requiredCol = Math.max(0, columns.indexOf("cooldown_frames"));
-    const x = 110 + 140 + Math.max(0, requiredCol - 2) * 120 + 60;
-    await page.mouse.click(box!.x + x, box!.y + box!.height * 0.5, { button: "right" });
+    const cooldownCol = 5;
+    await page.mouse.click(origin.x + columnCenter(cooldownCol), row1Y, { button: "right" });
     const missing = page.getByTestId("four-state-missing");
     await expect(missing).toBeVisible();
     await expect(missing).toBeDisabled();

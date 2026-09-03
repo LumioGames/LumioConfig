@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { HostApiError, api, readToken } from "../api/client";
 import { LocalDraftSessionProvider } from "../api/draftSession";
 import type {
@@ -24,12 +24,14 @@ import { TableList } from "../panels/TableList";
 import { Button } from "../components/ui";
 import { applyEditors, editorKinds, type EditorKind } from "../spreadsheet/editors";
 import { buildDraft, buildPatch, countDirty, extractTokens, mergeCurrentCells, rememberToken } from "../spreadsheet/extract";
-import { FOUR_STATE_MENU, tokenForDeleteKey, tokenForMenu, type FourStateKind } from "../spreadsheet/fourState";
+import { tokenForDeleteKey, tokenForMenu, type FourStateKind } from "../spreadsheet/fourState";
 import { COMMAND, installInterceptors, newDraftRowKey } from "../spreadsheet/interceptors";
 import { applyDraft, applyRebase, buildCell, workbookFromWarehouse } from "../spreadsheet/projection";
 import { createSheetsUniver, loadWorkbook, type SheetsUniver } from "../spreadsheet/univer";
 import { applyViewState, captureViewState, load as loadView, save as saveView } from "../spreadsheet/viewState";
 import { INITIAL_EDITOR_STATE, canEdit, canRefreshOnly, canSave, canSubmit, canValidate, reducer, type EditorAction } from "./state";
+import { phaseView } from "./phaseView";
+import { COPY } from "./copy";
 
 const REPO_NAME = "LumioConfig";
 const AUTOSAVE_MS = 2000;
@@ -90,7 +92,6 @@ export function App() {
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoExport, setAutoExport] = useState(false);
   const patchRef = useRef<PatchObject | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; rowKey: string; column: string } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<SheetsUniver | null>(null);
   const mapRef = useRef<ProjectionMap | null>(null);
@@ -199,8 +200,10 @@ export function App() {
         if (rebasingRef.current) {
           return undefined;
         }
-        dispatch({ type: "failed", hint: "另一个标签页已保存，请刷新" });
-        setErrors([{ code: error.code, message: "另一个标签页已保存，请刷新" }]);
+        // ADR 0005:409 归类为 failKind,canRefreshOnly / 横幅按它分派,
+        // 不再对 hint 做子串判断。
+        dispatch({ type: "failed", hint: COPY.banner.failedDraftConflict, failKind: "DRAFT_VERSION_CONFLICT" });
+        setErrors([{ code: error.code, message: COPY.banner.failedDraftConflict }]);
         return undefined;
       }
       dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
@@ -213,7 +216,7 @@ export function App() {
 
   const writeToken = useCallback(async (rowKey: string, column: string, token: CellToken, force = false) => {
     if (!force && !canEdit(stateRef.current)) {
-      dispatch({ type: "hint", hint: "另一个标签页已保存，请刷新" });
+      dispatch({ type: "hint", hint: COPY.banner.failedDraftConflict });
       return;
     }
     const map = mapRef.current;
@@ -257,6 +260,66 @@ export function App() {
     containerRef.current?.replaceChildren();
   }, []);
 
+  /** 原生右键四态菜单(ADR 0004)的落点:取当前活动选区换算 rowKey/列。 */
+  const selectionRowColumn = useCallback((): { rowKey: string; column: string } | null => {
+    const map = mapRef.current;
+    if (!map) {
+      return null;
+    }
+    const univerAPI = instanceRef.current?.univerAPI as {
+      getActiveWorkbook?: () => {
+        getActiveSheet?: () => {
+          getSelection?: () => { getActiveRange?: () => { getRow?: () => number; getColumn?: () => number } | null } | null;
+        } | null;
+      } | null;
+    };
+    const range = univerAPI.getActiveWorkbook?.()?.getActiveSheet?.()?.getSelection?.()?.getActiveRange?.();
+    const row = range?.getRow?.();
+    const col = range?.getColumn?.();
+    if (row === undefined || col === undefined || row <= 0) {
+      return null;
+    }
+    const rowKey = map.rowKeys[row - 1];
+    const column = map.columns[col];
+    if (!rowKey || !column) {
+      return null;
+    }
+    return { rowKey, column };
+  }, []);
+
+  const applyFourStateToSelection = useCallback(
+    (kind: FourStateKind) => {
+      const target = selectionRowColumn();
+      if (!target) {
+        return;
+      }
+      const desc = columnOf(tableRef.current, target.column);
+      if (!desc) {
+        return;
+      }
+      const token = tokenForMenu(kind, desc);
+      if (!token) {
+        dispatch({ type: "hint", hint: COPY.validation.requiredMissingColumn });
+        return;
+      }
+      void writeToken(target.rowKey, target.column, token);
+    },
+    [selectionRowColumn, writeToken],
+  );
+
+  /** 菜单项可用性与 tokenForMenu 同源:能造出 token 的 kind 才可点。 */
+  const fourStateAvailability = useCallback((): Partial<Record<FourStateKind, boolean>> => {
+    const target = selectionRowColumn();
+    const desc = target ? columnOf(tableRef.current, target.column) : undefined;
+    if (!desc) {
+      return {};
+    }
+    return {
+      missing: tokenForMenu("missing", desc) !== null,
+      default: tokenForMenu("default", desc) !== null,
+    };
+  }, [selectionRowColumn]);
+
   const mountWorkbook = useCallback(
     (warehouse: TableResponse, draftVersion: number, staleHint?: string, overlay?: Draft) => {
       const container = containerRef.current;
@@ -268,7 +331,16 @@ export function App() {
       });
       applyViewState(workbook, warehouse.table, loadView(REPO_NAME, warehouse.table));
       const projectedAt = performance.now();
-      const instance = createSheetsUniver(container);
+      // ADR 0004:四态四项以「单元格」分组注入 Univer 原生右键,App 只传 handlers。
+      const instance = createSheetsUniver(container, {
+        fourState: {
+          empty: () => applyFourStateToSelection("empty"),
+          null: () => applyFourStateToSelection("null"),
+          default: () => applyFourStateToSelection("default"),
+          missing: () => applyFourStateToSelection("missing"),
+          availability: fourStateAvailability,
+        },
+      });
       loadWorkbook(instance.univerAPI, workbook);
       void applyEditors(instance.univerAPI, displayed, refOptionsRef.current);
       const paintedAt = performance.now();
@@ -329,7 +401,7 @@ export function App() {
         }
       }
     },
-    [markDirty],
+    [applyFourStateToSelection, fourStateAvailability, markDirty],
   );
 
   const openTable = useCallback(
@@ -460,7 +532,7 @@ export function App() {
           (item) => item.code === "VCS_COMMIT_FAILED" || item.code === "EXPORT_FAILED",
         );
         if (followUp) {
-          pendingHintRef.current = result.errors[0]?.code === "EXPORT_FAILED" ? "导表失败" : "未提交";
+          pendingHintRef.current = COPY.banner.failedVcs;
           dispatch({ type: "validated", ok: false, hint: pendingHintRef.current });
           openTable(stateRef.current.table);
           return result;
@@ -482,8 +554,8 @@ export function App() {
       }
       dispatch({ type: "submitted", fingerprint: result.result?.sourceFingerprint ?? stateRef.current.fingerprint });
       if (result.result?.vcs?.action === "none" && patch.ops.length > 0) {
-        pendingHintRef.current = "未提交";
-        dispatch({ type: "hint", hint: "未提交" });
+        pendingHintRef.current = COPY.status.uncommittedMerges(1);
+        dispatch({ type: "hint", hint: COPY.status.uncommittedMerges(1) });
       }
       setDirtyCounts((current) => ({ ...current, [stateRef.current.table]: 0 }));
       setErrors([]);
@@ -678,7 +750,7 @@ export function App() {
         }
         const token = tokenForMenu(kind, desc);
         if (!token) {
-          dispatch({ type: "hint", hint: "required 列不能设为缺列" });
+          dispatch({ type: "hint", hint: COPY.validation.requiredMissingColumn });
           return;
         }
         await writeToken(rowKey, column, token);
@@ -690,7 +762,7 @@ export function App() {
         }
         const result = tokenForDeleteKey(desc);
         if (!result.token) {
-          dispatch({ type: "hint", hint: result.hint ?? "required 列不能清空" });
+          dispatch({ type: "hint", hint: result.hint ?? COPY.validation.requiredNoDefault(column) });
           return result.hint;
         }
         await writeToken(rowKey, column, result.token);
@@ -791,32 +863,7 @@ export function App() {
     };
   }, [currentPatch, markDirty, mountWorkbook, persistDraft, rebaseNow, state.draftVersion, state.hint, state.phase, state.table, submitNow, validateNow, writeToken]);
 
-  const onContextMenu = (event: MouseEvent<HTMLDivElement>) => {
-    const map = mapRef.current;
-    if (!map) {
-      return;
-    }
-    const univerAPI = instanceRef.current?.univerAPI as {
-      getActiveWorkbook?: () => {
-        getActiveSheet?: () => {
-          getSelection?: () => { getActiveRange?: () => { getRow?: () => number; getColumn?: () => number } | null } | null;
-        } | null;
-      } | null;
-    };
-    const range = univerAPI.getActiveWorkbook?.()?.getActiveSheet?.()?.getSelection?.()?.getActiveRange?.();
-    const row = range?.getRow?.();
-    const col = range?.getColumn?.();
-    if (row === undefined || col === undefined || row <= 0) {
-      return;
-    }
-    const rowKey = map.rowKeys[row - 1];
-    const column = map.columns[col];
-    if (!rowKey || !column) {
-      return;
-    }
-    event.preventDefault();
-    setMenu({ x: event.clientX, y: event.clientY, rowKey, column });
-  };
+  const view = phaseView(state);
 
   return (
     <div className="app-shell">
@@ -826,36 +873,7 @@ export function App() {
           ref={containerRef}
           className="univer-root"
           data-testid="univer-root"
-          onContextMenu={onContextMenu}
         />
-        {menu ? (
-          <ul
-            className="four-state-menu"
-            data-testid="four-state-menu"
-            style={{ left: menu.x, top: menu.y }}
-          >
-            {FOUR_STATE_MENU.map((item) => (
-              <li key={item.kind}>
-                <Button
-                  variant="menu"
-                  data-testid={`four-state-${item.kind}`}
-                  onClick={() => {
-                    const desc = columnOf(tableRef.current, menu.column);
-                    const token = desc ? tokenForMenu(item.kind, desc) : null;
-                    if (!token) {
-                      dispatch({ type: "hint", hint: "required 列不能设为缺列" });
-                    } else {
-                      writeToken(menu.rowKey, menu.column, token);
-                    }
-                    setMenu(null);
-                  }}
-                >
-                  {item.label}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
         {state.phase === "Conflicted" ? (
           <ConflictPanel
             conflicts={conflicts}
@@ -941,7 +959,7 @@ export function App() {
             data-testid="draft-refresh"
             onClick={() => window.location.reload()}
           >
-            刷新
+            {COPY.bannerActions.refresh}
           </Button>
         ) : null}
         <ErrorPanel errors={errors} />
@@ -953,7 +971,7 @@ export function App() {
           draftVersion={state.draftVersion}
           dirtyCount={state.dirtyCount}
           online={state.online}
-          phase={state.phase}
+          phase={view.label}
         />
       </div>
     </div>
