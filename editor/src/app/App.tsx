@@ -31,10 +31,14 @@ import { CommandPalette } from "../panels/CommandPalette";
 import { SubmitConfirm } from "../panels/SubmitConfirm";
 import { ShortcutsDialog } from "../panels/ShortcutsDialog";
 import { Blocked } from "../panels/Blocked";
+import { DiffTab, type MyChange } from "../panels/drawer/DiffTab";
+import type { HistoryEntry } from "../api/types";
+import { history as fetchHistory } from "../api/client";
 import { applyEditors, editorKinds, type EditorKind } from "../spreadsheet/editors";
 import { installLumioBadges } from "../spreadsheet/badges";
 import type { CellMeta } from "../spreadsheet/cellMeta";
 import { buildDraft, buildPatch, countDirty, extractTokens, mergeCurrentCells, rememberToken } from "../spreadsheet/extract";
+import { tokenEqual } from "../spreadsheet/tokens";
 import { tokenForDeleteKey, tokenForMenu, type FourStateKind } from "../spreadsheet/fourState";
 import { COMMAND, installInterceptors, newDraftRowKey } from "../spreadsheet/interceptors";
 import { applyDraft, applyRebase, buildCell, workbookFromWarehouse } from "../spreadsheet/projection";
@@ -125,6 +129,8 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
+  const [historyEnabled, setHistoryEnabled] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [seenBannerOpen, setSeenBannerOpen] = useState(false);
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoExport, setAutoExport] = useState(false);
@@ -777,6 +783,7 @@ export function App() {
         setTableNames(session.tables.map((item: SessionTableSummary) => ({ name: item.name, label: item.name })));
         setTableSummaries(session.tables);
         setRevision(session.revision);
+        setHistoryEnabled(Boolean((session as { capabilities?: { history?: boolean } }).capabilities?.history));
         setAutoCommit(session.settings.submit.autoCommit);
         setAutoExport(session.settings.submit.autoExport);
         dispatch({ type: "online", online: true });
@@ -1156,6 +1163,28 @@ export function App() {
     };
   }, [conflicts, errors, selection]);
 
+  // 「改动」页签:进入时取修订级差异(Host history 端点,git 才有)。
+  useEffect(() => {
+    if (!hostMode || !historyEnabled || drawerTab !== "diff" || !drawerOpen) {
+      return;
+    }
+    let alive = true;
+    void fetchHistory(state.table)
+      .then((result: { items: HistoryEntry[] }) => {
+        if (alive) {
+          setHistoryEntries(result.items);
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setHistoryEntries([]);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [drawerOpen, drawerTab, historyEnabled, hostMode, state.table]);
+
   // Conflicted 自动切冲突页签并展开(§5 Conflicted 只允许冲突面板动作与取消)。
   useEffect(() => {
     if (state.phase === "Conflicted") {
@@ -1163,6 +1192,41 @@ export function App() {
       setDrawerOpen(true);
     }
   }, [state.phase]);
+
+  /** 「改动」页签的我的未提交改动:baseCells 与当前 token 的格级差。 */
+  const myChanges = useCallback((): MyChange[] => {
+    const map = mapRef.current;
+    const univerAPI = instanceRef.current?.univerAPI;
+    if (!map || !univerAPI) {
+      return [];
+    }
+    const tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
+    const changes: MyChange[] = [];
+    for (const rowKey of map.rowKeys) {
+      const rowIndex = map.rowKeys.indexOf(rowKey) + 1;
+      const current = tokens[rowKey] ?? {};
+      const base = map.baseCells?.[rowKey] ?? {};
+      const columns = new Set([...Object.keys(base), ...Object.keys(current)]);
+      for (const column of columns) {
+        if (column === "id" || column === "name") {
+          continue;
+        }
+        const now = current[column];
+        const before = base[column];
+        if (!now || tokenEqual(now, before)) {
+          continue;
+        }
+        changes.push({
+          row: rowIndex,
+          rowId: rowKey,
+          column,
+          from: before?.raw ?? "@missing",
+          to: now.raw,
+        });
+      }
+    }
+    return changes;
+  }, []);
 
   const view = phaseView(state, {
     revision: revision ?? undefined,
@@ -1285,6 +1349,7 @@ export function App() {
             tone: conflicts.length > 0 ? "conflict" : undefined,
           },
           { id: "export", label: "导出" },
+          ...(historyEnabled ? [{ id: "diff" as const, label: "改动" }] : []),
         ]}
         active={drawerTab}
         open={drawerOpen}
@@ -1416,6 +1481,36 @@ export function App() {
             onJump={(conflict) => {
               if (conflict.rowId && conflict.column) {
                 jumpToCell(conflict.rowId, conflict.column);
+              }
+            }}
+          />
+        ) : null}
+        {drawerTab === "diff" ? (
+          <DiffTab
+            enabled={historyEnabled}
+            mine={myChanges()}
+            history={historyEntries}
+            basis="last-seen"
+            onBasisChange={() => {
+              /* 基准切换的下拉细化随后续需求;默认上次打开 */
+            }}
+            mark={false}
+            onMarkChange={() => {
+              /* 网格内高亮标记随后续需求(§8「在表格中标记」) */
+            }}
+            onJump={(rowValue, column) => {
+              const map = mapRef.current;
+              if (!map) {
+                return;
+              }
+              // 我的改动 row 是 1 基表行号;Host 历史 cells[].row 运行时是
+              // 行 id/名字符串(类型标 number,C3 concern),两种都兜。
+              const rowKey =
+                typeof rowValue === "number"
+                  ? map.rowKeys[rowValue - 1]
+                  : map.rowKeys.find((key) => key === rowValue);
+              if (rowKey) {
+                jumpToCell(rowKey, column);
               }
             }}
           />

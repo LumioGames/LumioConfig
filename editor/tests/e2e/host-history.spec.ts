@@ -174,7 +174,7 @@ test.describe("host history (git)", () => {
   });
 
   // 依赖 Drawer / App 接线(E 阵列与主 loop 合入后启用):改动页签在抽屉中渲染两次修订,点击条目跳格。
-  test.skip("改动页签列出两次修订与格级差异并可跳格(待 Drawer/App 接线)", async ({ page }) => {
+  test("改动页签列出两次修订与格级差异并可跳格(待 Drawer/App 接线)", async ({ page }) => {
     test.skip(!host, "host missing");
     if (!host) {
       throw new Error("host missing");
@@ -232,7 +232,7 @@ test.describe("host history (none)", () => {
   });
 
   // 依赖 Drawer / App 接线(E 阵列与主 loop 合入后启用):svn / none 桩下 tab-diff 不出现。
-  test.skip("svn / none 桩下改动页签不出现(待 Drawer/App 接线)", async ({ page }) => {
+  test("svn / none 桩下改动页签不出现(待 Drawer/App 接线)", async ({ page }) => {
     test.skip(!host, "host missing");
     if (!host) {
       throw new Error("host missing");
