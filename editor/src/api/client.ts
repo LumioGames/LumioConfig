@@ -1,3 +1,5 @@
+import type { HistoryEntry } from "./types";
+
 export class HostApiError extends Error {
   readonly code: string;
   readonly errors: unknown[];
@@ -49,6 +51,20 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new HostApiError(payload.code ?? "ERROR", payload.message ?? response.statusText, payload.errors ?? []);
   }
   return payload as T;
+}
+
+/** §9:修订级差异。`since` 缺省取最近 `limit` 条(Host 上限 100)。 */
+export async function history(
+  table: string,
+  since?: string,
+  limit = 20,
+): Promise<{ items: HistoryEntry[] }> {
+  const params = new URLSearchParams();
+  if (since) {
+    params.set("since", since);
+  }
+  params.set("limit", String(limit));
+  return api(`/api/tables/${encodeURIComponent(table)}/history?${params.toString()}`);
 }
 
 export async function subscribeEvents(handler: (name: string, data: unknown) => void): Promise<() => void> {
