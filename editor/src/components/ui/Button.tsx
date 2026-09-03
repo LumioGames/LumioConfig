@@ -5,18 +5,28 @@ export type ButtonVariant = "default" | "primary" | "nav" | "menu";
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   active?: boolean;
+  disabledReason?: string;
 }
 
 function cx(...parts: Array<string | false | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
-export function Button({ variant = "default", active = false, className, type = "button", ...rest }: ButtonProps) {
+export function Button({
+  variant = "default",
+  active = false,
+  disabledReason,
+  className,
+  type = "button",
+  ...rest
+}: ButtonProps) {
   return (
     <button
       type={type}
       className={cx("btn", `btn--${variant}`, active && "is-active", className)}
       {...rest}
+      title={disabledReason}
+      aria-disabled={disabledReason !== undefined ? true : undefined}
     />
   );
 }

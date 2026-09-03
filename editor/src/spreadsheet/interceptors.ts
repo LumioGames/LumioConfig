@@ -1,8 +1,13 @@
 import type { CellToken, ProjectionMap, TableColumn } from "../api/types";
 import { DRAFT_ID_LABEL, readLumioMeta, styleIdFor, tokenFromMeta, writeLumioCustom } from "./cellMeta";
+import { COMMAND } from "./commands";
 import { rememberToken } from "./extract";
 import { tokenForDeleteKey } from "./fourState";
 import { numberOutOfRange } from "./editors";
+
+// COMMAND 常量已按 ADR 0004 移至 spreadsheet/commands.ts;此处 re-export 保住
+// 既有导入方(App.tsx、tests/interceptors.test.ts)不换文件。
+export { COMMAND } from "./commands";
 
 export const HINTS = {
   formula: "公式不可用，配表不持久化公式",
@@ -12,41 +17,6 @@ export const HINTS = {
   pasteFormula: "粘贴含公式，已仅保留值",
   header: "表头不可编辑",
   insertRow: "新行将在合入时发号",
-} as const;
-
-export const COMMAND = {
-  setRangeValues: "sheet.command.set-range-values",
-  setRangeValuesMutation: "sheet.mutation.set-range-values",
-  merge: "sheet.command.add-worksheet-merge",
-  mergeAll: "sheet.command.add-worksheet-merge-all",
-  mergeVertical: "sheet.command.add-worksheet-merge-vertical",
-  mergeHorizontal: "sheet.command.add-worksheet-merge-horizontal",
-  insertColBefore: "sheet.command.insert-col-before",
-  insertColAfter: "sheet.command.insert-col-after",
-  insertColByRange: "sheet.command.insert-col-by-range",
-  insertCol: "sheet.command.insert-col",
-  removeColConfirm: "sheet.command.remove-col-confirm",
-  removeColByRange: "sheet.command.remove-col-by-range",
-  confirmRemoveCol: "sheet.confirm.remove-col",
-  insertRowBefore: "sheet.command.insert-row-before",
-  insertRowAfter: "sheet.command.insert-row-after",
-  insertRowByRange: "sheet.command.insert-row-by-range",
-  removeRowConfirm: "sheet.command.remove-row-confirm",
-  removeRowByRange: "sheet.command.remove-row-by-range",
-  confirmRemoveRow: "sheet.confirm.remove-row",
-  paste: "univer.command.paste",
-  pasteNamed: "sheet.command.paste",
-  pasteShortKey: "sheet.command.paste-by-short-key",
-  pasteValue: "sheet.command.paste-value",
-  pasteOptional: "sheet.command.optional-paste",
-  pasteBesidesBorder: "sheet.command.paste-besides-border",
-  pasteFormula: "sheet.command.paste-formula",
-  insertFunction: "formula-ui.operation.insert-function",
-  moreFunctions: "formula-ui.operation.more-functions",
-  clearSelectionContent: "sheet.command.clear-selection-content",
-  clearSelectionAll: "sheet.command.clear-selection-all",
-  clearContent: "sheet.command.clear-selection",
-  autoFill: "sheet.command.auto-fill",
 } as const;
 
 const MERGE_IDS = new Set<string>([
