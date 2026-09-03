@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import zlib from "node:zlib";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const editorRoot = path.resolve(here, "../..");
@@ -24,6 +25,79 @@ function copyRepo(dst: string) {
   }
   fs.copyFileSync(path.join(repoRoot, "repository.yaml"), path.join(dst, "repository.yaml"));
   // 不拷 .lumio:键盘用例从零脏格起步。
+}
+
+/**
+ * 解码 Playwright 截图 PNG(仅支持无调色板的 RGB/RGBA 8bit)并统计
+ * invalid 样式色 #C5221F 的核心笔画像素。只给 T0 的无红字守卫用,不追求通用。
+ */
+function countRedDominantPixels(png: Buffer): number {
+  if (png.readUInt32BE(0) !== 0x89504e47) {
+    throw new Error("not a png");
+  }
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  let bitDepth = 0;
+  let colorType = 0;
+  const idat: Buffer[] = [];
+  while (offset < png.length) {
+    const length = png.readUInt32BE(offset);
+    const type = png.toString("ascii", offset + 4, offset + 8);
+    const data = png.subarray(offset + 8, offset + 8 + length);
+    if (type === "IHDR") {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data[8];
+      colorType = data[9];
+    } else if (type === "IDAT") {
+      idat.push(data);
+    } else if (type === "IEND") {
+      break;
+    }
+    offset += 12 + length;
+  }
+  if (bitDepth !== 8 || (colorType !== 2 && colorType !== 6)) {
+    throw new Error(`unsupported png: depth=${bitDepth} color=${colorType}`);
+  }
+  const channels = colorType === 6 ? 4 : 3;
+  const stride = width * channels;
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  let prev = Buffer.alloc(stride);
+  let count = 0;
+  for (let y = 0; y < height; y += 1) {
+    const rowStart = y * (stride + 1);
+    const filter = raw[rowStart];
+    const row = Buffer.from(raw.subarray(rowStart + 1, rowStart + 1 + stride));
+    for (let x = 0; x < stride; x += 1) {
+      const left = x >= channels ? row[x - channels] : 0;
+      const up = prev[x];
+      const upLeft = x >= channels ? prev[x - channels] : 0;
+      if (filter === 1) {
+        row[x] = (row[x] + left) & 0xff;
+      } else if (filter === 2) {
+        row[x] = (row[x] + up) & 0xff;
+      } else if (filter === 3) {
+        row[x] = (row[x] + ((left + up) >> 1)) & 0xff;
+      } else if (filter === 4) {
+        const p = left + up - upLeft;
+        const pa = Math.abs(p - left);
+        const pb = Math.abs(p - up);
+        const pc = Math.abs(p - upLeft);
+        row[x] = (row[x] + (pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft)) & 0xff;
+      }
+    }
+    for (let x = 0; x < stride; x += channels) {
+      const r = row[x];
+      const g = row[x + 1];
+      const b = row[x + 2];
+      if (r > 170 && g < 60 && b < 60) {
+        count += 1;
+      }
+    }
+    prev = row;
+  }
+  return count;
 }
 
 async function gitInit(root: string) {
@@ -175,6 +249,13 @@ test.describe("keyboard edits over Host static build", () => {
     await waitPoc(page, host.url);
     await page.waitForTimeout(500);
     await expect(page.getByTestId("status-hint")).toHaveText("就绪");
+    // S03 无红字:invalid 样式色 #C5221F 是 canvas 文本,模型层无 DOM 可断言,
+    // 退回像素口径。判据收紧到该色核心笔画(r>170 且 g/b<60):干净加载实测 0,
+    // 排除 Univer 自带 DV 角标(≈rgb(183,87,0),g≈87)与工具栏橙色图标的噪
+    // 声;阳性对照(damage 键入 "abc")实测 24,信号可分辨。
+    const shot = await page.getByTestId("univer-root").screenshot();
+    const red = countRedDominantPixels(shot);
+    expect(red, "invalid-red pixels on clean load").toBe(0);
   });
 
   test("T3 Delete on a required column without default keeps token and canvas", async ({ page }) => {
