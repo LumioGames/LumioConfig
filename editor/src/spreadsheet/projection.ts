@@ -104,10 +104,19 @@ function displayFromEffective(value: unknown): {
   return { v: text, forceString };
 }
 
+export interface BuildCellOptions {
+  /**
+   * 快照路径(整表加载)无 mutation 合并,空值保持省略 v;
+   * 写路径默认显式 v: null,Univer 的 set-range-values 合并才会清掉旧值(评审 P2-1)。
+   */
+  snapshot?: boolean;
+}
+
 export function buildCell(
   token: CellToken,
   column: TableColumn,
   rowKey: string,
+  options?: BuildCellOptions,
 ): WorkbookCell {
   const readOnly = column.readOnly === true || column.name === "id";
   const { v, forceString } = displayValue(token, column, rowKey);
@@ -126,6 +135,10 @@ export function buildCell(
   };
   if (v !== undefined) {
     cell.v = v;
+  } else if (!options?.snapshot) {
+    // Univer ICellData.v 为 Nullable<CellValue>;本地 WorkbookCell 镜像未含 null,
+    // 写路径在此显式置空以清画布旧文本(四态徽标仍只进 custom.lumio.badge)。
+    (cell as { v?: string | number | boolean | null }).v = null;
   }
   if (forceString) {
     cell.t = 4;
@@ -180,7 +193,7 @@ export function buildWorkbook(
         raw: "@missing",
         effective: null,
       };
-      line[String(colIndex)] = buildCell(token, column, rowKey);
+      line[String(colIndex)] = buildCell(token, column, rowKey, { snapshot: true });
     });
     cellData[String(sheetRow)] = line;
   });
