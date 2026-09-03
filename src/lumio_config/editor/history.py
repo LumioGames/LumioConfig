@@ -74,7 +74,9 @@ def _revision_item(adapter: VcsAdapter, revision: HistoryRevision, parent: str, 
         for row_id in sorted(set(child_map) & set(parent_map)):
             child_row = child_map[row_id]
             parent_row = parent_map[row_id]
-            name = _cell_token(child_row, "name") or row_id
+            # _cell_token 缺列返回 "@missing"(truthy),占位值不作行名,回退 row_id。
+            name_token = _cell_token(child_row, "name")
+            name = row_id if name_token in (None, "@missing", "@default", "null", '') else name_token
             for column in sorted(set(child_row) | set(parent_row)):
                 child_token = _cell_token(child_row, column) or "@missing"
                 parent_token = _cell_token(parent_row, column) or "@missing"

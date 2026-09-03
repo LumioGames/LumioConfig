@@ -100,7 +100,19 @@ python tools/lumio_config.py serve
 
 ## 「改动」页签（修订级差异，R-00383）
 
-`GET /api/tables/{table}/history?since=<revisionId>&limit=20` → 每修订 `{ revision, message, time, author, cells: [{ row, rowId, column, from, to }], created, deleted, schemaChanged }`。Host 用 `VcsAdapter` 白名单命令（`git log` / `git show`）取两修订快照，经 `load_sources` 解析后按稳定 id 逐格比对；Schema 变化的修订只标 `schemaChanged`，不伪造格级差异。`vcs=svn/none` 返回空列表且 `capabilities.history=false`，页签不出现；前端不调 git。
+`GET /api/tables/{table}/history?since=<revisionId>&limit=20` → 每修订 `{ revision, message, time, author, cells: [{ row, rowId, column, from, to }], created, deleted, schemaChanged }`。
+
+```jsonc
+// GET /api/tables/skills/history?limit=20
+{ "items": [ {
+  "revision": "9f2a1c0", "message": "config(skills): raise fireball damage to 140",
+  "time": "2026-09-03T12:00:00+08:00", "author": "cui",
+  "cells": [ { "row": "fireball", "rowId": "40001", "column": "damage", "from": "130", "to": "140" } ],
+  "created": [], "deleted": [], "schemaChanged": false } ] }
+// row 是行名(展示用),跳格用 rowId(与表格行键同域);since=未知修订返回空 items
+```
+
+Host 用 `VcsAdapter` 白名单命令（`git log` / `git show`）取两修订快照，经 `load_sources` 解析后按稳定 id 逐格比对；Schema 变化的修订只标 `schemaChanged`，不伪造格级差异。`vcs=svn/none` 返回空列表且 `capabilities.history=false`，页签不出现；前端不调 git。
 
 ## 错误码速查（编辑器路径）
 
@@ -112,3 +124,4 @@ python tools/lumio_config.py serve
 | `SCHEMA_CHANGED` | 表结构已变化 | Failed 横幅 + 刷新重放 |
 | `VCS_COMMIT_FAILED` / `EXPORT_FAILED` | 改动已合入但 commit / 导表未完成 | Failed 横幅（终端手动处理） |
 | `UNKNOWN_TABLE` | 表不存在 | 404
+| `BAD_LIMIT` | history 的 limit 不是 1–100 整数 | 422(改动页签拉取失败提示) |

@@ -45,10 +45,11 @@ export interface DiffTabProps {
   /** 「在表格中标记」开关:开时接线方在网格里高亮改动格。 */
   mark: boolean;
   onMarkChange: (mark: boolean) => void;
-  onJump: (row: number, column: string) => void;
+  /** 历史条目传出 rowId(与 ProjectionMap.rowKeys 同域);「我的改动」传 1 基行号。 */
+  onJump: (row: number | string, column: string) => void;
 }
 
-function cellLine(row: number, column: string, from: string, to: string): string {
+function cellLine(row: number | string, column: string, from: string, to: string): string {
   return `${row} · ${column} · ${from} → ${to}`;
 }
 
@@ -165,7 +166,7 @@ export function DiffTab({
                         type="button"
                         className="diff-tab__cell"
                         data-testid="diff-cell"
-                        onClick={() => onJump(cell.row, cell.column)}
+                        onClick={() => onJump(cell.rowId, cell.column)}
                       >
                         {cellLine(cell.row, cell.column, cell.from, cell.to)}
                       </button>

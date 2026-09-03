@@ -162,6 +162,7 @@ test.describe("host history (git)", () => {
     const top = items[0].cells.find((cell) => cell.column === "damage");
     expect(top).toBeTruthy();
     expect(top!.row).toBe("fireball");
+    expect(top!.rowId).toBe("40001");
     expect(top!.from).toBe("130");
     expect(top!.to).toBe("140");
     const middle = items[1].cells.find((cell) => cell.column === "damage");
@@ -174,7 +175,7 @@ test.describe("host history (git)", () => {
   });
 
   // 依赖 Drawer / App 接线(E 阵列与主 loop 合入后启用):改动页签在抽屉中渲染两次修订,点击条目跳格。
-  test("改动页签列出两次修订与格级差异并可跳格(待 Drawer/App 接线)", async ({ page }) => {
+  test("改动页签列出两次修订与格级差异并可跳格", async ({ page }) => {
     test.skip(!host, "host missing");
     if (!host) {
       throw new Error("host missing");
@@ -185,11 +186,13 @@ test.describe("host history (git)", () => {
     const revision = page.getByTestId("diff-revision").first();
     await expect(revision).toContainText("config(skills): raise fireball damage to 140");
     await expect(page.getByTestId("diff-cell").first()).toContainText("fireball · damage · 130 → 140");
+    // 跳格必须真实生效(快审 P1-1):断言 set-selection 命中 fireball 行的 rowId(40001)
+    // 与 damage 列——rowId 与 rowKeys 同域,行名「fireball」不在 rowKeys 里,
+    // 该断言只有走通 rowId 直命中分支才可能通过。
     await page.getByTestId("diff-cell").first().click();
-    await page.waitForFunction(() => {
-      const cell = window.__lumioPoc?.extractTokens?.();
-      return Boolean(cell);
-    });
+    await expect
+      .poll(() => page.evaluate(() => window.__lumioPoc?.lastJump?.() ?? null))
+      .toEqual({ rowKey: "40001", column: "damage" });
   });
 });
 

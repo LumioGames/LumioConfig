@@ -85,6 +85,7 @@ export interface PocBridge {
   validateNow: () => Promise<unknown>;
   submitNow: () => Promise<unknown>;
   rebaseNow: () => Promise<unknown>;
+  lastJump: () => { rowKey: string; column: string } | null;
 }
 
 declare global {
@@ -138,6 +139,8 @@ export function App() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const instanceRef = useRef<SheetsUniver | null>(null);
   const mapRef = useRef<ProjectionMap | null>(null);
+  /** 最近一次 jumpToCell 的目标(e2e 断言跳格真实生效用,快审 P1-1)。 */
+  const lastJumpRef = useRef<{ rowKey: string; column: string } | null>(null);
   const tableRef = useRef<TableResponse | null>(null);
   const interceptorsRef = useRef<{ dispose: () => void } | null>(null);
   const badgesRef = useRef<{ dispose: () => void } | null>(null);
@@ -970,6 +973,7 @@ export function App() {
       validateNow: () => validateNow(),
       submitNow: () => submitNow(),
       rebaseNow: () => rebaseNow(),
+      lastJump: () => lastJumpRef.current,
       draftVersion: () => state.draftVersion,
       phase: () => state.phase,
     };
@@ -995,6 +999,7 @@ export function App() {
     apiHost.executeCommand("sheet.command.set-selection", {
       range: { startRow: row + 1, endRow: row + 1, startColumn: col, endColumn: col },
     });
+    lastJumpRef.current = { rowKey, column };
     setSelection({ row: row + 1, column, rowKey });
     setInspectorOpen((open) => open);
   }, []);
@@ -1503,12 +1508,21 @@ export function App() {
               if (!map) {
                 return;
               }
-              // 我的改动 row 是 1 基表行号;Host 历史 cells[].row 运行时是
-              // 行 id/名字符串(类型标 number,C3 concern),两种都兜。
-              const rowKey =
-                typeof rowValue === "number"
-                  ? map.rowKeys[rowValue - 1]
-                  : map.rowKeys.find((key) => key === rowValue);
+              // 我的改动 row 是 1 基行号;历史条目传出 rowId(与 rowKeys 同域)。
+              // 兜底顺序(快审 P1-1):数字行号 → rowId 直命中 → 行名反查
+              // (tokens name.raw,M6-I 补丁页签同型)。
+              let rowKey: string | undefined;
+              if (typeof rowValue === "number") {
+                rowKey = map.rowKeys[rowValue - 1];
+              } else if (map.rowKeys.includes(rowValue)) {
+                rowKey = rowValue;
+              } else {
+                const univerAPI = instanceRef.current?.univerAPI;
+                if (univerAPI) {
+                  const tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
+                  rowKey = map.rowKeys.find((key) => tokens[key]?.name?.raw === rowValue);
+                }
+              }
               if (rowKey) {
                 jumpToCell(rowKey, column);
               }

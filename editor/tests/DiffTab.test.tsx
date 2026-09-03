@@ -37,7 +37,7 @@ const HISTORY: HistoryEntry[] = [
     message: "config(skills): rename frostbolt",
     time: "2026-09-01T10:00:00+08:00",
     author: "Editor Test",
-    cells: [{ row: 4, rowId: "40002", column: "name", from: "frostbolt", to: "frost_bolt" }],
+    cells: [{ row: "frostbolt", rowId: "40002", column: "name", from: "frostbolt", to: "frost_bolt" }],
     created: ["40003"],
     deleted: [],
     schemaChanged: false,
@@ -52,7 +52,7 @@ interface MountOptions {
   mark?: boolean;
   onBasisChange?: (basis: DiffBasis) => void;
   onMarkChange?: (mark: boolean) => void;
-  onJump?: (row: number, column: string) => void;
+  onJump?: (row: number | string, column: string) => void;
 }
 
 function mountTab(options: MountOptions = {}): HTMLDivElement {
@@ -91,7 +91,7 @@ describe("DiffTab", () => {
     expect(mine.textContent).toContain("3 · damage · 120 → 130");
     expect(ai.textContent).toContain("AI");
     expect(ai.textContent).toContain("a10eb3f · config(skills): rename frostbolt · 2026-09-01T10:00:00+08:00");
-    expect(ai.textContent).toContain("4 · name · frostbolt → frost_bolt");
+    expect(ai.textContent).toContain("frostbolt · name · frostbolt → frost_bolt");
     expect(ai.textContent).toContain("新增行：40003");
     // 分组色只用 tokens:我的=琥珀(--color-dirty),AI=靛蓝(--color-ai)。
     expect(mine.querySelector('[data-testid="diff-group-mine-title"]')?.getAttribute("style")).toContain(
@@ -143,7 +143,7 @@ describe("DiffTab", () => {
     act(() => {
       aiCell.click();
     });
-    expect(onJump).toHaveBeenCalledWith(4, "name");
+    expect(onJump).toHaveBeenCalledWith("40002", "name");
   });
 
   it("「在表格中标记」开关回调 onMarkChange", () => {

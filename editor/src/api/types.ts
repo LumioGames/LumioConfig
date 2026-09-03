@@ -189,7 +189,8 @@ export interface HistoryEntry {
   message: string;
   time: string;
   author: string;
-  cells: Array<{ row: number; rowId: string; column: string; from: string; to: string }>;
+  /** row 是行名字符串(运行时),跳格请用同域的 rowId;「我的改动」行号在 MyChange 自有类型。 */
+  cells: Array<{ row: string; rowId: string; column: string; from: string; to: string }>;
   created: string[];
   deleted: string[];
   schemaChanged: boolean;
