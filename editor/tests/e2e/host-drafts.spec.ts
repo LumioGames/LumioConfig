@@ -151,8 +151,12 @@ test.describe("host drafts", () => {
       return window.__lumioPoc?.saveDraftNow();
     });
     expect(second).toBeUndefined();
-    await expect(page2.getByTestId("status-hint")).toContainText("标签页");
+    // D1(v3)起「标签页」提示可以在 banner 横幅或 status-hint live region 里:
+    // 旧接线只有 status-hint 红字;新接线是 Banner 横幅 + 视觉隐藏 live region。
+    const bannerOrHint = page2.getByTestId("banner").or(page2.getByTestId("status-hint"));
+    await expect(bannerOrHint.first()).toContainText("标签页");
     await expect(page2.getByTestId("draft-refresh")).toBeVisible();
+    await expect(page2.getByTestId("draft-refresh")).toBeEnabled();
     await page2.close();
   });
 
