@@ -41,6 +41,10 @@ body,
   grid-row: 2;
 }
 
+.app-shell > [data-testid="banner"] + [data-testid="banner"] {
+  border-top: 1px solid var(--color-border);
+}
+
 /* ---- 表列表(设计稿 §10;200px 展开 / 44px 折叠首字母栏) ---- */
 .table-list {
   display: flex;
@@ -311,18 +315,12 @@ body,
 }
 
 /*
- * 底部条:本 wave 承载旧面板(DiffPreview/ExportPanel/SettingsPanel/ErrorPanel/
- * ConflictPanel),M6-I 接抽屉时整体替换;限高保住表格区占比,内部滚动,
- * E2E 点击自动滚入。
+ * 底部抽屉(M6-I,Drawer 组件自带 30/240px):占第 4 行整宽;
+ * 顶部横幅区允许多条(相位横幅 + seen 横幅)堆叠。
  */
-.app-legacy {
+.app-shell > [data-testid="panel"] {
   grid-column: 1 / -1;
   grid-row: 4;
-  max-height: 150px;
-  overflow-y: auto;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-bg-surface);
-  padding: 4px 12px;
 }
 
 .status-bar {
@@ -330,23 +328,6 @@ body,
   grid-row: 5;
 }
 
-.diff-preview {
-  padding: 8px 0;
-  max-height: 140px;
-  overflow: auto;
-}
 
-.diff-preview__actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 6px;
-}
 
-.export-panel label {
-  display: inline-block;
-  margin-right: 12px;
-}
 
-.conflict-panel button {
-  margin: 0 4px 4px 0;
-}
