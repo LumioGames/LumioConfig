@@ -199,5 +199,22 @@ export const COPY = {
       dirty: (n: number) => `有 ${n} 处改动（尚未预检）`,
       validated: "预检通过，没有发现问题",
     },
+    /** §8 冲突页签:进度 / 三列 / 选项 / 底部动作;取消动作复用 bannerActions.cancelSubmit。 */
+    conflict: {
+      resolved: (n: number, m: number) => `已解决 ${n} / ${m}`,
+      progressLabel: "冲突解决进度",
+      colBase: "打开时",
+      colCurrent: "仓库当前",
+      colDraft: "我的草稿",
+      pickRepo: "采仓库值",
+      pickMine: "采我的值",
+      pickInput: "手工输入",
+      pickDefault: "恢复默认",
+      pickNull: "设为 ∅",
+      drop: "放弃我的改动",
+      resubmit: "重新预检并提交",
+      inputPlaceholder: "输入替换值，回车确认",
+      jumpTitle: "在表格中定位",
+    },
   },
 } as const;

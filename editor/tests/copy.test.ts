@@ -16,6 +16,7 @@ const sampleArgs: Record<string, unknown[]> = {
   requiredNoDefault: ["cost"],
   rowCount: [4],
   viewHint: [9],
+  resolved: [1, 2],
 };
 
 interface CopyEntry {
