@@ -1,15 +1,75 @@
-:root {
+/*
+ * 设计令牌 —— 真值表：.spec/knowledge/features/web-editor-ux.md §4。
+ * 颜色沿用既有 --color-* 前缀，不设第二套命名。
+ * data-theme="light" 为预留的深色主题切换点（ADR 0006，本轮不做）。
+ */
+:root,
+:root[data-theme="light"] {
+  /* 页面底 / 表格、面板 */
   --color-bg-app: #f6f7f9;
-  --color-bg-surface: #fff;
-  --color-border: #d8dee6;
-  --color-border-subtle: #e6ebf1;
+  --color-bg-surface: #ffffff;
+  --color-readonly-bg: #f6f7f9;
+
+  /* 边框：分隔线 / 网格线 / Panel 警告态专用 */
+  --color-border: #e3e6eb;
+  --color-border-subtle: #eef0f3;
   --color-border-faint: #eef2f6;
-  --color-text: #3c434c;
-  --color-text-muted: #5c6570;
-  --color-danger-text: #a1260d;
-  --color-accent-bg: #e8f1ff;
-  --color-accent-border: #8ab4f8;
-  --color-warning-bg: #fff8e5;
   --color-warning-border: #f0d78c;
   --color-warning-border-subtle: #f3e6b8;
+
+  /* 文本：正文 / 次要 / 占位 */
+  --color-text: #1c2230;
+  --color-text-muted: #6a7280;
+  --color-text-faint: #9aa3b0;
+
+  /* 强调：主按钮、选中格、导出按钮 */
+  --color-accent: oklch(0.52 0.12 155);
+  --color-accent-bg: oklch(0.96 0.03 155);
+  --color-accent-border: oklch(0.80 0.08 155);
+
+  /* 脏格底 + 右上角三角 */
+  --color-dirty: #b7791f;
+  --color-dirty-bg: #fff7e0;
+
+  /* 新行整行底 + 行号「新」 */
+  --color-new: #1f5fb3;
+  --color-new-bg: #eaf2ff;
+
+  /* 危险：唯一危险前景色是 --color-danger-text，不设 --color-danger */
+  --color-danger-text: #b3261e;
+  --color-danger-bg: #fdecec;
+
+  /* 冲突格（描边 + ⚑）、冲突卡 */
+  --color-conflict: #7a3fb0;
+  --color-conflict-bg: #f3ecfb;
+
+  /* 「改动」视图里 AI 修订标记 */
+  --color-ai: #4a4cc7;
+  --color-ai-bg: #ecedff;
+
+  /* Panel 警告态背景（值不动） */
+  --color-warning-bg: #fff8e5;
+
+  /* 字体栈：系统字体，CSP default-src 'self' 下不引外链字体 */
+  --font-sans: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+
+  /* 字号：标签 10–11 / 密集 12 / 正文 13 / 标题 14 */
+  --font-size-10: 10px;
+  --font-size-11: 11px;
+  --font-size-12: 12px;
+  --font-size-13: 13px;
+  --font-size-14: 14px;
+
+  /* 表格行高 / 列头高（两行） */
+  --size-row-height: 26px;
+  --size-col-header: 36px;
+
+  /* 圆角：4=按钮/面板，12=状态胶囊 */
+  --radius-4: 4px;
+  --radius-12: 12px;
+
+  /* 两档阴影：菜单 / 对话框 */
+  --shadow-menu: 0 8px 24px rgba(20, 24, 32, .12);
+  --shadow-dialog: 0 16px 48px rgba(20, 24, 32, .24);
 }
