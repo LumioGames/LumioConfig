@@ -50,7 +50,7 @@ Excel 手感的配置表 + 一块按需展开的检查器 + 一条按需展开�
 
 高度预算：表格区 900 − 42 − 32 − 30 − 24 = 772 ≈ 主区（900 − 42 − 24 = 834）的 92.6%；1280×720 时 592 / 654 ≈ 90.5%。抽屉展开 240px 时仍 ≥ 63%（非默认态，允许）。
 
-宽度预算：表列表 200 + 行号 44 + 设计列宽（`id` 96、`name` 150、`display_name` 140、引用列 130、其余 110）× skills 7 列 ≈ 1010px。1280 宽下检查器展开后表格区只剩 820px，因此检查器**默认收起**；点击单元格或列头时展开，`Ctrl+M`（契约卡核对 Univer 0.25 快捷键表后定）或顶栏开关收起，开合状态记 `localStorage`。检查器展开时允许表格横向滚动，不允许挤压列宽。
+宽度预算：设计列宽（`id` 96、`name` 150、`display_name` 140、引用列 130、其余 110）× skills 7 列 = 846px，加行号列 44 = 890px，再加表列表 200 = 1090px。1280 宽下检查器展开后表格区只剩 820px（< 890），因此检查器**默认收起**；点击单元格或列头时展开，`Ctrl+M`（契约卡核对 Univer 0.25 快捷键表后定）或顶栏开关收起，开合状态记 `localStorage`。检查器展开时允许表格横向滚动，不允许挤压列宽。
 
 ## 3. Univer 表面裁剪
 
@@ -70,20 +70,20 @@ Excel 手感的配置表 + 一块按需展开的检查器 + 一条按需展开�
 
 字体：`system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif`；等宽 `ui-monospace, Consolas, monospace`（`id`、数值、指纹、补丁值）；正文 13px，密集文本 12px，标签 10–11px；表格行高 26px，列头 36px（两行）。
 
-令牌落 `editor/src/styles/tokens.css`，**沿用既有 `--color-*` 前缀**（`editor-ui-primitives.md` 已交付的 13 个变量保留），新增语义色：
+令牌落 `editor/src/styles/tokens.css`，**沿用既有 `--color-*` 前缀**。`editor-ui-primitives.md` 已交付的 13 个变量**名称全部保留**；其中 7 个按本表**改值**（`--color-bg-surface --color-border --color-border-subtle --color-text --color-text-muted --color-accent-bg --color-accent-border`，既有 `Button / Panel / DataTable` 随之换到设计色，属预期），`--color-danger-text` 改值为 `#b3261e` 并继续作为唯一的危险前景色，`--color-bg-app --color-border-faint --color-warning-*` 值不动（`Panel` 警告态专用）；其余为新增。M6-G 令牌卡按此表落地，不得另起第二套命名。
 
 | 令牌 | 值 | 用途 |
 | --- | --- | --- |
-| `--color-bg-app` / `--color-surface`（既有） | `#f6f7f9` / `#ffffff` | 页面底 / 表格、面板 |
-| `--color-border` / `--color-border-subtle`（既有） | `#e3e6eb` / `#eef0f3` | 分隔线 / 网格线 |
-| `--color-text` / `--color-text-muted` / `--color-text-faint` | `#1c2230` / `#6a7280` / `#9aa3b0` | 正文 / 次要 / 占位 |
-| `--color-accent` / `--color-accent-bg` / `--color-accent-border` | `oklch(0.52 0.12 155)` / `oklch(0.96 0.03 155)` / `oklch(0.80 0.08 155)` | 主按钮、选中格、导出按钮 |
-| `--color-dirty` / `--color-dirty-bg` | `#b7791f` / `#fff7e0` | 脏格底 + 右上角三角 |
-| `--color-new` / `--color-new-bg` | `#1f5fb3` / `#eaf2ff` | 新行整行底 + 行号「新」 |
-| `--color-danger` / `--color-danger-bg` | `#b3261e` / `#fdecec` | 删除行（删除线）、无效格（波浪线 + `!`）、错误 |
-| `--color-conflict` / `--color-conflict-bg` | `#7a3fb0` / `#f3ecfb` | 冲突格（描边 + ⚑）、冲突卡 |
-| `--color-ai` / `--color-ai-bg` | `#4a4cc7` / `#ecedff` | 「改动」视图里 AI 修订标记 |
-| `--color-readonly-bg` | `#f6f7f9` | `id` 列底 + 列头锁图标 |
+| `--color-bg-app` / `--color-bg-surface`（既有；后者改值） | `#f6f7f9` / `#ffffff` | 页面底 / 表格、面板 |
+| `--color-border` / `--color-border-subtle`（既有，改值） | `#e3e6eb` / `#eef0f3` | 分隔线 / 网格线 |
+| `--color-text` / `--color-text-muted`（既有，改值）/ `--color-text-faint`（新增） | `#1c2230` / `#6a7280` / `#9aa3b0` | 正文 / 次要 / 占位 |
+| `--color-accent`（新增）/ `--color-accent-bg` / `--color-accent-border`（既有，改值） | `oklch(0.52 0.12 155)` / `oklch(0.96 0.03 155)` / `oklch(0.80 0.08 155)` | 主按钮、选中格、导出按钮 |
+| `--color-dirty` / `--color-dirty-bg`（新增） | `#b7791f` / `#fff7e0` | 脏格底 + 右上角三角 |
+| `--color-new` / `--color-new-bg`（新增） | `#1f5fb3` / `#eaf2ff` | 新行整行底 + 行号「新」 |
+| `--color-danger-text`（既有，改值）/ `--color-danger-bg`（新增） | `#b3261e` / `#fdecec` | 删除行（删除线）、无效格（波浪线 + `!`）、错误；不再另设 `--color-danger` |
+| `--color-conflict` / `--color-conflict-bg`（新增） | `#7a3fb0` / `#f3ecfb` | 冲突格（描边 + ⚑）、冲突卡 |
+| `--color-ai` / `--color-ai-bg`（新增） | `#4a4cc7` / `#ecedff` | 「改动」视图里 AI 修订标记 |
+| `--color-readonly-bg`（新增） | `#f6f7f9` | `id` 列底 + 列头锁图标 |
 | 圆角 | 4px（按钮 / 面板）、12px（状态胶囊） | |
 | 阴影 | 菜单 `0 8px 24px rgba(20,24,32,.12)`；对话框 `0 16px 48px rgba(20,24,32,.24)` | |
 
@@ -148,7 +148,7 @@ Univer 单元格样式（`projection.ts` 的 `STYLES`）是工作簿数据，不
 
 ## 9. 需要 Host（单独立卡 M6-K）
 
-修订级差异：`GET /api/tables/{t}/history?since=<revisionId>&limit=20` → `[{revision, message, time, author, cells:[{row, rowId, column, from, to}], created:[…], deleted:[…]}]`。定位键用版本库修订 id 而不是底稿指纹（Host 没有指纹 → 修订的持久映射；0-8 §3 的指纹只是三方合并基线）；`since` 缺省取最近 `limit` 条。Host 内部用 `VcsAdapter` 白名单命令（`git log` / `git show`）取两修订快照，用 `load_sources` 解析后按稳定 id 逐格比对；`vcs=svn/none` 返回 `[]` 且 `capabilities.history=false`。前端不调 git。
+修订级差异：`GET /api/tables/{t}/history?since=<revisionId>&limit=20` → `{ items: [{ revision, message, time, author, cells: [{ row, rowId, column, from, to }], created: [rowId], deleted: [rowId], schemaChanged: boolean }] }`（Schema 在该修订变化时 `schemaChanged: true` 且 `cells` 为空，不伪造格级差异）。定位键用版本库修订 id 而不是底稿指纹（Host 没有指纹 → 修订的持久映射；0-8 §3 的指纹只是三方合并基线）；`since` 缺省取最近 `limit` 条。Host 内部用 `VcsAdapter` 白名单命令（`git log` / `git show`）取两修订快照，用 `load_sources` 解析后按稳定 id 逐格比对；`vcs=svn/none` 返回 `{ items: [] }` 且 `capabilities.history=false`。前端不调 git。
 
 ## 10. 表列表
 

@@ -12,7 +12,7 @@
 - 在既有 `components/ui/` 旁扩展 `Tabs / Dialog / Toast / Menu / useHotkeys`，令牌沿用 `--color-*` 前缀扩展；不另起第二套。
 - **修复卡（M6-F）先于重设计**：R-00361 退回项、`invalid` 守卫、四态呈现 spike、真实键盘 E2E 先合入 main，重设计契约卡以它为前置。
 - 卡序：M6-F 修复 → M6-G 契约层 → M6-H 壳与表格区 → M6-I 抽屉 → M6-J 键盘与收口；M6-K（Host 历史接口 + 改动页签）文件集与前端卡不重叠，可与 M6-H 并行。仓内每张 Workflow 卡再按 `writing-plans` 拆成文件集互斥的任务卡并行扇出。
-- `App.tsx` 不进任何 worker 卡；每个 wave 合入时由主 loop 接线，保证每 wave 结束都有可运行、可 E2E 的整体。
+- `App.tsx` 不进重设计实现卡（M6-G～M6-J）的 worker 文件集；每个 wave 合入时由主 loop 接线，保证每 wave 结束都有可运行、可 E2E 的整体。唯一例外是修复卡 M6-F 只改 `installInterceptors` / `canEdit` 的安装时序（对抗审查 P2-2），不碰布局与 JSX。
 - `interceptors.ts`、`api/types.ts`、`__lumioPoc` 桥纳入文件集与验收；E2E 只覆盖 8 个 testid 的现状写进设计稿，新验收项一律写明是新增测试。
 - 不采用 `CLAUDE_CODE_PROMPT.md` 的一卡一会话、每卡审查流程；审查按本仓规程在统一合入后做一次（触碰红线面的卡例外）。该文件不入库。
 

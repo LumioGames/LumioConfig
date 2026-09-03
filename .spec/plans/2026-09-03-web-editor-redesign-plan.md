@@ -56,7 +56,7 @@ M6-F 修复 ──▶ M6-G 契约层 ──▶ M6-H 壳与表格区 ──▶ M6
   - `Tabs({ items, active, onChange })`、`Dialog({ open, title, onClose, children })`（焦点陷阱 + Esc）、`Toast` provider + `useToast()`（`role=status`）、`Menu({ items, anchor, onClose })`、`useHotkeys(map)`；`Button` 增 `disabledReason?: string`（渲染为 `title`）。
   - `commands.ts`：`export const COMMAND` 白名单 id（undo / redo / find / filter / sort / freeze / insertRow / deleteRow / copyRow / zoom / cut / copy / paste），每项注释来源文件。
   - `menus.ts`：`registerFourStateMenu(univerAPI, handlers: { empty, null, default, missing })`。
-  - `tokens.css`：`--color-text-faint --color-accent --color-accent-bg --color-accent-border --color-dirty --color-dirty-bg --color-new --color-new-bg --color-danger --color-danger-bg --color-conflict --color-conflict-bg --color-ai --color-ai-bg --color-readonly-bg`（既有 13 个保留）。
+  - `tokens.css`：既有 13 个名称保留；改值 `--color-bg-surface --color-border --color-border-subtle --color-text --color-text-muted --color-accent-bg --color-accent-border --color-danger-text`；新增 `--color-text-faint --color-accent --color-dirty --color-dirty-bg --color-new --color-new-bg --color-danger-bg --color-conflict --color-conflict-bg --color-ai --color-ai-bg --color-readonly-bg`；不设 `--color-danger`（危险前景色统一用 `--color-danger-text`）。
 - 验收：见 Workflow 卡 M6-G 四条。
 - 主 loop 接线：本 wave 合入后 `App.tsx` 改为消费 `phaseView` 与 `COPY`，删除 `four-state-menu` / `onContextMenu`，既有 E2E 全绿。
 
@@ -93,7 +93,7 @@ M6-F 修复 ──▶ M6-G 契约层 ──▶ M6-H 壳与表格区 ──▶ M6
 
 - 独占文件：`src/lumio_config/editor/history.py`（新）、`editor/vcs.py`（白名单增 `("git","log")`、`("git","show")`）、`editor/server.py`（`GET /api/tables/{table}/history`）、`editor/session.py`（`capabilities.history`）、`tests/test_editor_history.py`、`editor/src/api/{types,client}.ts`（history 类型与调用）、`editor/src/panels/drawer/DiffTab.tsx`、`docs/reference/editor.md` 改动段。
 - 依赖：Host 部分无前置，可与 M6-H 并行；前端页签依赖 M6-I 的 `Drawer`。
-- 接口：`GET /api/tables/{t}/history?since=<revisionId>&limit=20` → `{ items: [{ revision, message, time, author, cells: [{ row, rowId, column, from, to }], created: [rowId], deleted: [rowId] }] }`；`since` 缺省取最近 `limit` 条；`vcs=svn/none` → `{ items: [] }` 且 `/api/session` `capabilities.history=false`。Host 用 `VcsAdapter` 白名单取两修订的 `tables/<t>.txt` 快照，经 `load_sources` 解析后按稳定 id 逐格比对；不复制 `patch.py` 语义。
+- 接口：`GET /api/tables/{t}/history?since=<revisionId>&limit=20` → `{ items: [{ revision, message, time, author, cells: [{ row, rowId, column, from, to }], created: [rowId], deleted: [rowId], schemaChanged: boolean }] }`（Schema 变化的修订 `schemaChanged: true` 且 `cells` 为空）；`since` 缺省取最近 `limit` 条；`vcs=svn/none` → `{ items: [] }` 且 `/api/session` `capabilities.history=false`。Host 用 `VcsAdapter` 白名单取两修订的 `tables/<t>.txt` 快照，经 `load_sources` 解析后按稳定 id 逐格比对；不复制 `patch.py` 语义。
 - 验收：见 Workflow 卡 M6-K 四条。
 
 ## 卡间文件集（互不重叠）
@@ -107,4 +107,4 @@ M6-F 修复 ──▶ M6-G 契约层 ──▶ M6-H 壳与表格区 ──▶ M6
 | M6-J | `panels/{CommandPalette,SubmitConfirm,Blocked,ShortcutsDialog}.tsx`、`components/ui/useHotkeys.ts`、`editor/docs/a11y-checklist.md`、`docs/reference/editor.md`、`src/lumio_config/editor_static/`、`tests/e2e/keyboard-journeys.spec.ts`、`editor/package.json`；主 loop：`App.tsx` |
 | M6-K | `src/lumio_config/editor/{history,vcs,server,session}.py`、`tests/test_editor_history.py`、`editor/src/api/{types,client}.ts`、`panels/drawer/DiffTab.tsx`、`docs/reference/editor.md` |
 
-同一文件出现在相邻两卡（`projection.ts`、`viewState.ts`、`api/types.ts`、`interceptors.ts`、`host-*.spec.ts`）时按卡序串行，不并行。
+同一文件出现在两卡（`projection.ts`、`cellMeta.ts`、`projection.roundtrip.test.ts`（M6-F / M6-H）、`viewState.ts`（M6-H / M6-I）、`api/types.ts`（M6-G / M6-K）、`interceptors.ts`（M6-F / M6-G）、`host-*.spec.ts`（M6-H / M6-I）、`docs/reference/editor.md`（M6-J / M6-K））时按卡序串行，不并行；M6-K 的 Host 部分可与 M6-H 并行，但其前端文件（`api/{types,client}.ts`、`DiffTab.tsx`、`editor.md`）须等 M6-J 合入后再动。
