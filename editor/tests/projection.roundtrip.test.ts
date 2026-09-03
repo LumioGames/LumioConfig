@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import type { TableResponse } from "../src/api/types";
 import { buildBigFixture } from "../src/spreadsheet/bigFixture";
 import { extractTokens } from "../src/spreadsheet/extract";
-import { buildWorkbook } from "../src/spreadsheet/projection";
+import { tokenForMenu } from "../src/spreadsheet/fourState";
+import { buildCell, buildWorkbook } from "../src/spreadsheet/projection";
 import { diffTokens, tokensFromTable } from "../src/spreadsheet/tokens";
 import type { WorkbookData } from "../src/spreadsheet/workbook-types";
 
@@ -94,5 +95,37 @@ describe("buildWorkbook → extractTokens", () => {
     expect(demo?.damage).toEqual({ state: "default", raw: "@default", effective: 0 });
     expect(demo?.cooldown_frames).toEqual({ state: "missing", raw: "@missing", effective: null });
     expect(demo?.icon?.raw).toBe("火球🔥");
+  });
+
+  it("carries v: null on four-state writes so Univer clears the stored value", () => {
+    const table = loadJson("skills.json");
+    const icon = table.columns.find((column) => column.name === "icon");
+    expect(icon?.type).toBe("string");
+    // 与 App.tsx writeToken 相同的三参调用形态(右键四态菜单 / 冲突覆盖的写路径)。
+    const token = tokenForMenu("null", icon!);
+    expect(token).toEqual({ state: "null", raw: "null", effective: null });
+    const cell = buildCell(token!, icon!, "40001");
+    expect(cell.v).toBeNull();
+    expect(cell.custom?.lumio).toMatchObject({
+      state: "null",
+      raw: "null",
+      column: "icon",
+      rowKey: "40001",
+      badge: "∅",
+    });
+    expect(cell.s).toBe("nullState");
+  });
+
+  it("keeps a real display value on writes and only nulls the empty display", () => {
+    const table = loadJson("skills.json");
+    const icon = table.columns.find((column) => column.name === "icon")!;
+    // default 态带非空 effective:仍显示列默认值,不清 v。
+    const defaultToken = tokenForMenu("default", icon)!;
+    expect(defaultToken.effective).toBe("fx_none");
+    expect(buildCell(defaultToken, icon, "40001").v).toBe("fx_none");
+    // value 态写入保持原值。
+    expect(
+      buildCell({ state: "value", raw: "fx_new", effective: "fx_new" }, icon, "40001").v,
+    ).toBe("fx_new");
   });
 });
