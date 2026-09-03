@@ -125,6 +125,17 @@ export const COPY = {
   onboardingToast: "草稿会自动保存在本机，提交前不会写进仓库",
   /** §12:导出说明。 */
   exportNote: "单向生成物，不会导回仓库；输出到 build/export",
+  /** §8 抽屉「导出」页签的标签(CSV/TSV、S/C/V 是格式/列组标识,非文案)。 */
+  export: {
+    tables: "表",
+    format: "格式",
+    source: "来源",
+    sourceRepo: "仓库",
+    sourceDraft: "含我的草稿",
+    target: "目标列",
+    targetAll: "全部",
+    submit: "导出",
+  },
   /** §12:required 列守卫。 */
   validation: {
     requiredMissingColumn: "必填列不能设为缺列",

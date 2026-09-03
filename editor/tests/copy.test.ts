@@ -68,6 +68,11 @@ describe("COPY 文案表", () => {
     expect(COPY.cellMenu.setNull).toBe("设为 null ∅");
     expect(COPY.onboardingToast).toBe("草稿会自动保存在本机，提交前不会写进仓库");
     expect(COPY.exportNote).toBe("单向生成物，不会导回仓库；输出到 build/export");
+    expect(COPY.export.source).toBe("来源");
+    expect(COPY.export.sourceRepo).toBe("仓库");
+    expect(COPY.export.sourceDraft).toBe("含我的草稿");
+    expect(COPY.export.targetAll).toBe("全部");
+    expect(COPY.export.submit).toBe("导出");
     expect(COPY.drawer.patchEmpty).toBe("还没有改动…");
     expect(COPY.drawer.errorsEmpty.clean).toBe("还没有改动");
     expect(COPY.drawer.errorsEmpty.dirty(3)).toBe("有 3 处改动（尚未预检）");
