@@ -25,7 +25,7 @@ CLI = ROOT / "tools" / "lumio_config.py"
 SESSION_KEYS = {"repoName", "revision", "tables", "schemas", "settings", "capabilities"}
 REVISION_KEYS = {"vcs", "id", "branch", "dirty"}
 TABLE_KEYS = {"name", "schemaPath", "rowCount", "sourceFingerprint", "schemaFingerprint"}
-CAPABILITY_KEYS = {"submit", "commit", "export", "events"}
+CAPABILITY_KEYS = {"submit", "commit", "export", "events", "history"}
 CELL_KEYS = {"state", "raw", "effective"}
 
 
