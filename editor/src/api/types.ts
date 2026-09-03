@@ -193,3 +193,9 @@ export type EditorPhase =
   | "Stale"
   | "Failed"
   | "Closed";
+
+/**
+ * ADR 0005:Failed 阶段的失败归类,取代对 hint 的子串判断。
+ * 空串 = 未归类(产生点接线完成前由 hint 兜底显示)。
+ */
+export type FailKind = "VCS" | "SCHEMA_CHANGED" | "DRAFT_VERSION_CONFLICT" | "";
