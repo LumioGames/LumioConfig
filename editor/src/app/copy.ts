@@ -76,10 +76,13 @@ export const COPY = {
     if (autoExport) return `${target}，并导出表文件；不会自动 commit。`;
     return `${target}。`;
   },
-  /** §12:autoCommit ☑ 行。 */
+  /** §12:autoCommit ☑ 行 + 设置对话框标题/第二项/关闭。 */
   settings: {
+    title: "设置",
     autoCommitLabel: "提交后自动 commit 到当前分支",
+    autoExportLabel: "提交后自动导表",
     savedToast: "已保存到本机设置",
+    close: "关闭",
   },
   /** §10 表列表(侧栏)。 */
   sidebar: {
