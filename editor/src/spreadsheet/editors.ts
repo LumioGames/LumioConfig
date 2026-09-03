@@ -37,6 +37,9 @@ export function editorKind(column: TableColumn): EditorKind {
 }
 
 export function numberOutOfRange(column: TableColumn, raw: string): boolean {
+  if (!NUMBER_TYPES.has(column.type)) {
+    return false;
+  }
   if (raw === "" || raw === "null" || raw === "@default" || raw === "@missing") {
     return false;
   }
