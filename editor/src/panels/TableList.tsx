@@ -1,4 +1,5 @@
 import { FIXTURES } from "../fixtures/catalog";
+import { Button } from "../components/ui";
 
 interface TableListProps {
   selected: string;
@@ -16,15 +17,15 @@ export function TableList({ selected, onSelect, dirtyCounts = {}, names }: Table
       <ul>
         {items.map((fixture) => (
           <li key={fixture.name}>
-            <button
-              type="button"
+            <Button
+              variant="nav"
+              active={fixture.name === selected}
               data-testid={`table-${fixture.name}`}
-              className={fixture.name === selected ? "is-active" : undefined}
               onClick={() => onSelect(fixture.name)}
             >
               {fixture.label ?? fixture.name}
               {dirtyCounts[fixture.name] ? ` · ${dirtyCounts[fixture.name]}` : ""}
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
