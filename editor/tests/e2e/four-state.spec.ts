@@ -152,4 +152,63 @@ test.describe("four-state nine actions", () => {
     const tokens = await page.evaluate(() => window.__lumioPoc?.extractTokens());
     expect(copied && tokens?.[copied]).toBeTruthy();
   });
+
+  test("native context menu drives four-state via four-state-* items", async ({ page }) => {
+    await waitPoc(page);
+    // 坐标口径与 keyboard.spec 相同:canvas 原点 + 24px 列标带 + 24px 行高,
+    // 列宽 [110, 140, 其余 120]。右键数据行 1(40001),不用 height*0.5——
+    // fixture 只有 3 行数据,半高会落在 sheet 空行(rowKeys 之外)。
+    const origin = await page
+      .waitForFunction(() =>
+        [...document.querySelectorAll('[data-testid="univer-root"] canvas')].some(
+          (el) => el.getBoundingClientRect().width > 500,
+        ),
+      )
+      .then(() =>
+        page.evaluate(() => {
+          const el = [...document.querySelectorAll('[data-testid="univer-root"] canvas')].find(
+            (item) => item.getBoundingClientRect().width > 500,
+          );
+          const rect = el?.getBoundingClientRect();
+          if (!rect) {
+            throw new Error("grid canvas missing");
+          }
+          return { x: rect.x, y: rect.y };
+        }),
+      );
+    const columnCenter = (col: number) => {
+      const widths = [110, 140];
+      let x = 0;
+      for (let i = 0; i < col; i += 1) {
+        x += widths[i] ?? 120;
+      }
+      return x + (widths[col] ?? 120) / 2;
+    };
+    // v3 两行列头后表头行 36px(24 列标带 + 36 表头 + 12 半行)。
+    const row1Y = origin.y + 24 + 36 + 12;
+
+    // display_name 列(必填,有值)右键:四项全部可见。
+    // Univer 关闭的旧菜单仍留在 DOM(display:none),testid 会撞车,一律取可见实例。
+    const visibleItem = (id: string) => page.locator(`[data-testid="${id}"] >> visible=true`);
+    await page.mouse.click(origin.x + columnCenter(2), row1Y, { button: "right" });
+    await expect(page.getByText("单元格")).toBeVisible();
+    await expect(visibleItem("four-state-empty")).toBeVisible();
+    await expect(visibleItem("four-state-null")).toBeVisible();
+    await expect(visibleItem("four-state-default")).toBeVisible();
+    await expect(visibleItem("four-state-missing")).toBeVisible();
+    await visibleItem("four-state-empty").click();
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.__lumioPoc?.extractTokens()?.["40001"]?.display_name?.raw),
+      )
+      .toBe('""');
+
+    // 必填列(cooldown_frames)右键:设为缺列应禁用并带 title 提示
+    const cooldownCol = 5;
+    await page.mouse.click(origin.x + columnCenter(cooldownCol), row1Y, { button: "right" });
+    const missing = page.locator('[data-testid="four-state-missing"] >> visible=true');
+    await expect(missing).toBeVisible();
+    await expect(missing).toBeDisabled();
+    await expect(missing).toHaveAttribute("title", "必填列不能设为缺列");
+  });
 });

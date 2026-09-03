@@ -37,6 +37,9 @@ export function editorKind(column: TableColumn): EditorKind {
 }
 
 export function numberOutOfRange(column: TableColumn, raw: string): boolean {
+  if (!NUMBER_TYPES.has(column.type)) {
+    return false;
+  }
   if (raw === "" || raw === "null" || raw === "@default" || raw === "@missing") {
     return false;
   }
@@ -76,11 +79,12 @@ export function validationRules(
   const rules: SheetValidationRule[] = [];
   table.columns.forEach((column, colIndex) => {
     const kind = editorKind(column);
+    // ADR 0004 空行策略:DV 只挂数据行 + 3 空行(含表头偏移,数据区从行 1 起)。
     const ranges = [
       {
         startRow: 1,
         startColumn: colIndex,
-        endRow: 9998,
+        endRow: table.rows.length + 3,
         endColumn: colIndex,
       },
     ];

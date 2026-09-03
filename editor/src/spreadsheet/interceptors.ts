@@ -1,8 +1,13 @@
 import type { CellToken, ProjectionMap, TableColumn } from "../api/types";
 import { DRAFT_ID_LABEL, readLumioMeta, styleIdFor, tokenFromMeta, writeLumioCustom } from "./cellMeta";
+import { COMMAND } from "./commands";
 import { rememberToken } from "./extract";
 import { tokenForDeleteKey } from "./fourState";
 import { numberOutOfRange } from "./editors";
+
+// COMMAND 常量已按 ADR 0004 移至 spreadsheet/commands.ts;此处 re-export 保住
+// 既有导入方(App.tsx、tests/interceptors.test.ts)不换文件。
+export { COMMAND } from "./commands";
 
 export const HINTS = {
   formula: "公式不可用，配表不持久化公式",
@@ -12,41 +17,6 @@ export const HINTS = {
   pasteFormula: "粘贴含公式，已仅保留值",
   header: "表头不可编辑",
   insertRow: "新行将在合入时发号",
-} as const;
-
-export const COMMAND = {
-  setRangeValues: "sheet.command.set-range-values",
-  setRangeValuesMutation: "sheet.mutation.set-range-values",
-  merge: "sheet.command.add-worksheet-merge",
-  mergeAll: "sheet.command.add-worksheet-merge-all",
-  mergeVertical: "sheet.command.add-worksheet-merge-vertical",
-  mergeHorizontal: "sheet.command.add-worksheet-merge-horizontal",
-  insertColBefore: "sheet.command.insert-col-before",
-  insertColAfter: "sheet.command.insert-col-after",
-  insertColByRange: "sheet.command.insert-col-by-range",
-  insertCol: "sheet.command.insert-col",
-  removeColConfirm: "sheet.command.remove-col-confirm",
-  removeColByRange: "sheet.command.remove-col-by-range",
-  confirmRemoveCol: "sheet.confirm.remove-col",
-  insertRowBefore: "sheet.command.insert-row-before",
-  insertRowAfter: "sheet.command.insert-row-after",
-  insertRowByRange: "sheet.command.insert-row-by-range",
-  removeRowConfirm: "sheet.command.remove-row-confirm",
-  removeRowByRange: "sheet.command.remove-row-by-range",
-  confirmRemoveRow: "sheet.confirm.remove-row",
-  paste: "univer.command.paste",
-  pasteNamed: "sheet.command.paste",
-  pasteShortKey: "sheet.command.paste-by-short-key",
-  pasteValue: "sheet.command.paste-value",
-  pasteOptional: "sheet.command.optional-paste",
-  pasteBesidesBorder: "sheet.command.paste-besides-border",
-  pasteFormula: "sheet.command.paste-formula",
-  insertFunction: "formula-ui.operation.insert-function",
-  moreFunctions: "formula-ui.operation.more-functions",
-  clearSelectionContent: "sheet.command.clear-selection-content",
-  clearSelectionAll: "sheet.command.clear-selection-all",
-  clearContent: "sheet.command.clear-selection",
-  autoFill: "sheet.command.auto-fill",
 } as const;
 
 const MERGE_IDS = new Set<string>([
@@ -345,6 +315,14 @@ function columnOf(options: InstallInterceptorsOptions | undefined, name: string)
   return options?.tableColumns?.find((item) => item.name === name);
 }
 
+/** 单元格提交值与 token 有效显示值的统一文本口径(null/undefined 视为空)。 */
+function displayText(value: unknown): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+  return typeof value === "string" ? value : String(value);
+}
+
 function attachLumioFromEdit(params: unknown, map: ProjectionMap, options?: InstallInterceptorsOptions): void {
   visitCells(params, (cell, row, col) => {
     if (row === undefined || col === undefined || row <= 0) {
@@ -356,17 +334,26 @@ function attachLumioFromEdit(params: unknown, map: ProjectionMap, options?: Inst
       return;
     }
     const existing = readLumioMeta(cell as { custom?: Record<string, unknown> });
-    if (existing && existing.state && existing.state !== "value") {
-      const token = tokenFromMeta({ ...existing, column, rowKey });
-      cell.custom = {
-        ...asRecord(cell.custom),
-        ...writeLumioCustom({
-          ...existing,
-          column,
-          rowKey,
-        }),
-      };
-      rememberToken(map, rowKey, column, token);
+    // Univer 键盘提交的 value 携带整格旧 custom.lumio;只有「新 v 相对当前
+    // 有效显示值发生了变化」才是用户文本编辑(0-7 §5:四态与普通值互不坍缩)。
+    const typedEdit = cell.v !== undefined && cell.v !== null;
+    if (existing && existing.state !== "value") {
+      if (!typedEdit || displayText(cell.v) === displayText(existing.effective)) {
+        const token = tokenFromMeta({ ...existing, column, rowKey });
+        cell.custom = {
+          ...asRecord(cell.custom),
+          ...writeLumioCustom({
+            ...existing,
+            column,
+            rowKey,
+          }),
+        };
+        rememberToken(map, rowKey, column, token);
+        return;
+      }
+    } else if (!typedEdit && !existing) {
+      // 例如漏过拦截的清空 mutation:{ v: null } 不是文本编辑,不得记成
+      // { state: "value", raw: "" }(required 列保持原值的兜底口径)。
       return;
     }
     const raw =
@@ -469,6 +456,46 @@ export function copyRowKey(map: ProjectionMap, sourceKey: string, randomBytes?: 
   return key;
 }
 
+interface SelectionSheetRange {
+  startRow: number;
+  endRow: number;
+  startCol: number;
+  endCol: number;
+}
+
+function callMethod(target: unknown, name: string): unknown {
+  const rec = asRecord(target);
+  const method = rec?.[name];
+  return typeof method === "function" ? (method as () => unknown).call(target) : undefined;
+}
+
+/**
+ * 键盘 Delete 的 sheet.command.clear-selection-content 不带 range(真实命令
+ * 从 selectionManager 取选区);拦截时从 univerAPI 读当前活动选区兜底。
+ */
+function activeSelectionRange(univer: unknown): SelectionSheetRange | undefined {
+  const rec = asRecord(univer);
+  const api = rec?.univerAPI ?? univer;
+  const workbook = callMethod(api, "getActiveWorkbook");
+  const sheet = callMethod(workbook, "getActiveSheet");
+  const selection = callMethod(sheet, "getSelection");
+  const range = callMethod(selection, "getActiveRange");
+  if (!asRecord(range)) {
+    return undefined;
+  }
+  const startRow = numberOf(callMethod(range, "getRow"));
+  const startCol = numberOf(callMethod(range, "getColumn"));
+  if (startRow === undefined || startCol === undefined) {
+    return undefined;
+  }
+  return {
+    startRow,
+    endRow: numberOf(callMethod(range, "getLastRow")) ?? startRow,
+    startCol,
+    endCol: numberOf(callMethod(range, "getLastColumn")) ?? startCol,
+  };
+}
+
 export function installInterceptors(
   univer: unknown,
   map: ProjectionMap,
@@ -547,12 +574,19 @@ export function installInterceptors(
       return;
     }
     if (CLEAR_IDS.has(id)) {
-      const rows = rowRange(event.params);
-      if (!rows) {
-        return;
+      let rows = rowRange(event.params);
+      let cols: { startCol: number; endCol: number };
+      if (rows) {
+        cols = colRange(event.params);
+      } else {
+        const selection = activeSelectionRange(univer);
+        if (!selection) {
+          return;
+        }
+        rows = { startRow: selection.startRow, count: selection.endRow - selection.startRow + 1 };
+        cols = { startCol: selection.startCol, endCol: selection.endCol };
       }
       event.cancel = true;
-      const cols = colRange(event.params);
       const execute = options?.executeCommand;
       for (let sheetRow = rows.startRow; sheetRow < rows.startRow + rows.count; sheetRow += 1) {
         if (sheetRow <= 0) {
@@ -580,6 +614,9 @@ export function installInterceptors(
           execute?.(COMMAND.setRangeValues, {
             range: { startRow: sheetRow, startColumn: col, endRow: sheetRow, endColumn: col },
             value: {
+              // 四态写入必须带显式 v:null:Univer mutation 合并只在新值带 v 字段时
+              // 覆盖,否则画布残留旧文本(评审 P2-1,与 buildCell 写路径同规则)。
+              v: null,
               s: styleIdFor(result.token.state, false),
               custom: writeLumioCustom({
                 ...result.token,

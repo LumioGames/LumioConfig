@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A4 spike · 四态徽标渲染扩展 demo</title>
+    <!-- CSP 与生产对齐:default-src 'self',无任何外链(字体/脚本/样式全部来自本地 vite dev server) -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'"
+    />
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+        background: #ffffff;
+        color: #1f2328;
+      }
+      header {
+        padding: 10px 16px;
+        font-size: 14px;
+        border-bottom: 1px solid #e1e4e8;
+        display: flex;
+        gap: 16px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+      header strong {
+        font-size: 15px;
+      }
+      header span {
+        color: #5c6570;
+        font-size: 12px;
+      }
+      #layout {
+        display: flex;
+        gap: 12px;
+        padding: 12px 16px;
+        align-items: flex-start;
+      }
+      #app {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 540px;
+        border: 1px solid #e1e4e8;
+      }
+      #panel {
+        flex: 0 0 420px;
+        font-size: 12px;
+      }
+      #panel h2 {
+        font-size: 13px;
+        margin: 4px 0 6px;
+      }
+      #panel button {
+        font-size: 12px;
+        padding: 4px 10px;
+        margin: 2px 4px 8px 0;
+        cursor: pointer;
+      }
+      #dump {
+        white-space: pre-wrap;
+        word-break: break-all;
+        background: #f6f8fa;
+        border: 1px solid #e1e4e8;
+        padding: 8px;
+        max-height: 420px;
+        overflow: auto;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 11px;
+      }
+      #panel ol {
+        margin: 4px 0 8px;
+        padding-left: 18px;
+        color: #5c6570;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>A4 spike · 四态徽标渲染扩展 demo</strong>
+      <span
+        >Univer OSS 0.25.1 · 徽标经 CELL_CONTENT 拦截器(customRender / markers)绘制,
+        数据层 v 保持 null,徽标不进 v / token</span
+      >
+    </header>
+    <div id="layout">
+      <div id="app"></div>
+      <div id="panel">
+        <h2>模型层 vs 渲染层复核</h2>
+        <button id="check">复核 v 未被徽标污染</button>
+        <div id="dump">(待载入)</div>
+        <h2>手工验证清单</h2>
+        <ol>
+          <li>选中「明确空值 ∅」格按 Ctrl+C,粘贴到记事本:得到空串(徽标不进剪贴板)。</li>
+          <li>同一格双击进入编辑:编辑框为空(v 为 null)。</li>
+          <li>Ctrl+F 搜「∅」:搜不到(查找走原始数据)。</li>
+          <li>「吃默认」格:幽灵默认值 25 + 右下角「默认」徽标。</li>
+        </ol>
+      </div>
+    </div>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>
