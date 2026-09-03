@@ -10,6 +10,27 @@ export interface ViewState {
   filter?: unknown;
   sort?: unknown;
   zoom?: number;
+  /** 检查器开合(设计稿 §2.1:默认收起,开合记 localStorage,刷新后记忆)。 */
+  inspectorOpen?: boolean;
+  /** 表列表折叠(Ctrl+B / 44px 首字母栏,设计稿 §10)。 */
+  sidebarCollapsed?: boolean;
+}
+
+/** 检查器 / 表列表的缺省开合态:检查器默认收起,表列表默认展开。 */
+export const UI_DEFAULTS = {
+  inspectorOpen: false,
+  sidebarCollapsed: false,
+} as const;
+
+/** 存量视图 JSON(无这两个字段)与 null 一律落回缺省开合态。 */
+export function uiFlags(state: ViewState | null): {
+  inspectorOpen: boolean;
+  sidebarCollapsed: boolean;
+} {
+  return {
+    inspectorOpen: state?.inspectorOpen ?? UI_DEFAULTS.inspectorOpen,
+    sidebarCollapsed: state?.sidebarCollapsed ?? UI_DEFAULTS.sidebarCollapsed,
+  };
 }
 
 export function storageKey(repoName: string, table: string): string {
