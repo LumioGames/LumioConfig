@@ -3,7 +3,7 @@ name: editor-ui-primitives
 description: editor/ 面板共享的 Button/Panel/DataTable 基础组件与 design token——改 editor/src/panels 或新增面板时查
 metadata:
   type: doc
-  status: 设计中
+  status: 已交付
 ---
 
 # editor 面板 UI 基础组件
@@ -26,14 +26,15 @@ metadata:
 
 ```ts
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "default" | "primary" | "nav";
+  variant?: "default" | "primary" | "nav" | "menu";
   active?: boolean; // 仅 nav 变体使用，选中态
 }
 ```
 
 - `default`：ConflictPanel 的动作按钮、DiffPreview 的预检/提交、ExportPanel 的导出、ErrorPanel 的条目按钮——现状无视觉区分，样式对应当前各处裸 `<button>` 的默认外观。
 - `primary`：App.tsx 里的"刷新"按钮，对应现有 `.draft-refresh` 的蓝色强调样式。
-- `nav`：TableList 的表清单项、App.tsx 四态菜单（four-state-menu）的条目——整行可点、hover 高亮，`active` 对应 TableList 当前 `is-active` 的选中态。
+- `nav`：TableList 的表清单项——整行可点、有选中态，`active` 对应原 `is-active`。
+- `menu`：App.tsx 四态菜单（four-state-menu）的条目——同样整行可点、hover 高亮，但原 CSS（padding/border/无 `is-active` 概念）与 `nav` 并不完全相同，落地时拆成独立变体而非复用 `nav`，避免为了共用一个变体而改变两处任一处的现有视觉。
 
 其余原生 button props（`type`、`disabled`、`onClick`、`data-testid`、`className`）透传。
 
@@ -43,7 +44,6 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 interface PanelProps {
   tone?: "default" | "warning"; // warning 对应冲突面板的黄色调
   variant?: "docked" | "boxed"; // docked=仅上边框，boxed=完整边框+外边距
-  scroll?: boolean; // 超高滚动（max-height + overflow: auto）
   as?: "section" | "div" | "ul"; // ErrorPanel 用 <ul> 而非 <section>
   title?: React.ReactNode;
   "data-testid"?: string;
@@ -52,7 +52,7 @@ interface PanelProps {
 }
 ```
 
-覆盖 SettingsPanel、ErrorPanel（`as="ul"`）、DiffPreview（`scroll`）、ConflictPanel（`tone="warning"` + `scroll`）、ExportPanel（`variant="boxed"`）的外壳。
+覆盖 SettingsPanel、ErrorPanel（`as="ul"`）、DiffPreview、ConflictPanel（`tone="warning"`）、ExportPanel（`variant="boxed"`）的外壳。滚动（DiffPreview 的 180px、ConflictPanel warning 态的 220px，两者高度不同）不做成运行时 prop——`.panel--warning` 的 max-height/overflow 直接写进 `ui.css`，DiffPreview 的 180px 保留在 `app.css` 里按其原有 `.diff-preview` 类名覆盖，两条都是 CSS 层面解决，比加一个 `scroll` prop 更贴合"只做当前重复需要的抽象"。
 
 ### DataTable（`editor/src/components/ui/DataTable.tsx`）
 
@@ -85,7 +85,8 @@ interface DataTableProps<T> {
 
 ## 验收
 
-- [ ] 三个新组件在 `editor/src/components/ui/` 下有对应的最小单元测试（vitest + @testing-library），覆盖各 variant/tone/scroll 分支的 className 输出。
-- [ ] 现有 e2e 套件（`pnpm e2e`）在重构后全部通过，无 `data-testid` 缺失或行为变化。
-- [ ] `pnpm lint`、`pnpm test`（含 `check-deps`）通过。
-- [ ] 视觉对比：重构前后各面板截图/人工检查无可见差异。
+- [x] 三个新组件在 `editor/src/components/ui/` 下有对应的最小单元测试，覆盖各 variant/tone/as 分支的 className 与 DOM 输出。落地用 `react-dom/client` 的 `createRoot`/`act` 直接挂载断言，不引入 `@testing-library/react`（本仓当时没有这个依赖，纯组件层单测靠原生 DOM API 足够，不为测试新增任务外依赖）。
+- [x] 现有 e2e 套件（`pnpm e2e`，26 条）在重构后全部通过，无 `data-testid` 缺失或行为变化。
+- [x] `pnpm lint`、`pnpm test`（含 `check-deps`，52 条）通过。
+- [x] 视觉对比：重构前后各面板人工检查无可见差异（TableList 选中态、四态菜单实测像素级一致；其余面板逐条 CSS 属性对照均为同值 token 替换）。
+- [x] `src/lumio_config/editor_static/`（`src/lumio_config/editor/server.py` 实际服务的编辑器静态资源目录）已用 `pnpm build` 从最终源码重建并提交，避免生成物与本次重构的源码脱节。
