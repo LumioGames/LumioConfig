@@ -14,11 +14,17 @@ ALLOWED_COMMANDS = {
     ("git", "rev-parse"),
     ("git", "add"),
     ("git", "commit"),
+    ("git", "log"),
+    ("git", "show"),
     ("svn", "status"),
     ("svn", "info"),
     ("svn", "add"),
     ("svn", "commit"),
 }
+
+LOG_FIELD_SEPARATOR = "\x1f"
+LOG_RECORD_SEPARATOR = "\x1e"
+GIT_LOG_FORMAT = "%H%x1f%s%x1f%aI%x1f%an%x1e"
 
 
 @dataclass(frozen=True)
@@ -28,12 +34,24 @@ class Revision:
     branch: str | None
 
 
+@dataclass(frozen=True)
+class HistoryRevision:
+    id: str
+    message: str
+    time: str
+    author: str
+
+
 class VcsAdapter(Protocol):
     def status(self, paths: list[str]) -> list[str]: ...
 
     def revision(self) -> Revision | None: ...
 
     def commit(self, paths: list[str], message: str) -> str | None: ...
+
+    def log(self, paths: list[str], since: str | None, limit: int) -> list[HistoryRevision]: ...
+
+    def show(self, revision: str, path: str) -> str: ...
 
 
 def run_vcs(root: Path, argv: list[str]) -> subprocess.CompletedProcess[str]:
@@ -82,6 +100,31 @@ class GitAdapter:
         head = run_vcs(self.root, ["git", "rev-parse", "HEAD"])
         return head.stdout.strip() or None
 
+    def log(self, paths: list[str], since: str | None, limit: int) -> list[HistoryRevision]:
+        argv = ["git", "log", f"--format={GIT_LOG_FORMAT}", "-n", str(limit)]
+        if since is not None:
+            argv.append(f"{since}..HEAD")
+        argv.extend(["--", *paths])
+        result = run_vcs(self.root, argv)
+        if result.returncode != 0:
+            if since is not None:
+                return []
+            raise RuntimeError((result.stderr or result.stdout).strip() or "git log failed")
+        revisions: list[HistoryRevision] = []
+        for record in result.stdout.split(LOG_RECORD_SEPARATOR):
+            record = record.strip("\n")
+            if not record:
+                continue
+            commit_id, message, time, author = record.split(LOG_FIELD_SEPARATOR)
+            revisions.append(HistoryRevision(id=commit_id, message=message, time=time, author=author))
+        return revisions
+
+    def show(self, revision: str, path: str) -> str:
+        result = run_vcs(self.root, ["git", "show", f"{revision}:{path}"])
+        if result.returncode != 0:
+            return ""
+        return result.stdout
+
 
 class SvnAdapter:
     def __init__(self, root: Path) -> None:
@@ -120,6 +163,12 @@ class SvnAdapter:
         info = run_vcs(self.root, ["svn", "info", "--show-item", "revision"])
         return info.stdout.strip() or None
 
+    def log(self, paths: list[str], since: str | None, limit: int) -> list[HistoryRevision]:
+        return []
+
+    def show(self, revision: str, path: str) -> str:
+        return ""
+
 
 class NoneAdapter:
     def status(self, paths: list[str]) -> list[str]:
@@ -130,6 +179,12 @@ class NoneAdapter:
 
     def commit(self, paths: list[str], message: str) -> str | None:
         return None
+
+    def log(self, paths: list[str], since: str | None, limit: int) -> list[HistoryRevision]:
+        return []
+
+    def show(self, revision: str, path: str) -> str:
+        return ""
 
 
 def make_adapter(root: Path, settings: Settings) -> GitAdapter | SvnAdapter | NoneAdapter:
