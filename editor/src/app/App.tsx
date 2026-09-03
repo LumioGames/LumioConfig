@@ -27,6 +27,10 @@ import { Banner } from "../panels/Banner";
 import { GridToolbar } from "../panels/GridToolbar";
 import { Inspector } from "../panels/Inspector";
 import { ToastProvider } from "../components/ui";
+import { CommandPalette } from "../panels/CommandPalette";
+import { SubmitConfirm } from "../panels/SubmitConfirm";
+import { ShortcutsDialog } from "../panels/ShortcutsDialog";
+import { Blocked } from "../panels/Blocked";
 import { applyEditors, editorKinds, type EditorKind } from "../spreadsheet/editors";
 import { installLumioBadges } from "../spreadsheet/badges";
 import type { CellMeta } from "../spreadsheet/cellMeta";
@@ -45,7 +49,7 @@ import {
   uiFlags,
   writeSeen,
 } from "../spreadsheet/viewState";
-import { INITIAL_EDITOR_STATE, canEdit, canSave, reducer, type EditorAction } from "./state";
+import { INITIAL_EDITOR_STATE, canEdit, canSave, canValidate, reducer, type EditorAction } from "./state";
 import { phaseView } from "./phaseView";
 import { COPY } from "./copy";
 
@@ -118,6 +122,9 @@ export function App() {
   const [submitResult, setSubmitResult] = useState<import("../api/draftSession").SubmitResult | null>(null);
   const [conflictResolved, setConflictResolved] = useState<Record<string, Resolution>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const [seenBannerOpen, setSeenBannerOpen] = useState(false);
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoExport, setAutoExport] = useState(false);
@@ -807,18 +814,16 @@ export function App() {
     return stop;
   }, [hostMode, rebaseNow]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        if (canSave(stateRef.current) || stateRef.current.dirtyCount > 0) {
-          void persistDraft();
-        }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [persistDraft]);
+  /** 提交入口:仅当会 commit / 导表时先弹一句话确认(ADR 0005)。 */
+  const requestSubmit = useCallback(() => {
+    if (autoCommit || autoExport) {
+      setSubmitConfirmOpen(true);
+      return;
+    }
+    void submitNow();
+  }, [autoCommit, autoExport, submitNow]);
+  const requestSubmitRef = useRef(requestSubmit);
+  requestSubmitRef.current = requestSubmit;
 
   useEffect(() => {
     window.__lumioPoc = {
@@ -1013,6 +1018,45 @@ export function App() {
     });
   }, [persistUiFlags]);
 
+  // 应用级热键(M6-J 接线,HOTKEYS.worksInGrid 子集):捕获阶段 + 只避开真
+  // 文本输入(Univer 宿主 DIV 是 contenteditable,先例见 Ctrl+M / Ctrl+J)。
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.metaKey) {
+        return;
+      }
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "s") {
+        event.preventDefault();
+        if (canSave(stateRef.current) || stateRef.current.dirtyCount > 0) {
+          void persistDraft();
+        }
+      } else if (key === "enter") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          requestSubmitRef.current();
+        } else if (canValidate(stateRef.current)) {
+          void validateNow();
+        }
+      } else if (key === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      } else if (key === "b") {
+        event.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [persistDraft, toggleSidebar, validateNow]);
+
   // Ctrl+M 是应用级键(§11),焦点在表格内也要生效:不走 useHotkeys 的
   // .univer-root 保留规则,只忽略真文本输入;M6-J(Task 17)统一进 HOTKEYS。
   useEffect(() => {
@@ -1139,9 +1183,7 @@ export function App() {
         dirtyCount={state.dirtyCount}
         inspectorOpen={inspectorOpen}
         onToggleSidebar={toggleSidebar}
-        onOpenPalette={() => {
-          /* 命令面板随 M6-J 接线 */
-        }}
+        onOpenPalette={() => setPaletteOpen(true)}
         onExport={() => {
           setDrawerTab("export");
           setDrawerOpen(true);
@@ -1149,15 +1191,11 @@ export function App() {
         onValidate={() => {
           void validateNow();
         }}
-        onSubmit={() => {
-          void submitNow();
-        }}
+        onSubmit={requestSubmit}
         onOpenSettings={() => {
           setSettingsOpen(true);
         }}
-        onOpenShortcuts={() => {
-          /* 快捷键对话框随 M6-J 接线 */
-        }}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
         onToggleInspector={toggleInspector}
       />
       <Banner
@@ -1441,6 +1479,150 @@ export function App() {
           setDrawerOpen(true);
         }}
       />
+      {paletteOpen ? (
+        <CommandPalette
+          open={paletteOpen}
+          onClose={() => setPaletteOpen(false)}
+          commands={[
+            ...(hostMode
+              ? (tableSummaries ?? []).map((item) => ({
+                  group: "打开表",
+                  label: `打开 ${item.name}`,
+                  run: () => {
+                    openTable(item.name);
+                    setPaletteOpen(false);
+                  },
+                }))
+              : FIXTURES.map((item) => ({
+                  group: "打开表",
+                  label: `打开 ${item.name}`,
+                  run: () => {
+                    openTable(item.name);
+                    setPaletteOpen(false);
+                  },
+                }))),
+            {
+              group: "动作",
+              label: "预检",
+              shortcut: "Ctrl+Enter",
+              run: () => {
+                void validateNow();
+                setPaletteOpen(false);
+              },
+            },
+            {
+              group: "动作",
+              label: "提交补丁",
+              shortcut: "Ctrl+Shift+Enter",
+              run: () => {
+                requestSubmit();
+                setPaletteOpen(false);
+              },
+            },
+            {
+              group: "动作",
+              label: "保存本地草稿",
+              shortcut: "Ctrl+S",
+              run: () => {
+                void persistDraft();
+                setPaletteOpen(false);
+              },
+            },
+            {
+              group: "动作",
+              label: "导出",
+              run: () => {
+                setDrawerTab("export");
+                setDrawerOpen(true);
+                setPaletteOpen(false);
+              },
+            },
+            {
+              group: "动作",
+              label: "新增行",
+              run: () => {
+                const apiHost = instanceRef.current?.univerAPI as {
+                  executeCommand?: (id: string, params?: unknown) => unknown;
+                } | undefined;
+                apiHost?.executeCommand?.(COMMAND.insertRowAfter);
+                setPaletteOpen(false);
+              },
+            },
+            {
+              group: "动作",
+              label: "查找 / 替换",
+              run: () => {
+                const apiHost = instanceRef.current?.univerAPI as {
+                  executeCommand?: (id: string, params?: unknown) => unknown;
+                } | undefined;
+                apiHost?.executeCommand?.(COMMAND.find);
+                setPaletteOpen(false);
+              },
+            },
+            {
+              group: "动作",
+              label: "折叠表列表",
+              shortcut: "Ctrl+B",
+              run: () => {
+                toggleSidebar();
+                setPaletteOpen(false);
+              },
+            },
+            {
+              group: "动作",
+              label: "打开补丁预览",
+              shortcut: "Ctrl+J",
+              run: () => {
+                setDrawerTab("patch");
+                setDrawerOpen(true);
+                setPaletteOpen(false);
+              },
+            },
+            {
+              group: "帮助",
+              label: "快捷键",
+              run: () => {
+                setShortcutsOpen(true);
+                setPaletteOpen(false);
+              },
+            },
+            {
+              group: "帮助",
+              label: "设置",
+              run: () => {
+                setSettingsOpen(true);
+                setPaletteOpen(false);
+              },
+            },
+          ]}
+        />
+      ) : null}
+      <SubmitConfirm
+        open={submitConfirmOpen}
+        text={COPY.submitConfirm(
+          state.dirtyCount,
+          revision?.branch ?? "",
+          revision?.id.slice(0, 8) ?? "",
+          state.table,
+          summary || (patchPreview ? "…" : ""),
+          autoCommit,
+          autoExport,
+        )}
+        onConfirm={() => {
+          setSubmitConfirmOpen(false);
+          void submitNow();
+        }}
+        onCancel={() => setSubmitConfirmOpen(false)}
+      />
+      {shortcutsOpen ? (
+        <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      ) : null}
+      {hostMode && !state.online && state.phase !== "Opening" ? (
+        <Blocked
+          kind={state.phase === "Closed" ? "closed" : "offline"}
+          onRetry={() => window.location.reload()}
+        />
+      ) : null}
     </div>
     </ToastProvider>
   );

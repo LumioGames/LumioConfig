@@ -100,7 +100,8 @@ const SUMMARY_STYLE: CSSProperties = { fontWeight: 600, fontSize: "var(--font-si
 const TARGET_STYLE: CSSProperties = { color: "var(--color-text-muted)", fontSize: "var(--font-size-12)" };
 
 const EMPTY_STYLE: CSSProperties = {
-  color: "var(--color-text-faint)",
+  // a11y:faint 对白底 ≈2.6:1,空态正文用 muted(≥4.5:1)。
+  color: "var(--color-text-muted)",
   padding: "16px 0",
   textAlign: "center",
   fontSize: "var(--font-size-12)",
