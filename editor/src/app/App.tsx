@@ -13,7 +13,7 @@ import type {
   TableColumn,
   TableResponse,
 } from "../api/types";
-import { loadFixture } from "../fixtures/catalog";
+import { FIXTURES, loadFixture } from "../fixtures/catalog";
 import { ConflictPanel } from "../panels/ConflictPanel";
 import { DiffPreview } from "../panels/DiffPreview";
 import { ExportPanel } from "../panels/ExportPanel";
@@ -978,6 +978,11 @@ export function App() {
   useEffect(() => {
     const onDown = (event: MouseEvent) => {
       const container = containerRef.current;
+      // 只认左键:右键属于上下文菜单交互,不应强制展开检查器(其四态键与
+      // 原生菜单 testid 同名,同时出现会撞 strict 模式)。
+      if (event.button !== 0) {
+        return;
+      }
       if (!container || !(event.target instanceof Node) || !container.contains(event.target)) {
         return;
       }
@@ -1074,12 +1079,21 @@ export function App() {
         }}
       />
       <TableList
-        tables={(tableSummaries ?? []).map((item) => ({
-          name: item.name,
-          rowCount: item.rowCount,
-          dirtyCount: dirtyCounts[item.name] ?? 0,
-          conflictCount: item.name === state.table ? conflicts.length : 0,
-        }))}
+        tables={(hostMode
+          ? (tableSummaries ?? []).map((item) => ({
+              name: item.name,
+              rowCount: item.rowCount,
+              dirtyCount: dirtyCounts[item.name] ?? 0,
+              conflictCount: item.name === state.table ? conflicts.length : 0,
+            }))
+          : FIXTURES.map((item) => ({
+              // fixture 模式没有 /api/session,行数开表后才知,先给 0(侧栏不显示行数)。
+              name: item.name,
+              rowCount: 0,
+              dirtyCount: dirtyCounts[item.name] ?? 0,
+              conflictCount: item.name === state.table ? conflicts.length : 0,
+            }))
+        )}
         active={state.table}
         collapsed={sidebarCollapsed}
         onSelect={openTable}
