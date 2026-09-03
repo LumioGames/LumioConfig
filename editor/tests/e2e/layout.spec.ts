@@ -3,11 +3,6 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * 布局与检查器验收(R-00380 M6-H · S01/S03/S04;设计稿 §2.1/§5/§7)。
  *
- * 本文件分两段:
- * 1. 现在就能跑的烟雾断言(不依赖 App v3 接线、不经 __lumioPoc 注入 phase);
- * 2. 依赖主 loop App 接线(Inspector 挂载 / Ctrl+M / TopBar+Banner / phase 注入桥)
- *    的用例——先以 test.skip 占位并注明依赖,接线后去掉 skip 行整段复跑。
- *
  * 快捷键核定结论(Ctrl+M,待办 §11「契约卡核对 Univer 0.25 内置键后定」):
  * - Univer 0.25.1 全部已装包(sheets-ui/ui/sheets/docs/filter/sort/find-replace/
  *   data-validation/numfmt)无任何 KeyCode.M 快捷键注册; sheets-ui 实注册键为
@@ -17,12 +12,33 @@ import { expect, test, type Page } from "@playwright/test";
  *   设计稿明令避开的 Ctrl+Shift+I / Ctrl+Shift+J);本项目自用 Ctrl+S/K/B/J/Enter
  *   亦无冲突。
  * 结论: **Ctrl+M 可用**。
+ *
+ * 坐标口径与 keyboard.spec 相同(canvas 原点 + 24 列标带 + 36 表头行 + 24 行高,
+ * 列宽 [110, 140, 其余 120])。
  */
 
 async function waitPoc(page: Page) {
   await page.goto("/");
   await page.getByTestId("univer-root").waitFor();
   await page.waitForFunction(() => Boolean(window.__lumioPoc?.map?.()));
+}
+
+async function gridOrigin(page: Page): Promise<{ x: number; y: number }> {
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('[data-testid="univer-root"] canvas')].some(
+      (el) => el.getBoundingClientRect().width > 500,
+    ),
+  );
+  return page.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-testid="univer-root"] canvas')].find(
+      (item) => item.getBoundingClientRect().width > 500,
+    );
+    const rect = el?.getBoundingClientRect();
+    if (!rect) {
+      throw new Error("grid canvas missing");
+    }
+    return { x: rect.x, y: rect.y };
+  });
 }
 
 for (const viewport of [
@@ -39,37 +55,88 @@ for (const viewport of [
       expect(box!.height).toBeGreaterThan(300);
     });
 
-    // 依赖:Task 11/12 面板(TopBar 42 / 工具栏 32 / 抽屉 30 / 状态条 24)+ 主 loop
-    // App 接线后的 v3 布局;当前 App 仍是 v1 组合,主区占比无意义。接线后删掉
-    // 体内这行 test.skip 并实现测量。
-    test("univer-root height / main-area height ≥ 0.75", async () => {
-      test.skip(true, "主 loop App 接线后启用:univer-root 高度 / 主区高度 ≥ 0.75(R-00380 S01)");
-      /* 接线后实现:主区 = 视口高 − 顶栏(42) − 状态条(24);断言
-         univer-root.boundingBox().height / 主区高 ≥ 0.75,两档视口各跑一次。 */
+    // 主区 = 视口高 − 顶栏(42) − 状态条(24);断言 univer-root 高度占比 ≥ 0.75
+    // (R-00380 S01;§2.1 预算 900 档 92.6% / 720 档 90.5%)。
+    test("univer-root height / main-area height ≥ 0.75", async ({ page }) => {
+      await waitPoc(page);
+      const box = await page.getByTestId("univer-root").boundingBox();
+      expect(box).toBeTruthy();
+      const main = viewport.height - 42 - 24;
+      expect(box!.height / main).toBeGreaterThanOrEqual(0.75);
     });
   });
 }
 
 test.describe("inspector open/close (R-00380 S01)", () => {
-  // 依赖:Inspector 挂载与 Ctrl+M 接线由主 loop 完成(App.tsx 不在本卡文件集)。
-  test("inspector defaults to collapsed, expands on cell selection, Ctrl+M collapses, remembered after reload", async () => {
-    test.skip(true, "主 loop App 接线后启用:检查器默认收起 / 选格展开 / Ctrl+M 收起 / 刷新后记忆");
-    /* 接线后实现:
-       1. getByTestId("inspector") 初始不可见(默认收起,viewState.uiFlags 缺省 false);
-       2. 点击数据格 → inspector 可见,cell-baseline/invalid-reason 按需出现;
-       3. page.keyboard.press("Control+m") → 收起;
-       4. reload → 保持收起(localStorage 键 lumio-config-editor:view:*);
-       5. 再点格展开 → reload → 保持展开(记忆对称)。 */
+  test("inspector defaults to collapsed, expands on cell selection, Ctrl+M collapses, remembered after reload", async ({ page }) => {
+    await waitPoc(page);
+    // 1. 默认收起
+    await expect(page.getByTestId("inspector")).toHaveCount(0);
+    // 2. 点数据行 1 的 display_name → 展开
+    const origin = await gridOrigin(page);
+    await page.mouse.click(origin.x + 110 + 70, origin.y + 24 + 36 + 12);
+    await expect(page.getByTestId("inspector")).toBeVisible();
+    // 3. Ctrl+M 收起
+    await page.keyboard.press("Control+m");
+    await expect(page.getByTestId("inspector")).toHaveCount(0);
+    // 4. reload → 保持收起
+    await page.reload();
+    await waitPoc(page);
+    await expect(page.getByTestId("inspector")).toHaveCount(0);
+    // 5. 再点格展开 → reload → 保持展开(记忆对称)
+    const origin2 = await gridOrigin(page);
+    await page.mouse.click(origin2.x + 110 + 70, origin2.y + 24 + 36 + 12);
+    await expect(page.getByTestId("inspector")).toBeVisible();
+    await page.reload();
+    await waitPoc(page);
+    await expect(page.getByTestId("inspector")).toBeVisible();
   });
 });
 
 test.describe("phase capsule and blocking banner (R-00380 S04)", () => {
-  // 依赖:TopBar/Banner(Task 11)+ __lumioPoc 的 phase 注入桥(主 loop 接线)。
-  test("every phase shows its capsule copy and blocking phases show the banner", async () => {
-    test.skip(true, "主 loop 接线后启用:14 个状态各有胶囊文案且阻断态有 banner");
-    /* 接线后实现:经 __lumioPoc 注入 phase(Opening/ReadyClean/ReadyDirty/SavingDraft/
-       Validating/ReadyToSubmit/Submitting/Conflicted/Stale/Failed×3 种 failKind/Closed/
-       offline 派生态),逐一断言状态胶囊文案与 §5 文案表一致;Conflicted/Stale/Failed/
-       offline/Closed 断言 [data-testid="banner"] 可见且非阻断态无 banner。 */
+  // 经 __lumioPoc.setPhase 注入(bridge 由主 loop 接线;生产代码不派发 debugPhase)。
+  test("every phase shows its capsule copy and blocking phases show the banner", async ({ page }) => {
+    await waitPoc(page);
+    const capsule = page.getByTestId("status-phase");
+    const banner = page.getByTestId("banner");
+
+    const normal: Array<[string, string]> = [
+      ["Opening", "正在打开…"],
+      ["ReadyClean", "与仓库一致"],
+      ["ReadyDirty", "格未提交"],
+      ["SavingDraft", "正在保存草稿…"],
+      ["Validating", "正在预检…"],
+      ["ReadyToSubmit", "预检通过，可提交"],
+      ["Submitting", "正在提交…"],
+    ];
+    // fixture 模式下 online 恒为 false(无 Host 会话),注入时显式置 online,
+    // 否则 14 态全部被「无法连接本机服务」派生态覆盖。
+    for (const [phase, text] of normal) {
+      await page.evaluate((p) => window.__lumioPoc?.setPhase(p, undefined, true), phase);
+      await expect(capsule).toContainText(text);
+      await expect(banner).toHaveCount(0);
+    }
+
+    const blocking: Array<[string, string | undefined, string]> = [
+      ["Conflicted", undefined, "处冲突"],
+      ["Stale", undefined, "仓库已更新"],
+      ["Failed", "VCS", "commit 未完成"],
+      ["Failed", "SCHEMA_CHANGED", "结构已变化"],
+      ["Failed", "DRAFT_VERSION_CONFLICT", "另一个标签页"],
+      ["Closed", undefined, "会话已结束"],
+    ];
+    for (const [phase, failKind, text] of blocking) {
+      await page.evaluate(
+        (args: [string, string | undefined]) => window.__lumioPoc?.setPhase(args[0], args[1], true),
+        [phase, failKind] as [string, string | undefined],
+      );
+      await expect(banner).toBeVisible();
+      await expect(banner).toContainText(text);
+    }
+
+    // offline 派生态:任一阶段叠加 online=false 覆盖为离线横幅。
+    await page.evaluate(() => window.__lumioPoc?.setPhase("ReadyDirty", undefined, false));
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText("无法连接本机服务");
   });
 });

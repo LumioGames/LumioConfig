@@ -170,6 +170,8 @@ async function waitPocFixture(page: Page) {
 const COLUMN_WIDTHS = [110, 140];
 const ROW_HEIGHT = 24;
 const HEADER_BAND = 24;
+/** v3 两行列头(D3)后表头行高 36(单行 24 + 换行行)。 */
+const HEADER_ROW = 36;
 
 function columnCenter(col: number): number {
   let x = 0;
@@ -200,7 +202,7 @@ async function gridOrigin(page: Page): Promise<{ x: number; y: number }> {
 /** 真实鼠标点中 40001 行 display_name(sheet row 1 / col 2),再用方向键走到目标格。 */
 async function selectCell(page: Page, sheetRow: number, sheetCol: number) {
   const origin = await gridOrigin(page);
-  await page.mouse.click(origin.x + columnCenter(2), origin.y + HEADER_BAND + ROW_HEIGHT + ROW_HEIGHT / 2);
+  await page.mouse.click(origin.x + columnCenter(2), origin.y + HEADER_BAND + HEADER_ROW + ROW_HEIGHT / 2);
   for (let i = 1; i < sheetRow; i += 1) {
     await page.keyboard.press("ArrowDown");
   }
@@ -248,7 +250,8 @@ test.describe("keyboard edits over Host static build", () => {
     }
     await waitPoc(page, host.url);
     await page.waitForTimeout(500);
-    await expect(page.getByTestId("status-hint")).toHaveText("就绪");
+    // v3 状态条:status-hint 是视觉隐藏 live region,空 hint 渲染空串(旧「就绪」占位已删)。
+    await expect(page.getByTestId("status-hint")).toHaveText("");
     // S03 无红字:invalid 样式色 #C5221F 是 canvas 文本,模型层无 DOM 可断言,
     // 退回像素口径。判据收紧到该色核心笔画(r>170 且 g/b<60):干净加载实测 0,
     // 排除 Univer 自带 DV 角标(≈rgb(183,87,0),g≈87)与工具栏橙色图标的噪
@@ -269,7 +272,8 @@ test.describe("keyboard edits over Host static build", () => {
     const token = await page.evaluate(() => window.__lumioPoc?.extractTokens()?.["40001"]?.damage);
     expect(token).toEqual({ state: "value", raw: "120", effective: 120 });
     await expect(page.getByTestId("status-hint")).toContainText("required");
-    await expect(page.getByTestId("status-dirty")).toContainText("0");
+    // v3 状态条(§12):0 脏格显示「无未提交改动」。
+    await expect(page.getByTestId("status-dirty")).toContainText("无未提交改动");
     const patch = await page.evaluate(() => window.__lumioPoc?.buildPatch());
     expect(patch?.ops).toHaveLength(0);
   });

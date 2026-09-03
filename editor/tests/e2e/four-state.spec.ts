@@ -184,7 +184,8 @@ test.describe("four-state nine actions", () => {
       }
       return x + (widths[col] ?? 120) / 2;
     };
-    const row1Y = origin.y + 24 + 24 + 12;
+    // v3 两行列头后表头行 36px(24 列标带 + 36 表头 + 12 半行)。
+    const row1Y = origin.y + 24 + 36 + 12;
 
     // display_name 列(必填,有值)右键:四项全部可见
     await page.mouse.click(origin.x + columnCenter(2), row1Y, { button: "right" });
