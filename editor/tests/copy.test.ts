@@ -64,6 +64,7 @@ describe("COPY 文案表", () => {
     expect(COPY.settings.autoCommitLabel).toBe("提交后自动 commit 到当前分支");
     expect(COPY.settings.autoExportLabel).toBe("提交后自动导表");
     expect(COPY.settings.savedToast).toBe("已保存到本机设置");
+    expect(COPY.banner.changedSinceSeen).toBe("自你上次打开以来这张表已变化");
     expect(COPY.validation.requiredMissingColumn).toBe("必填列不能设为缺列");
     expect(COPY.validation.requiredNoDefault("cost")).toBe("cost 是必填列且没有默认值，Delete 不改动它");
     expect(COPY.cellMenu.setNull).toBe("设为 null ∅");

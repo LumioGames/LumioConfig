@@ -40,6 +40,8 @@ export const COPY = {
     failedDraftConflict: "另一个标签页保存了这张表的草稿。此页已停止编辑，刷新后接着改。",
     offline: "无法连接本机服务。请重新运行 serve，再打开新链接。",
     closed: "会话已结束。请重新打开链接；若链接已失效，请重新运行 serve 后打开新链接。",
+    /** §8 末段 J3:打开表时修订/指纹与上次看到的不同 → 蓝底横幅 + [知道了](ack 写 seen)。 */
+    changedSinceSeen: "自你上次打开以来这张表已变化",
   },
   /** §5 横幅动作按钮。 */
   bannerActions: {
