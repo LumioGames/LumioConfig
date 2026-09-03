@@ -1298,7 +1298,7 @@ export function App() {
           columnCount={mapRef.current?.columns.length ?? 0}
           canEdit={canEdit(state)}
         />
-        <div className="app-grid-body">
+        <div className="app-grid-body" role="main">
           <div ref={containerRef} className="univer-root" data-testid="univer-root" />
           {inspectorOpen ? (
             <Inspector

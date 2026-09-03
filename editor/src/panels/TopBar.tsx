@@ -115,6 +115,9 @@ const BRAND_STYLE: CSSProperties = {
   fontWeight: 600,
   color: "var(--color-text-muted)",
   whiteSpace: "nowrap",
+  margin: 0,
+  display: "inline-flex",
+  alignItems: "center",
 };
 
 const SLASH_STYLE: CSSProperties = {
@@ -262,7 +265,7 @@ export function TopBar({
       >
         <IconSidebar />
       </button>
-      <span style={BRAND_STYLE}>LumioConfig</span>
+      <h1 style={BRAND_STYLE}>LumioConfig</h1>
       <span aria-hidden="true" style={SLASH_STYLE}>
         /
       </span>

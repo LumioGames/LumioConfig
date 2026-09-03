@@ -176,7 +176,7 @@ export function Drawer({ tabs, active, open, onSelect, onToggle, children }: Dra
   }
 
   return (
-    <section data-testid="panel" style={{ ...PANEL_STYLE, height: open ? 240 : 30 }}>
+    <section data-testid="panel" aria-label="工具面板" style={{ ...PANEL_STYLE, height: open ? 240 : 30 }}>
       <div style={{ ...STRIP_STYLE, borderBottom: open ? "1px solid var(--color-border)" : 0 }}>
       <div role="tablist" aria-label="抽屉" style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }} onKeyDown={handleStripKeyDown}>
         {tabs.map((tab) => {

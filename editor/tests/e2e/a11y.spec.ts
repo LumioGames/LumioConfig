@@ -32,14 +32,13 @@ async function waitApp(page: Page) {
 }
 
 /**
- * 已知豁免(serious+,主 loop / 后续卡修,见 docs/a11y-checklist.md 待勾清单):
- * - `.grid-toolbar__hint`:app.css 用 --color-text-faint(浅灰)做 11px 提示字,
- *   白底对比 ≈ 2.4:1 < 4.5:1;样式在 app.css(主 loop 文件集),本卡不越界改,
- *   修复 = 换 --color-text-muted 后删本行 exclude。
+ * 已知豁免(serious+,见 docs/a11y-checklist.md):
+ * - `.grid-toolbar__hint` 对比度已修(app.css 换 --color-text-muted,M6-J 接线期),
+ *   豁免行已删;此处保留的只剩第三方 DOM。
  * - `#univer-doc-main-canvas`:Univer 0.25.1 画布宿主自带 tabindex 无对应 role,
  *   第三方 DOM,本项目源码改不了;升级 / 换渲染层前保持豁免。
  */
-const KNOWN_EXCLUSIONS = [".grid-toolbar__hint", "#univer-doc-main-canvas"];
+const KNOWN_EXCLUSIONS = ["#univer-doc-main-canvas"];
 
 async function scanWithAxe(page: Page) {
   let builder = new AxeBuilder({ page });
@@ -52,7 +51,12 @@ async function scanWithAxe(page: Page) {
   console.log(
     "a11y violations:",
     JSON.stringify(
-      results.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length })),
+      results.violations.map((v) => ({
+        id: v.id,
+        impact: v.impact,
+        nodes: v.nodes.length,
+        targets: v.nodes.map((n) => n.target),
+      })),
     ),
   );
   expect(serious, JSON.stringify(serious, null, 2)).toEqual([]);
