@@ -1230,7 +1230,16 @@ export function App() {
     if (!desc) {
       return null;
     }
-    const tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
+    let tokens: Record<string, Record<string, CellToken>> | null = null;
+    try {
+      tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
+    } catch {
+      // dispose 竞态:Univer 实例销毁期间其生命周期事件可同步触发一次渲染,届时
+      // instanceRef 仍指半销毁实例(工作簿已死,save() 返回 undefined),extractTokens
+      // 会抛——检查器目标取不到就返回 null,不白屏(M7-B S02 实测;审计 §C-10 的
+      // 一次性白屏与此同源)。
+      return null;
+    }
     const current = tokens[selection.rowKey]?.[selection.column];
     if (!current) {
       return null;

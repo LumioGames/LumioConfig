@@ -284,4 +284,54 @@ test.describe("host errors tab (M7-B, R-00397)", () => {
       .poll(() => page.evaluate(() => window.__lumioPoc?.activeSelection?.() ?? null))
       .toEqual({ rowKey: "40001", column: "damage" });
   });
+
+  /**
+   * S02 的其余归零路径(M7-B §2):还原(S01 已覆盖)之外,undo 回基线与切表都以
+   * E2E 旅程钉死;「行删除撤销」与 undo 共用同一清除点——markDirty 里
+   * `stateRef.dirtyCount > 0 && dirty === 0 → setErrors([])`(App.tsx 接线提交),
+   * 且其独立行为已被 TableList/undo 既有用例与 S01 的同分支覆盖,此处不再
+   * 构造删除行唯一改动的复合状态(见交回物 known gaps 的口径说明)。
+   */
+  test("S02 undo-to-baseline and table switch also clear the errors tab", async ({ page }) => {
+    if (!host) {
+      throw new Error("host missing");
+    }
+
+    // undo 回基线:预检失败(errors=1)→ 撤销(经 __lumioPoc.undo 桥,与工具栏撤销
+    // 按钮同语义;四态写入可能压多条命令,循环撤销直到回基线)→ dirty 0 → 错误归零。
+    await preflightDamageNull(page, host.url);
+    await expect.poll(async () => (await errorTabFacts(page)).countText).toBe("1");
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const raw = await page.evaluate(() => window.__lumioPoc?.extractTokens()?.["40001"]?.damage?.raw);
+      if (raw === "120") {
+        break;
+      }
+      await page.evaluate(() => window.__lumioPoc?.undo?.());
+      await page.waitForTimeout(200);
+    }
+    await expect
+      .poll(() => page.evaluate(() => window.__lumioPoc?.extractTokens()?.["40001"]?.damage?.raw))
+      .toBe("120");
+    await expect(page.getByTestId("status-phase")).toHaveAttribute("data-phase", "ReadyClean");
+    await expect.poll(async () => (await errorTabFacts(page)).countText).toBe("0");
+    const afterUndo = await errorTabFacts(page);
+    expect(afterUndo.countBg).toBe(afterUndo.subtleBg);
+    expect(afterUndo.statusDirty).toContain("无未提交改动");
+
+    // 切表归零:重新弄脏并预检失败(errors=1)→ 点侧栏切表 → 新表以干净态打开,错误不跨表。
+    // (不再整页 goto:桥写入 + 预检即可复现 errors=1,避免重载竞态)
+    await page.evaluate(() => window.__lumioPoc?.applyFourState?.("40001", "damage", "null"));
+    await page.waitForFunction(() => window.__lumioPoc?.extractTokens?.()?.["40001"]?.damage?.raw === "null");
+    await page.getByTestId("btn-validate").click();
+    await expect
+      .poll(() => page.evaluate(() => window.__lumioPoc?.phase?.() ?? ""))
+      .toBe("ReadyDirty");
+    await expect.poll(async () => (await errorTabFacts(page)).countText).toBe("1");
+    await page.getByTestId("table-effects").click();
+    await expect(page.getByTestId("status-phase")).toHaveAttribute("data-phase", "ReadyClean");
+    await expect.poll(async () => (await errorTabFacts(page)).countText).toBe("0");
+    const afterSwitch = await errorTabFacts(page);
+    expect(afterSwitch.countBg).toBe(afterSwitch.subtleBg);
+    expect(afterSwitch.statusDirty).toContain("无未提交改动");
+  });
 });
