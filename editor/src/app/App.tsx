@@ -5,6 +5,7 @@ import {
   api,
   createLivenessWatchdog,
   readToken,
+  sourceFile,
   subscribeEventsWithReconnect,
 } from "../api/client";
 import { LocalDraftSessionProvider } from "../api/draftSession";
@@ -29,6 +30,7 @@ import { ExportTab, type ExportRequest, type ExportResult } from "../panels/draw
 import { SettingsDialog, type EditorSettings } from "../panels/SettingsDialog";
 import { StatusBar } from "../panels/StatusBar";
 import { TableList } from "../panels/TableList";
+import { SourceViewDialog, type SourceViewKind } from "../panels/SourceViewDialog";
 import { TopBar } from "../panels/TopBar";
 import { Banner } from "../panels/Banner";
 import { GridToolbar } from "../panels/GridToolbar";
@@ -121,6 +123,9 @@ export function App() {
   const [tableSummaries, setTableSummaries] = useState<SessionTableSummary[] | undefined>(undefined);
   // M7-F:导出格式列表由 Host capabilities 下发(当前 ["csv","tsv","txt"]),前端不写死。
   const [exportFormats, setExportFormats] = useState<string[] | undefined>(undefined);
+  // M7-E/M7-G:源文件查看器开合态;reveal 按 capabilities 整项决定菜单第三项是否渲染。
+  const [sourceView, setSourceView] = useState<{ table: string; kind: SourceViewKind } | null>(null);
+  const [revealEnabled, setRevealEnabled] = useState(false);
   const [dirtyCounts, setDirtyCounts] = useState<Record<string, number>>({});
   const [errors, setErrors] = useState<Array<{ code?: string; message?: string }>>([]);
   const [conflicts, setConflicts] = useState<RebaseConflict[]>([]);
@@ -838,6 +843,7 @@ export function App() {
         setTableNames(session.tables.map((item: SessionTableSummary) => ({ name: item.name, label: item.name })));
         setTableSummaries(session.tables);
         setExportFormats(session.capabilities?.export);
+        setRevealEnabled(session.capabilities?.reveal === true);
         setRevision(session.revision);
         setHistoryEnabled(Boolean((session as { capabilities?: { history?: boolean } }).capabilities?.history));
         setAutoCommit(session.settings.submit.autoCommit);
@@ -1384,7 +1390,18 @@ export function App() {
         collapsed={sidebarCollapsed}
         onSelect={openTable}
         onToggleCollapse={toggleSidebar}
+        onViewSource={(table, kind) => setSourceView({ table, kind })}
+        revealEnabled={revealEnabled}
       />
+      {sourceView ? (
+        <SourceViewDialog
+          open
+          table={sourceView.table}
+          kind={sourceView.kind}
+          load={() => sourceFile(sourceView.table, sourceView.kind)}
+          onClose={() => setSourceView(null)}
+        />
+      ) : null}
       <div className="app-grid">
         <GridToolbar
           univerAPI={instanceRef.current?.univerAPI ?? null}
