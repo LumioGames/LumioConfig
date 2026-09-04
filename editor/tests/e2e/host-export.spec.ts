@@ -121,4 +121,33 @@ test.describe("host export", () => {
     ]);
     expect(download.suggestedFilename()).toBe("skills.csv");
   });
+
+  // M7-F S01/S03:TXT(权威文本格式)导出与 tables/<t>.txt 逐字节一致;
+  // 目标列选择器锁死(Owner 选项 A:TXT 只出全列)。
+  test("txt export downloads a byte-identical copy of tables/skills.txt", async ({ page }) => {
+    if (!host) {
+      throw new Error("host missing");
+    }
+    await page.goto(host.url);
+    await page.getByTestId("univer-root").waitFor();
+    await page.getByTestId("btn-export-top").click();
+    await page.getByTestId("export-format").selectOption("txt");
+    await expect(page.getByTestId("export-txt-note")).toContainText("只读快照");
+    await expect(page.getByTestId("export-target")).toBeDisabled();
+    await page.getByTestId("btn-export").click();
+    await expect(page.getByTestId("export-link").first()).toBeVisible();
+    const hrefs = await page.locator("[data-testid=export-link]").evaluateAll((nodes) =>
+      nodes.map((node) => (node as HTMLAnchorElement).getAttribute("href") ?? ""),
+    );
+    expect(hrefs.find((href) => href.endsWith("skills.txt"))).toBeTruthy();
+    // 下载 export-link(blob 下载),与源表 tables/skills.txt 逐字节比对。
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.locator('[data-testid="export-link"][href$="skills.txt"]').click(),
+    ]);
+    expect(download.suggestedFilename()).toBe("skills.txt");
+    const actual = fs.readFileSync(await download.path());
+    const expected = fs.readFileSync(path.join(tmp, "tables", "skills.txt"));
+    expect(actual.equals(expected)).toBe(true);
+  });
 });
