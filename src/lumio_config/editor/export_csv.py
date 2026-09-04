@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from ..fingerprint import source_fingerprint
+from ..model import Cell, TableSource
 from ..patch import _row_id
+from ..text_table import format_table_text
 from ..validate import load_sources
 from .drafts import DraftStore
 from .settings import load_settings
@@ -83,6 +85,33 @@ def _atomic_write(path: Path, data: bytes) -> None:
         raise
 
 
+def _overlay_table(
+    table: TableSource,
+    overlay: dict[str, Any],
+    deleted: set[str],
+    id_column: str,
+) -> TableSource:
+    rows: list[dict[str, Cell]] = []
+    for row in table.rows:
+        rid = _row_id(row, id_column) or ""
+        if rid in deleted:
+            continue
+        patch = overlay.get(rid) or {}
+        if not patch:
+            rows.append(row)
+            continue
+        merged = dict(row)
+        for column in table.columns:
+            if column not in patch:
+                continue
+            token = _draft_token(patch[column])
+            if token is None:
+                continue
+            merged[column] = Cell.from_token(token)
+        rows.append(merged)
+    return TableSource(table.name, table.schema_ref, table.columns, rows, table.path)
+
+
 def export_tables(
     root: Path,
     tables: list[str],
@@ -93,8 +122,10 @@ def export_tables(
 ) -> list[Path]:
     root = Path(root)
     out_dir = Path(out_dir)
-    if fmt not in {"csv", "tsv"}:
-        raise ValueError("format must be csv or tsv")
+    if fmt not in {"csv", "tsv", "txt"}:
+        raise ValueError("format must be csv, tsv or txt")
+    if fmt == "txt" and targets:
+        raise ValueError("txt export does not support targets filtering; keep targets empty to export full-column tables")
     if source not in {"repo", "draft"}:
         raise ValueError("source must be repo or draft")
     schemas, table_map, errors = load_sources(root)
@@ -110,35 +141,42 @@ def export_tables(
         if schema is None or table is None:
             continue
         id_column = str(schema.get("idColumn", "id"))
-        columns = _columns(schema, targets)
         draft = drafts.load(name) if drafts else None
         overlay = (draft or {}).get("rows") or {}
         deleted = set((draft or {}).get("deleted") or []) if draft else set()
-        rows_out: list[list[str]] = [columns]
-        for row in table.rows:
-            rid = _row_id(row, id_column) or ""
-            if rid in deleted:
-                continue
-            patch = overlay.get(rid) or {}
-            line: list[str] = []
-            for column in columns:
-                if column in patch:
-                    token = _draft_token(patch[column])
-                    if token is None and column == "name" and isinstance(patch.get("name"), str):
-                        token = str(patch["name"])
-                    if token is None:
+        if fmt == "txt":
+            effective = table
+            if drafts is not None:
+                effective = _overlay_table(table, overlay, deleted, id_column)
+            path = out_dir / f"{name}.draft.txt" if source == "draft" else out_dir / f"{name}.txt"
+            _atomic_write(path, format_table_text(effective).encode("utf-8"))
+        else:
+            columns = _columns(schema, targets)
+            rows_out: list[list[str]] = [columns]
+            for row in table.rows:
+                rid = _row_id(row, id_column) or ""
+                if rid in deleted:
+                    continue
+                patch = overlay.get(rid) or {}
+                line: list[str] = []
+                for column in columns:
+                    if column in patch:
+                        token = _draft_token(patch[column])
+                        if token is None and column == "name" and isinstance(patch.get("name"), str):
+                            token = str(patch["name"])
+                        if token is None:
+                            cell = row.get(column)
+                            token = cell.token() if cell else "@missing"
+                    else:
                         cell = row.get(column)
                         token = cell.token() if cell else "@missing"
-                else:
-                    cell = row.get(column)
-                    token = cell.token() if cell else "@missing"
-                line.append(_guard(token))
-            rows_out.append(line)
-        handle = io.StringIO()
-        writer = csv.writer(handle, delimiter=delimiter, lineterminator="\n")
-        writer.writerows(rows_out)
-        path = out_dir / f"{name}.{fmt}"
-        _atomic_write(path, ("\ufeff" + handle.getvalue()).encode("utf-8"))
+                    line.append(_guard(token))
+                rows_out.append(line)
+            handle = io.StringIO()
+            writer = csv.writer(handle, delimiter=delimiter, lineterminator="\n")
+            writer.writerows(rows_out)
+            path = out_dir / f"{name}.{fmt}"
+            _atomic_write(path, ("\ufeff" + handle.getvalue()).encode("utf-8"))
         written.append(path)
         table_path = root / "tables" / f"{name}.txt"
         schema_path = root / "schemas" / f"{name}.json"
@@ -148,18 +186,26 @@ def export_tables(
     revision = adapter.revision()
     revision_id = revision.id if revision else ""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    readme = "\n".join(
-        [
-            "GENERATED / NOT AUTHORITATIVE — do not import back",
-            f"repo: {_repo_name(root)}",
-            f"revision: {revision_id}",
-            f"exportedAt: {now}",
-            f"source: {source}",
-            "fingerprints:",
-            *[f"  {item}" for item in fingerprints],
-            "",
-        ]
-    )
+    readme_lines = [
+        "GENERATED / NOT AUTHORITATIVE — do not import back",
+        f"repo: {_repo_name(root)}",
+        f"revision: {revision_id}",
+        f"exportedAt: {now}",
+        f"source: {source}",
+    ]
+    if fmt == "txt":
+        readme_lines.append(
+            "txt: .txt files in this directory are read-only snapshots of the source table format;"
+            " do not copy them back over tables/ — edit tables in the editor and commit a patch instead"
+        )
+        if source == "draft":
+            readme_lines.append(
+                "txt draft warning: this export contains uncommitted draft edits and does not match the repository"
+            )
+    readme_lines.append("fingerprints:")
+    readme_lines.extend(f"  {item}" for item in fingerprints)
+    readme_lines.append("")
+    readme = "\n".join(readme_lines)
     readme_path = out_dir / "README.txt"
     _atomic_write(readme_path, readme.encode("utf-8"))
     written.append(readme_path)
