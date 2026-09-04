@@ -1,24 +1,34 @@
 import { act } from "react";
 import type { ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TopBar, type TopBarRevision } from "../src/panels/TopBar";
 import { phaseView, type PhaseView } from "../src/app/phaseView";
 import { INITIAL_EDITOR_STATE, type EditorState } from "../src/app/state";
 import { COPY } from "../src/app/copy";
+import { ToastProvider } from "../src/components/ui/Toast";
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
+let writeText: ReturnType<typeof vi.fn>;
 
 function mount(node: ReactElement): HTMLDivElement {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root!.render(node);
+    root!.render(<ToastProvider>{node}</ToastProvider>);
   });
   return container;
 }
+
+beforeEach(() => {
+  writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+  });
+});
 
 afterEach(() => {
   if (root) {
@@ -212,5 +222,61 @@ describe("TopBar 回调", () => {
     expect(props.onOpenShortcuts).toHaveBeenCalledTimes(1);
     openMenuAndClickItem(0);
     expect(props.onOpenPalette).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("TopBar 表名 ⌄ 菜单路径(M7-D)", () => {
+  const PATH_PROPS = { sourcePath: "tables/skills.txt", schemaPath: "schemas/skills.json" };
+
+  function openTableMenu(el: HTMLElement): Array<HTMLElement> {
+    act(() => {
+      q(el, "topbar-table-menu").click();
+    });
+    return Array.from(el.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+  }
+
+  it("两条目文本与传入的 sourcePath / schemaPath 逐字一致(S02)", () => {
+    const el = mount(<TopBar {...baseProps(phaseView(at("ReadyDirty")))} {...PATH_PROPS} />);
+    const items = openTableMenu(el);
+    expect(items).toHaveLength(2);
+    expect(items[0]!.textContent).toBe(COPY.paths.sourceFile("tables/skills.txt"));
+    expect(items[1]!.textContent).toBe(COPY.paths.schemaFile("schemas/skills.json"));
+  });
+
+  it("点击条目调用 navigator.clipboard.writeText(路径) 并 toast 已复制路径(S03)", async () => {
+    const el = mount(<TopBar {...baseProps(phaseView(at("ReadyDirty")))} {...PATH_PROPS} />);
+    act(() => {
+      q(el, "topbar-table-menu").click();
+    });
+    const source = Array.from(el.querySelectorAll<HTMLElement>('[role="menuitem"]'))[0]!;
+    await act(async () => {
+      source.click();
+    });
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith("tables/skills.txt");
+    act(() => {
+      q(el, "topbar-table-menu").click();
+    });
+    const schema = Array.from(el.querySelectorAll<HTMLElement>('[role="menuitem"]'))[1]!;
+    await act(async () => {
+      schema.click();
+    });
+    expect(writeText).toHaveBeenCalledTimes(2);
+    expect(writeText).toHaveBeenCalledWith("schemas/skills.json");
+    const toasts = Array.from(document.querySelectorAll(".toast"));
+    expect(toasts.some((toast) => toast.textContent === COPY.paths.copied)).toBe(true);
+  });
+
+  it("表名按钮 title 为 <表名> · <源文件路径>(S04;status-table 在 StatusBar 不在本卡文件集,落点为此处)", () => {
+    const el = mount(<TopBar {...baseProps(phaseView(at("ReadyDirty")))} {...PATH_PROPS} />);
+    expect(q(el, "topbar-table").getAttribute("title")).toBe("skills · tables/skills.txt");
+  });
+
+  it("未传路径:不渲染 ⌄ 菜单按钮,title 退化为按表名推导", () => {
+    const props = baseProps(phaseView(at("ReadyDirty")));
+    props.tableName = "items";
+    const el = mount(<TopBar {...props} />);
+    expect(el.querySelector('[data-testid="topbar-table-menu"]')).toBeNull();
+    expect(q(el, "topbar-table").getAttribute("title")).toBe("items · tables/items.txt");
   });
 });
