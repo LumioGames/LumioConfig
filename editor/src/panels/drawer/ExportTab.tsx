@@ -7,13 +7,16 @@ import { COPY } from "../../app/copy";
  * 目标列(全部 · S · C · V)→ [导出] → 文件列表(含 README.txt)+ 下载。
  * 单向生成物,不能导回仓库。替代 ExportPanel(不删,由主 loop 接线切换)。
  *
+ * M7-F:格式列表经 `formats` prop 从 capabilities.export 渲染(Host 说了算);
+ * TXT(权威文本格式)只出全列 → 锁死目标列选择器,并追加只读快照/草稿警告文案。
+ *
  * testid 契约(既有 E2E 复用):btn-export export-format export-source
  * export-target export-link;新增 export-tab export-table-<name>。
  */
 
 export interface ExportRequest {
   tables: string[];
-  format: "csv" | "tsv";
+  format: "csv" | "tsv" | "txt";
   source: "repo" | "draft";
   targets?: Array<"S" | "C" | "V">;
 }
@@ -31,6 +34,11 @@ export interface ExportResult {
 export interface ExportTabProps {
   tables: string[];
   onExport(req: ExportRequest): Promise<ExportResult>;
+  /**
+   * M7-F:可导格式列表,来自 Host 会话 capabilities.export——Host 说了算,
+   * 不写死三项;未接线时回落全量(csv/tsv/txt)。未知格式按原字面量渲染。
+   */
+  formats?: string[];
 }
 
 const ROOT_STYLE: CSSProperties = {
@@ -75,6 +83,13 @@ function fileNameOf(href: string): string {
   return href.split("/").pop() ?? "export";
 }
 
+/** 格式 id → 选项文案;CSV/TSV 是格式标识非文案(同 copy.ts §8 注),TXT 用 M7-F 契约文案。 */
+const FORMAT_LABELS: Record<string, string> = {
+  csv: "CSV",
+  tsv: "TSV",
+  txt: COPY.export.formatTxt,
+};
+
 /** 经 Authorization 拉取导出文件并触发浏览器下载(blob,同旧 ExportPanel)。 */
 function download(href: string): void {
   void (async () => {
@@ -92,19 +107,22 @@ function download(href: string): void {
   })();
 }
 
-export function ExportTab({ tables, onExport }: ExportTabProps) {
+export function ExportTab({ tables, onExport, formats = ["csv", "tsv", "txt"] }: ExportTabProps) {
   const [selected, setSelected] = useState<string[]>(tables);
   // 键盘可达(J5):挂载即聚焦主按钮——Univer 网格会吞 Tab,纯 Tab 遍历
   // 无法从顶栏跨到抽屉,命令面板切页签后直接落焦点。
   useEffect(() => {
     document.querySelector<HTMLButtonElement>('[data-testid="btn-export"]')?.focus();
   }, []);
-  const [format, setFormat] = useState<"csv" | "tsv">("csv");
+  const [format, setFormat] = useState<"csv" | "tsv" | "txt">("csv");
   const [source, setSource] = useState<"repo" | "draft">("repo");
   const [target, setTarget] = useState<"" | "S" | "C" | "V">("");
   const [files, setFiles] = useState<ExportFile[]>([]);
   const [hint, setHint] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // M7-F Owner 选项 A:TXT 只出全列 → 目标列选择器整体锁死,请求也不带 targets。
+  const txt = format === "txt";
 
   // 表列表(会话加载后)变化时重置为全选(tables 引用每次渲染都变,按快照键比较)。
   const tablesKey = tables.join("\n");
@@ -120,7 +138,7 @@ export function ExportTab({ tables, onExport }: ExportTabProps) {
 
   const runExport = () => {
     const request: ExportRequest = { tables: selected, format, source };
-    if (target) {
+    if (target && !txt) {
       request.targets = [target];
     }
     setBusy(true);
@@ -141,6 +159,16 @@ export function ExportTab({ tables, onExport }: ExportTabProps) {
   return (
     <div className="drawer-export" data-testid="export-tab" style={ROOT_STYLE}>
       <p style={NOTE_STYLE}>{COPY.exportNote}</p>
+      {txt ? (
+        <p data-testid="export-txt-note" style={NOTE_STYLE}>
+          {COPY.export.txtNote}
+        </p>
+      ) : null}
+      {txt && source === "draft" ? (
+        <p data-testid="export-txt-draft-note" style={NOTE_STYLE}>
+          {COPY.export.txtDraftNote}
+        </p>
+      ) : null}
       <fieldset style={FIELD_STYLE}>
         <legend>{COPY.export.tables}</legend>
         {tables.map((table) => (
@@ -160,10 +188,13 @@ export function ExportTab({ tables, onExport }: ExportTabProps) {
         <select
           data-testid="export-format"
           value={format}
-          onChange={(event) => setFormat(event.target.value as "csv" | "tsv")}
+          onChange={(event) => setFormat(event.target.value as "csv" | "tsv" | "txt")}
         >
-          <option value="csv">CSV</option>
-          <option value="tsv">TSV</option>
+          {formats.map((value) => (
+            <option key={value} value={value}>
+              {FORMAT_LABELS[value] ?? value}
+            </option>
+          ))}
         </select>
       </label>
       <label>
@@ -181,7 +212,9 @@ export function ExportTab({ tables, onExport }: ExportTabProps) {
         {COPY.export.target}
         <select
           data-testid="export-target"
-          value={target}
+          value={txt ? "" : target}
+          disabled={txt}
+          title={txt ? COPY.export.txtNote : undefined}
           onChange={(event) => setTarget(event.target.value as "" | "S" | "C" | "V")}
         >
           <option value="">{COPY.export.targetAll}</option>
