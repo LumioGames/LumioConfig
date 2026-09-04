@@ -329,7 +329,13 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
             files = []
             for path in paths:
                 rel = path.name
-                files.append({"table": path.stem if path.suffix in {".csv", ".tsv"} else None, "href": f"/api/exports/{export_id}/{rel}"})
+                files.append({"table": (
+                    path.stem.removesuffix(".draft")
+                    if path.suffix == ".txt"
+                    else path.stem
+                    if path.suffix in {".csv", ".tsv"}
+                    else None
+                ), "href": f"/api/exports/{export_id}/{rel}"})
             self._json(200, {"exportId": export_id, "files": files})
 
         def _get_export_file(self, export_id: str, filename: str) -> None:
@@ -462,3 +468,4 @@ def _handler_for(host: EditorHost) -> type[BaseHTTPRequestHandler]:
 
 # importing the module registers its extension route via register()
 from . import history  # noqa: E402,F401
+from . import source_view  # noqa: E402,F401  # M7-E: registers /api/tables/<t>/source
