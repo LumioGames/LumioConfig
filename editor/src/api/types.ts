@@ -81,6 +81,8 @@ export interface SessionTableSummary {
   rowCount: number;
   sourceFingerprint: string;
   schemaFingerprint: string;
+  /** M7-D:仓库相对源文件路径,Host 下发 `tables/<name>.txt`(POSIX 分隔符,不含绝对路径)。 */
+  sourcePath: string;
 }
 
 export interface SessionSettings {
@@ -97,6 +99,8 @@ export interface SessionCapabilities {
   events: boolean;
   /** §9:修订历史能力;Host 端 `vcs == "git"` 才为 true,svn / none 为 false(页签不渲染)。 */
   history: boolean;
+  /** M7-G:在资源管理器中显示(reveal);默认 false,CLI `serve --allow-reveal` 显式开启。 */
+  reveal: boolean;
 }
 
 export interface SessionResponse {
@@ -106,6 +110,18 @@ export interface SessionResponse {
   schemas: Record<string, unknown>;
   settings: SessionSettings;
   capabilities: SessionCapabilities;
+}
+
+/**
+ * M7-E:`GET /api/tables/{table}/source?kind=table|schema` 的响应,只读源文件快照。
+ * `path` 为仓库相对路径(`tables/<t>.txt` / `schemas/<t>.json`),`text` 为文件全文,`bytes` 为字节数。
+ */
+export interface SourceFileResponse {
+  table: string;
+  kind: "table" | "schema";
+  path: string;
+  text: string;
+  bytes: number;
 }
 
 export interface PatchOp {
