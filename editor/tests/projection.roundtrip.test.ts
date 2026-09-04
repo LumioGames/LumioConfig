@@ -7,7 +7,7 @@ import type { Draft, TableResponse } from "../src/api/types";
 import { buildBigFixture } from "../src/spreadsheet/bigFixture";
 import { extractTokens } from "../src/spreadsheet/extract";
 import { tokenForMenu } from "../src/spreadsheet/fourState";
-import { buildCell, buildWorkbook, workbookFromWarehouse } from "../src/spreadsheet/projection";
+import { buildCell, buildWorkbook, columnWidth, workbookFromWarehouse } from "../src/spreadsheet/projection";
 import { decorateViewCell, type MutableViewCell } from "../src/spreadsheet/badges";
 import { diffTokens, tokensFromTable } from "../src/spreadsheet/tokens";
 import type { WorkbookData } from "../src/spreadsheet/workbook-types";
@@ -157,8 +157,8 @@ describe("v3 grid visuals", () => {
     expect(idHeader?.v).toContain("🔒");
     expect(nameHeader?.v).toContain("name *");
     expect(nameHeader?.v).toContain("\n");
-    expect(nameHeader?.v).toContain("string · SCV");
-    expect(refHeader?.v).toContain("ref→effects · S");
+    expect(nameHeader?.v).toContain("文本 · 服务端·客户端·体素");
+    expect(refHeader?.v).toContain("ref→effects · 服务端");
     expect(sheet?.rowData?.["0"]?.h).toBe(36);
     expect(styleOf(workbook, "header").tb).toBe(3);
   });
@@ -343,3 +343,53 @@ function workbookFromWarehouseRountrip(table: TableResponse, overlay: Draft) {
   const { workbook, map } = workbookFromWarehouse(table, overlay);
   return { workbook, map, extracted: extractTokens(workbook, map) };
 }
+
+/** M7-C(R-00394)S01/S02:列头第二行中文化 + 列宽自适应;S04:回环与徽标守卫见上。 */
+describe("M7-C header readability", () => {
+  it("localizes the header second line via COPY maps (damage / id against the real skills fixture)", () => {
+    const table = loadJson("skills.json");
+    const { workbook } = buildWorkbook(table);
+    const header = (col: number) => workbook.sheets.skills?.cellData["0"]?.[String(col)]?.v;
+    expect(header(4)).toBe("damage *\n整数 · 服务端");
+    expect(header(0)).toBe("id * 🔒\n整数 · 服务端·客户端·体素");
+  });
+
+  it("falls back to the raw type literal and preserves unknown visibility chars without throwing", () => {
+    const table: TableResponse = {
+      table: "weird",
+      sourceFingerprint: "sha256:weird",
+      columns: [{ name: "odd", type: "vec3", visibility: "QX" }],
+      rows: [],
+    };
+    const { workbook, extracted, expected } = roundTrip(table);
+    expect(workbook.sheets.weird?.cellData["0"]?.["0"]?.v).toBe("odd\nvec3 · Q·X");
+    expect(diffTokens(extracted, expected)).toEqual([]);
+  });
+
+  it("clamps columnWidth to [112, 240] and gives cooldown_frames more than its one-line need", () => {
+    const table = loadJson("skills.json");
+    const cooldown = table.columns.find((column) => column.name === "cooldown_frames")!;
+    const firstLine = "cooldown_frames *";
+    expect(columnWidth(cooldown)).toBeGreaterThan(firstLine.length * 8);
+    expect(columnWidth({ name: "a", type: "string" })).toBe(112);
+    expect(columnWidth({ name: "x".repeat(40), type: "string" })).toBe(240);
+    const id = table.columns.find((column) => column.name === "id")!;
+    expect(columnWidth(id)).toBeGreaterThanOrEqual(110);
+  });
+
+  it("wires columnWidth into the sheet columnData", () => {
+    const table = loadJson("skills.json");
+    const { workbook } = buildWorkbook(table);
+    const cooldown = table.columns.find((column) => column.name === "cooldown_frames")!;
+    expect(workbook.sheets.skills?.columnData?.["5"]?.w).toBe(columnWidth(cooldown));
+  });
+
+  it("prepends the full column name to the header tooltip", () => {
+    const table = loadJson("skills.json");
+    const { workbook } = buildWorkbook(table);
+    const lumio = (workbook.sheets.skills?.cellData["0"]?.["4"]?.custom as
+      | { lumio?: { headerTitle?: string } }
+      | undefined)?.lumio;
+    expect(lumio?.headerTitle?.startsWith(COPY.grid.fullColumnName("damage"))).toBe(true);
+  });
+});
