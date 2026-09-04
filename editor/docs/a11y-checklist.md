@@ -5,7 +5,8 @@ serious 以上零容忍);本清单收纳它管不到的人工条目——焦点�
 以及 `editor/docs/prototype/README.md` 未涵盖的设计验收项(重设计 handoff §4.3
 十一条),由 Task 20(F3 docs-and-static 收口,2026-09-03)逐条勾选。
 
-勾选口径:给出自动用例 ID 或截图 / 走查证据才打勾;修复时在条目后追加卡号。
+勾选口径:给出自动用例 ID 或截图 / 走查证据才打勾;`[~]` 表示部分满足——主体有证据、
+留有已声明的残留(M7-J / R-00402 引入);修复时在条目后追加卡号。
 
 ## 1. 自动化扫描现状(tests/e2e/a11y.spec.ts)
 
@@ -69,12 +70,12 @@ serious 以上零容忍);本清单收纳它管不到的人工条目——焦点�
 - [x] **14 态胶囊与横幅**:`tests/e2e/layout.spec.ts:98` 注入全相位断言胶囊文案,
       阻断态(Conflicted / Stale / Failed×3 / Closed / offline 派生)横幅级呈现,
       无模态弹出。
-- [x] **J1–J5 键盘**:J2 / J4 / J5 全程自动化(`tests/e2e/keyboard-journeys.spec.ts`);
+- [~] **J1–J5 键盘**:J2 / J4 / J5 全程自动化(`tests/e2e/keyboard-journeys.spec.ts`);
       J1 看表(切表)段并入 J2 首段,J3 核对改动(预检)段并入 J2 预检步,
       J1 / J3 无独立旅程用例,记为残留。
 - [x] **冲突无 prompt**:`src/` 全仓无 `window.prompt`(grep 零命中);冲突走
       radio 单选 + 内联输入(J4 断言 radio 组 Tab 可达)。
-- [x] **错误跳格**:错误页签 onJump 已接线(App.tsx ErrorTab onJump → jumpToCell,
+- [~] **错误跳格**:错误页签 onJump 已接线(App.tsx ErrorTab onJump → jumpToCell,
       与检查器 / 冲突卡同一跳格路径);无独立 e2e 用例,记为残留。
 - [ ] **七种标记灰度可辨**:同 §2 末条,第二通道已实现 + 单测,
       灰度视觉走查未做(Task 20 残留)。
