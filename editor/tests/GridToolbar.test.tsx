@@ -78,7 +78,6 @@ afterEach(() => {
   container?.remove();
   container = null;
   delete window.__lumioPoc;
-  localStorage.clear();
 });
 
 describe("GridToolbar view commands", () => {

@@ -1,10 +1,11 @@
 import { act } from "react";
 import type { ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TableList } from "../src/panels/TableList";
 import { ToastProvider } from "../src/components/ui/Toast";
 import { COPY } from "../src/app/copy";
+import { isStorageFallback, safeStorage } from "../src/app/storage";
 
 const ONBOARDING_KEY = "lumio-config-editor:onboarded";
 
@@ -61,7 +62,7 @@ afterEach(() => {
   }
   container?.remove();
   container = null;
-  localStorage.clear();
+  safeStorage("local").clear();
 });
 
 describe("TableList", () => {
@@ -167,12 +168,12 @@ describe("TableList", () => {
     expect(toggles).toBe(1);
   });
 
-  it("shows the onboarding toast exactly once via localStorage", () => {
-    localStorage.removeItem(ONBOARDING_KEY);
+  it("shows the onboarding toast exactly once via safeStorage", () => {
+    safeStorage("local").removeItem(ONBOARDING_KEY);
     const first = mountList();
     const region = first.querySelector(".toast-region");
     expect(region?.textContent).toBe(COPY.onboardingToast);
-    expect(localStorage.getItem(ONBOARDING_KEY)).not.toBeNull();
+    expect(safeStorage("local").getItem(ONBOARDING_KEY)).not.toBeNull();
 
     act(() => root!.unmount());
     first.remove();
@@ -181,9 +182,72 @@ describe("TableList", () => {
     expect(second.querySelector(".toast-region")?.textContent).toBe("");
   });
 
-  it("skips the onboarding toast when the localStorage key is already set", () => {
-    localStorage.setItem(ONBOARDING_KEY, "1");
+  it("skips the onboarding toast when the storage key is already set", () => {
+    safeStorage("local").setItem(ONBOARDING_KEY, "1");
     const el = mountList();
     expect(el.querySelector(".toast-region")?.textContent).toBe("");
+  });
+
+  it("degrades to prompting on every mount when storage falls back to the shim", async () => {
+    // M7-K S04:隐私模式 / 存储被禁 / Node 26 遮蔽时 storage 取不到。
+    // 组件不得抛异常,onboarding toast 退化为每次都提示(不静默吞)。
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get: () => undefined,
+    });
+    try {
+      // 重置模块注册表并动态引入,保证 storage 探测在"取不到"的环境下进行,
+      // 不依赖 safeStorage 实现是否缓存探测结果。
+      vi.resetModules();
+      const { act: freshAct } = await import("react");
+      const { createRoot: freshCreateRoot } = await import("react-dom/client");
+      const { TableList: FreshTableList } = await import("../src/panels/TableList");
+      const { ToastProvider: FreshToastProvider } = await import("../src/components/ui/Toast");
+      const { isStorageFallback: freshIsFallback } = await import("../src/app/storage");
+      expect(freshIsFallback("local")).toBe(true);
+
+      const mountFresh = () => {
+        const host = document.createElement("div");
+        document.body.appendChild(host);
+        const freshRoot = freshCreateRoot(host);
+        freshAct(() => {
+          freshRoot.render(
+            <FreshToastProvider>
+              <FreshTableList
+                tables={TABLES}
+                active="skills"
+                collapsed={false}
+                onSelect={() => {}}
+                onToggleCollapse={() => {}}
+              />
+            </FreshToastProvider>,
+          );
+        });
+        return { host, freshRoot };
+      };
+
+      const first = mountFresh();
+      expect(first.host.querySelector(".toast-region")?.textContent).toBe(COPY.onboardingToast);
+      freshAct(() => first.freshRoot.unmount());
+      first.host.remove();
+
+      // 垫片无法持久化「已提示」标记:再次挂载仍要提示,而不是崩或静默。
+      const second = mountFresh();
+      expect(second.host.querySelector(".toast-region")?.textContent).toBe(COPY.onboardingToast);
+      freshAct(() => second.freshRoot.unmount());
+      second.host.remove();
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(globalThis, "localStorage", descriptor);
+      } else {
+        delete (globalThis as { localStorage?: Storage }).localStorage;
+      }
+    }
+  });
+
+  it("isStorageFallback is false under a working jsdom localStorage", () => {
+    // 本机(Node 24)对照组:真实 storage 可用时不应落入垫片。
+    expect(isStorageFallback("local")).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent } from "react";
 import { Button, useToast } from "../components/ui";
 import { COPY } from "../app/copy";
+import { isStorageFallback, safeStorage } from "../app/storage";
 
 /** §10:首次打开 toast 只出一次的标记键(任务书 Task 12 逐字)。 */
 const ONBOARDING_KEY = "lumio-config-editor:onboarded";
@@ -29,8 +30,15 @@ export function TableList({ tables, active, collapsed, onSelect, onToggleCollaps
   const pushToast = useToast();
 
   useEffect(() => {
-    if (localStorage.getItem(ONBOARDING_KEY) === null) {
-      localStorage.setItem(ONBOARDING_KEY, "1");
+    // M7-K:存储一律走 safeStorage(隐私模式 / 存储被禁 / Node 26 遮蔽都不会抛);
+    // 垫片模式下标记无法持久化,退化为每次都提示,而不是崩或静默吞。
+    const storage = safeStorage("local");
+    if (isStorageFallback("local")) {
+      pushToast(COPY.onboardingToast);
+      return;
+    }
+    if (storage.getItem(ONBOARDING_KEY) === null) {
+      storage.setItem(ONBOARDING_KEY, "1");
       pushToast(COPY.onboardingToast);
     }
   }, [pushToast]);
