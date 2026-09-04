@@ -168,7 +168,14 @@ describe("TableList", () => {
     expect(toggles).toBe(1);
   });
 
-  it("shows the onboarding toast exactly once via safeStorage", () => {
+  // Node 26 的全局 localStorage 访问器遮蔽 jsdom Storage(审计 §G-2),环境里没有
+  // 可用的真实存储——「直通」类用例在此前提不成立,自动跳过;等价行为由垫片退化
+  // 用例(degrades to prompting…)覆盖。与 storage.test.ts 的同款口径。
+  const realStorageAvailable = !isStorageFallback("local");
+  // 与 storage.test.ts 同款:前提不成立的环境静态选 it.skip。
+  const itWithRealStorage = realStorageAvailable ? it : it.skip;
+
+  itWithRealStorage("shows the onboarding toast exactly once via safeStorage", () => {
     safeStorage("local").removeItem(ONBOARDING_KEY);
     const first = mountList();
     const region = first.querySelector(".toast-region");
@@ -182,7 +189,7 @@ describe("TableList", () => {
     expect(second.querySelector(".toast-region")?.textContent).toBe("");
   });
 
-  it("skips the onboarding toast when the storage key is already set", () => {
+  itWithRealStorage("skips the onboarding toast when the storage key is already set", () => {
     safeStorage("local").setItem(ONBOARDING_KEY, "1");
     const el = mountList();
     expect(el.querySelector(".toast-region")?.textContent).toBe("");
@@ -246,7 +253,7 @@ describe("TableList", () => {
     }
   });
 
-  it("isStorageFallback is false under a working jsdom localStorage", () => {
+  itWithRealStorage("isStorageFallback is false under a working jsdom localStorage", () => {
     // 本机(Node 24)对照组:真实 storage 可用时不应落入垫片。
     expect(isStorageFallback("local")).toBe(false);
   });
