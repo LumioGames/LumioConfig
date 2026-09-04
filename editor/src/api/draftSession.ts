@@ -1,5 +1,5 @@
 import type { Draft, PatchApplyResponse, PatchObject, RebaseResponse, TableResponse } from "./types";
-import { api, HostApiError, subscribeEvents } from "./client";
+import { api, type EventStreamCallbacks, HostApiError, subscribeEvents } from "./client";
 
 export type SubmitResult = PatchApplyResponse;
 
@@ -8,7 +8,7 @@ export interface DraftSessionProvider {
   saveDraft(table: string, draft: Draft, expectedVersion: number): Promise<number>;
   submit(patch: unknown): Promise<SubmitResult>;
   rebase(table: string, expectedVersion: number): Promise<RebaseResponse>;
-  subscribe(handler: (name: string, data: unknown) => void): () => void;
+  subscribe(cb: EventStreamCallbacks): () => void;
 }
 
 export class LocalDraftSessionProvider implements DraftSessionProvider {
@@ -48,11 +48,27 @@ export class LocalDraftSessionProvider implements DraftSessionProvider {
     });
   }
 
-  subscribe(handler: (name: string, data: unknown) => void): () => void {
+  subscribe(cb: EventStreamCallbacks): () => void {
     let stop: (() => void) | undefined;
-    void subscribeEvents(handler).then((dispose) => {
-      stop = dispose;
-    });
-    return () => stop?.();
+    let disposed = false;
+    void subscribeEvents(cb)
+      .then((dispose) => {
+        if (disposed) {
+          dispose();
+          return;
+        }
+        stop = dispose;
+      })
+      .catch(() => {
+        // M7-A §3:订阅生命周期不再吞异常——意外 reject 也回调 onClose("error")。
+        if (!disposed) {
+          cb.onClose?.("error");
+        }
+      });
+    return () => {
+      disposed = true;
+      stop?.();
+      stop = undefined;
+    };
   }
 }

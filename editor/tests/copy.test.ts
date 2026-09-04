@@ -17,6 +17,10 @@ const sampleArgs: Record<string, unknown[]> = {
   rowCount: [4],
   viewHint: [9],
   resolved: [1, 2],
+  // M7-X 新增函数型文案的取样(sourceView.title 与 title 同名,复用 title 的取样)。
+  fullColumnName: ["damage"],
+  sourceFile: ["tables/skills.txt"],
+  schemaFile: ["schemas/skills.json"],
 };
 
 interface CopyEntry {
@@ -99,5 +103,25 @@ describe("COPY 文案表", () => {
     expect(COPY.submitConfirm(3, "main", "a10eb3f", "skills", "update skills", false, false)).toBe(
       "将把 3 处改动提交到 main（a10eb3f）。",
     );
+  });
+
+  it("M7-X 契约:columnType / visibility 映射表存在且含规格列出的全部键值对", () => {
+    // 本卡只冻结映射表;未知输入的回落逻辑在消费方(Task 4 projection)。
+    expect(COPY.columnType).toMatchObject({
+      u32: "整数",
+      i32: "整数",
+      f32: "小数",
+      f64: "小数",
+      string: "文本",
+      bool: "是否",
+      ref: "引用",
+    });
+    expect(COPY.visibility).toMatchObject({
+      S: "服务端",
+      C: "客户端",
+      V: "体素",
+    });
+    // M7-C:图例完整说明必须保留「某列第一次标 C 要过生产激活单」这层含义(ADR 0-4 披露门禁)。
+    expect(COPY.grid.visibilityLegendBody).toContain("生产激活单");
   });
 });

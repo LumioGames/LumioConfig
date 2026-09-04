@@ -17,6 +17,14 @@ python tools/lumio_config.py serve
 - **命令面板**：`Ctrl+K`，切表与全部动作用键盘完成。
 - **阻断**：离线 / 会话结束时整页阻断页，按指引回终端重新 `serve`。
 
+## 离线与重连（M7-A）
+
+Host 与编辑器之间有一条每秒一次的心跳事件流。**连接断开**（终端里的 `serve` 进程退出、机器休眠、Host 崩溃）后 **≤ 8 秒**内：状态条「在线」变「离线」、状态胶囊变红「无法连接本机服务」、整页阻断页出现、表格锁定——正在编辑的内容和草稿都保留，不会白屏、不会丢失。
+
+- 掉线期间点切表 / 导出不会出现「提交失败」——那不是你的操作失败，是连接断了；界面保持在阻断页。
+- 编辑器会自动按 1s → 2s → 5s → 10s（封顶）退避重连。**回到终端重新运行 `serve`**（同端口）后 ≤ 12 秒自动恢复在线，草稿还在，可继续编辑；若新会话发了新链接，打开新链接即可（旧页面不会自动拿到新 token）。
+- 一直连不上：阻断页会一直显示，按指引回终端处理。
+
 ## 四态与 Delete
 
 | 四态 | 源 token | 操作 |
@@ -59,7 +67,13 @@ python tools/lumio_config.py serve
 
 ## 导出
 
-「导出」`POST /api/export`，文件 `GET /api/exports/{id}/{file}`。只写 `export.outDir/editor/<exportId>/`。CSV / TSV、UTF-8 BOM、四态写源 token；`= + - @` 等开头加 `'`。`README.txt` 含仓名、修订、指纹、来源、`GENERATED / NOT AUTHORITATIVE — do not import back`。无导入入口，无 XLSX。
+「导出」`POST /api/export`，文件 `GET /api/exports/{id}/{file}`。只写 `export.outDir/editor/<exportId>/`。**CSV / TSV / TXT** 三种格式；CSV / TSV 为 UTF-8 BOM、四态写源 token、`= + - @` 等开头加 `'`。`README.txt` 含仓名、修订、指纹、来源、`GENERATED / NOT AUTHORITATIVE — do not import back`。无导入入口，无 XLSX。
+
+**TXT（权威文本格式）**：内容与 `tables/<t>.txt` 逐字节一致（`source=repo` 时），四态 token 原样保留。**TXT 是只读快照，不能拷回 `tables/` 覆盖**——改表请在表格里改、提交补丁。TXT 只出全列（目标列过滤不可用）；含未提交草稿导出时文件名为 `<t>.draft.txt` 并在 README 中单独警告「含未提交草稿，与仓库不一致」。
+
+## 查看源文件（M7-E）
+
+表列表右键（或聚焦表名后 `Shift+F10` / `ContextMenu` 键）→「查看源文件 `tables/<t>.txt` / 查看 Schema `schemas/<t>.json`」打开只读查看器：等宽字体、带行号、可复制全文。**这是只读快照，改这里不会改仓库**——要改表请在表格里改，再提交补丁。文件超过 2 MiB 不在编辑器里显示（提示在编辑器外打开）。每次打开都重新拉取，与仓库当前内容一致。
 
 ## 错误码
 
@@ -125,3 +139,5 @@ Host 用 `VcsAdapter` 白名单命令（`git log` / `git show`）取两修订快
 | `VCS_COMMIT_FAILED` / `EXPORT_FAILED` | 改动已合入但 commit / 导表未完成 | Failed 横幅（终端手动处理） |
 | `UNKNOWN_TABLE` | 表不存在 | 404
 | `BAD_LIMIT` | history 的 limit 不是 1–100 整数 | 422(改动页签拉取失败提示) |
+| `NETWORK_UNREACHABLE` | Host 进程不可达（fetch 本身失败） | 掉线派生态：整页阻断 + 自动重连，不是「提交失败」（M7-A） |
+| `PAYLOAD_TOO_LARGE` | 源文件查看器请求的文件 > 2 MiB | 查看器显示「文件太大，编辑器里不显示」（M7-E） |

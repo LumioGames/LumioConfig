@@ -3,7 +3,7 @@ name: web-editor-ux
 description: 网页编辑器 v3 界面设计（IA、状态映射、令牌、抽屉、检查器、快捷键、文案表）——改 editor/ 布局、面板或用户文案时查
 metadata:
   type: doc
-  status: 设计中
+  status: 已交付
 ---
 
 # 网页编辑器 UX 设计（v3）
@@ -215,3 +215,15 @@ Univer 单元格样式（`projection.ts` 的 `STYLES`）是工作簿数据，不
 | 视图状态 `seen` | `spreadsheet/viewState.ts` | — |
 
 `data-testid`：E2E 实际引用的只有 `univer-root` `table-<name>` `status-hint` `draft-refresh` `btn-export` `export-link` `conflict-panel` `conflict-mine`，这 8 个必须保留（`status-hint` 改为视觉隐藏的 live region，仍含关键词「标签页」「合并」「公式」「id」「已合入仓库」）。其余现有 testid（`btn-validate` `btn-submit` `status-*` `conflict-*` `four-state-*` `export-*` `setting-autocommit`）保留命名以便新 E2E 复用。新增：`banner` `inspector` `cell-baseline` `invalid-reason` `panel` `tab-*` `submit-result` `command-palette` `context-menu` `conflict-resubmit`。E2E 文本断言只有 6 个中文片段（`host-drafts` 「标签页」；`sheet-ops` 「合并」「id」「公式」；`host-rebase` 「已合入仓库」「打开时」），改文案时同卡改断言。
+
+## 14. M7 加固批次的设计现状（2026-09-04 交付）
+
+v3 主干（M6）之后，M7 加固批次对以下设计点做了增量，均已是实现现状：
+
+- **离线可感知（M7-A）**：SSE 字节层心跳（Host 每秒一个冒号注释块）喂 5 秒看门狗；断流/判死派发 `online:false` → 整页阻断页（本文 §5 的派生态行成为现实），自动退避重连（1s→2s→5s→10s 封顶）；网络不可达（`NETWORK_UNREACHABLE`）不再落 `Failed`，掉线时切表保留工作簿不卸载。
+- **错误页签收敛（M7-B）**：ErrorTab 空态以状态为准——`dirtyCount===0` 无条件优先 `no-changes`；脏格归零（还原/undo/撤销删行/切表）即清错误列表；跳格对行名与 rowId 两种负载都能解析。
+- **列头可读性（M7-C）**：列头第二行中文化（`COPY.columnType` / `COPY.visibility`，未知值回落原字面量）；列宽按列名自适应（CJK 计 2、clamp 112–240，`cooldown_frames` 不折行）；工具栏常驻可点 S/C/V 图例（`--color-text-muted`，弹 Dialog 展开完整说明，键盘可达）。
+- **源文件路径可见（M7-D）**：Host 表摘要新增 `sourcePath`；顶栏表名 `⌄` 菜单两条只读路径条目（复制 + toast）。
+- **源文件只读查看器（M7-E）**：表列表右键 / `Shift+F10` → 查看源文件或 Schema；`GET /api/tables/{t}/source?kind=…` 四道安全边界；查看器宽 720、等宽、行号、三态（加载/过大 413/失败）；reveal 菜单项按 `capabilities.reveal` 整项不渲染（M7-G 未授权，Host 默认 false）。
+- **导出 TXT（M7-F）**：格式列表由 `capabilities.export` 下发（csv/tsv/txt）；TXT 与 `tables/<t>.txt` 逐字节一致、只读快照不可回导、只出全列（targets 非空即 400）；draft 导出命名 `<t>.draft.txt` 并加 README 警告。
+- **存储访问器（M7-K）**：`app/storage.ts` 的 `safeStorage`/`isStorageFallback` 永不抛；`editor/src/**` 禁裸 `localStorage.`/`sessionStorage.`（守卫测试在库）。

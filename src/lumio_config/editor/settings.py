@@ -22,6 +22,7 @@ class Settings:
     auto_export: bool
     out_dir: str
     allow_dirty: bool
+    allow_reveal: bool = False
 
     def as_public(self) -> dict[str, Any]:
         return {

@@ -1,6 +1,6 @@
 import { useState, type MouseEvent } from "react";
 import type { FUniver } from "@univerjs/core/facade";
-import { Menu, type MenuItem } from "../components/ui";
+import { Dialog, Menu, type MenuItem } from "../components/ui";
 import { COPY } from "../app/copy";
 import { COMMAND } from "../spreadsheet/commands";
 
@@ -104,6 +104,7 @@ export function GridToolbar({ univerAPI, columnCount, canEdit }: GridToolbarProp
   const [zoomIndex, setZoomIndex] = useState(0);
   const [frozen, setFrozen] = useState(false);
   const [sortAnchor, setSortAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [legendOpen, setLegendOpen] = useState(false);
 
   const run = (id: string, params?: object) => {
     if (univerAPI) {
@@ -258,10 +259,32 @@ export function GridToolbar({ univerAPI, columnCount, canEdit }: GridToolbarProp
         onClick={onZoom}
       />
       <span className="grid-toolbar__spacer" />
+      {/*
+       * M7-C S03:S/C/V 图例常驻可点。复用 grid-toolbar__button(--color-text-muted,
+       * 11px,无底无框),与右侧列数提示同级弱化,不压过它;原生 button 天然
+       * Tab 可聚焦 + Enter 激活。完整说明(含首次标 C 过生产激活单)在 Dialog 里,
+       * 文案全部来自 copy.ts 冻结键。
+       */}
+      <button
+        type="button"
+        className="grid-toolbar__button"
+        data-testid="tb-visibility-legend"
+        title={COPY.grid.visibilityLegendTitle}
+        onClick={() => setLegendOpen(true)}
+      >
+        <span className="grid-toolbar__button-text">{COPY.grid.visibilityLegend}</span>
+      </button>
       <span className="grid-toolbar__hint">{COPY.toolbar.viewHint(columnCount)}</span>
       {sortAnchor ? (
         <Menu open items={sortItems} anchor={sortAnchor} onClose={() => setSortAnchor(null)} />
       ) : null}
+      <Dialog
+        open={legendOpen}
+        title={COPY.grid.visibilityLegendTitle}
+        onClose={() => setLegendOpen(false)}
+      >
+        {COPY.grid.visibilityLegendBody}
+      </Dialog>
     </div>
   );
 }

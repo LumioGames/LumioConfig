@@ -174,18 +174,59 @@ export function columnTypeLabel(column: TableColumn): string {
   return column.type;
 }
 
-/** §6 列头两行文本:`name *`(必填星、只读锁)/ `类型 · 可见性`。 */
-function headerText(column: TableColumn): string {
+/** §6 列头第一行:`name *`(必填星)与 `🔒`(只读锁,id 列恒只读)。 */
+function headerFirstLine(column: TableColumn): string {
   const readOnly = column.readOnly === true || column.name === "id";
-  const first = `${column.name}${column.required === true ? " *" : ""}${readOnly ? " 🔒" : ""}`;
-  const second = column.visibility ? `${columnTypeLabel(column)} · ${column.visibility}` : columnTypeLabel(column);
-  return `${first}\n${second}`;
+  return `${column.name}${column.required === true ? " *" : ""}${readOnly ? " 🔒" : ""}`;
 }
 
-/** §6 列头 title:默认值 / 范围 / 枚举 / 可见性(TableColumn 暂无描述字段,待 Host 补)。 */
+/** M7-C S01:类型段走 COPY.columnType 中文化;未知类型回落原字面量;ref 列维持 columnTypeLabel 的 `ref→<目标表>`。 */
+function localizedTypeLabel(column: TableColumn): string {
+  const label = columnTypeLabel(column);
+  return COPY.columnType?.[label] ?? label;
+}
+
+/** M7-C S01:可见性逐字符走 COPY.visibility 展开、`·` 连接;未知字符原样保留。 */
+function visibilityLabel(visibility: string): string {
+  return [...visibility].map((char) => COPY.visibility?.[char] ?? char).join("·");
+}
+
+/** §6 列头两行文本:`name * 🔒` / `类型中文名 · 可见性中文名`(M7-C S01 中文化)。 */
+function headerText(column: TableColumn): string {
+  const type = localizedTypeLabel(column);
+  const second = column.visibility ? `${type} · ${visibilityLabel(column.visibility)}` : type;
+  return `${headerFirstLine(column)}\n${second}`;
+}
+
+/**
+ * M7-C S02:显示宽度按码点计,ASCII 码点记 1,CJK/全角/emoji 等非 ASCII 码点记 2
+ * (🔒 等增补平面字符经 for...of 取到完整码点)。
+ */
+function textWidth(text: string): number {
+  let width = 0;
+  for (const char of text) {
+    width += (char.codePointAt(0) ?? 0) < 0x80 ? 1 : 2;
+  }
+  return width;
+}
+
+/**
+ * M7-C S02:列宽按列头第一行自适应 `clamp(112, ceil(width * 8) + 34, 240)`,
+ * 目标是 `cooldown_frames *` 这类首行在默认缩放下单行不折(WRAP 仍兜底超长列名)。
+ * 下限 112 已覆盖 id 列旧的三元式下限 110(它带 `*` 与 🔒)。
+ */
+export function columnWidth(column: TableColumn): number {
+  const raw = Math.ceil(textWidth(headerFirstLine(column)) * 8) + 34;
+  return Math.min(240, Math.max(112, raw));
+}
+
+/** §6 列头 title:完整列名 / 类型 / 默认值 / 范围 / 枚举 / 可见性(TableColumn 暂无描述字段,待 Host 补)。 */
 function headerTitleText(column: TableColumn): string {
   const labels = COPY.inspector.constraintLabels;
-  const parts: string[] = [`${labels.type} ${columnTypeLabel(column)}`];
+  const parts: string[] = [
+    COPY.grid.fullColumnName?.(column.name) ?? column.name,
+    `${labels.type} ${columnTypeLabel(column)}`,
+  ];
   if (column.required === true) {
     parts.push(labels.required);
   }
@@ -379,9 +420,7 @@ export function buildWorkbook(
 
   const columnData: WorksheetData["columnData"] = {};
   table.columns.forEach((column, colIndex) => {
-    columnData[String(colIndex)] = {
-      w: column.name === "id" ? 110 : column.name === "name" ? 140 : 120,
-    };
+    columnData[String(colIndex)] = { w: columnWidth(column) };
   });
 
   const sheet: WorksheetData = {

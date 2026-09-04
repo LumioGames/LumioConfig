@@ -25,3 +25,4 @@ metadata:
 - 编辑器 Host 只绑 127.0.0.1；VCS 命令必须走白名单 argv 列表，禁止 shell=True；SSE 只在指纹复核变化后发事件。
 - 空 `ops` 提交不得走 `git commit`（工作树无改动会变成 `VCS_COMMIT_FAILED`）；提交成功后重载表要先把 `mapRef` 置空，否则下一拍 `executeCommand` 会打在已 dispose 的 Univer 上。
 - Univer 键盘提交的 `value` 携带整格旧 `custom`，拦截器不能把既有四态元数据当用户意图；`executeCommand` 造的参数形状不等于真实输入，拦截器改动必须有真实键盘用例。
+- 派活提示词里写了台账要求，不等于台账会存在。`.sdd/` 整目录 gitignore 会让台账在收口后蒸发；下一轮审计因此付出了重建全部证据的代价。台账的落点必须是入库路径。

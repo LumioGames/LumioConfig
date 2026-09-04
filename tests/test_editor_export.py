@@ -15,6 +15,7 @@ from lumio_config.editor.export_csv import export_tables
 from lumio_config.editor.server import create_server
 from lumio_config.fingerprint import source_fingerprint
 from lumio_config.patch import apply_patch
+from lumio_config.text_table import format_table_text, parse_table
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -124,6 +125,94 @@ class ExportTablesTests(unittest.TestCase):
             header = rows[0]
             fireball = next(row for row in rows[1:] if row[1] == "fireball")
             self.assertEqual(fireball[header.index("icon")], "null")
+
+    def test_txt_repo_matches_source_tables_byte_for_byte(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_repo(root)
+            out = root / "out"
+            paths = export_tables(root, ["skills", "drops", "effects"], "txt", "repo", None, out)
+            for name in ("skills", "drops", "effects"):
+                exported = out / f"{name}.txt"
+                self.assertIn(exported, paths)
+                self.assertEqual(
+                    exported.read_bytes(),
+                    (ROOT / "tables" / f"{name}.txt").read_bytes(),
+                    f"exported {name}.txt differs from the repo source table",
+                )
+            readme = (out / "README.txt").read_text(encoding="utf-8")
+            self.assertIn("read-only snapshot", readme)
+            self.assertIn("do not copy them back over tables/", readme)
+            self.assertNotIn("uncommitted draft", readme)
+
+    def test_txt_preserves_four_state_tokens(self):
+        crafted = (
+            "table: skills\n"
+            "schema: schemas/skills.json\n"
+            "\n"
+            "| id | name | display_name | effect_id | damage | cooldown_frames | icon |\n"
+            "| --- | ---- | ------------ | --------- | ------ | --------------- | ---- |\n"
+            "| 40001 | a | A | 50001 | 1 | 1 | @missing |\n"
+            "\n"
+            "| 40002 | b | B | 50001 | 2 | 2 | \"\" |\n"
+            "\n"
+            "| 40003 | c | C | 50001 | 3 | 3 | null |\n"
+            "\n"
+            "| 40004 | d | D | 50001 | 4 | 4 | @default |\n"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_repo(root)
+            table_path = root / "tables" / "skills.txt"
+            canonical = format_table_text(parse_table(crafted, table_path))
+            table_path.write_text(canonical, encoding="utf-8", newline="\n")
+            out = root / "out"
+            export_tables(root, ["skills"], "txt", "repo", None, out)
+            exported = out / "skills.txt"
+            self.assertEqual(exported.read_bytes(), canonical.encode("utf-8"))
+            reparsed = parse_table(exported.read_text(encoding="utf-8"), exported)
+            tokens = {row["name"].token(): row["icon"].token() for row in reparsed.rows}
+            self.assertEqual(
+                tokens,
+                {"a": "@missing", "b": '""', "c": "null", "d": "@default"},
+            )
+
+    def test_txt_draft_suffix_overlay_and_readme_warning(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_repo(root)
+            store = DraftStore(root)
+            store.save(
+                "skills",
+                {
+                    "table": "skills",
+                    "baseFingerprint": _fp(root),
+                    "rows": {"40001": {"damage": {"state": "value", "raw": "133"}}},
+                },
+                0,
+            )
+            out = root / "out"
+            paths = export_tables(root, ["skills"], "txt", "draft", None, out)
+            draft_path = out / "skills.draft.txt"
+            self.assertIn(draft_path, paths)
+            self.assertFalse((out / "skills.txt").exists())
+            text = draft_path.read_text(encoding="utf-8")
+            self.assertIn("| 133 ", text)
+            self.assertNotIn("| 120 ", text)
+            readme = (out / "README.txt").read_text(encoding="utf-8")
+            self.assertIn("read-only snapshot", readme)
+            self.assertIn("uncommitted draft", readme)
+            self.assertIn("does not match the repository", readme)
+
+    def test_txt_rejects_nonempty_targets(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_repo(root)
+            out = root / "out"
+            with self.assertRaises(ValueError) as ctx:
+                export_tables(root, ["skills"], "txt", "repo", ["S"], out)
+            self.assertIn("targets", str(ctx.exception))
+            self.assertFalse((out / "skills.txt").exists())
 
 
 class ExportHttpTests(unittest.TestCase):
