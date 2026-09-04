@@ -12,10 +12,6 @@ const BARE_STORAGE = /(?:local|session)Storage\./g;
 // - storage.ts 是 safeStorage 实现本身(Task 2 冻结契约);
 // - viewState.ts 用注入形参默认值 globalThis.localStorage,是正确范例。
 const ALLOWED_PATHS = new Set(["src/app/storage.ts", "src/spreadsheet/viewState.ts"]);
-// TODO(Task 14 合入后删除): src/panels/drawer/ExportTab.tsx:81 的 sessionStorage.getItem
-// 由 Task 14(F2 export-tab-txt,该文件在本批的独占方)迁移到 safeStorage("session"),
-// 主 loop 已把迁移并进 Task 14 的派遣指令;此前临时豁免。
-ALLOWED_PATHS.add("src/panels/drawer/ExportTab.tsx");
 
 function listSourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
