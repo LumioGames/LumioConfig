@@ -45,3 +45,23 @@
   - note: worker 因账户周/月限额中断（1310，2026-09-07 重置），六个文件已就位，主 loop 代为验证（单测 28 绿/lint 绿/E2E skip 设计正确）并代收尾提交
   - note: 接线点 2 由主 loop 落地——App.tsx 挂 SourceViewDialog、onViewSource→client.sourceFile、revealEnabled←capabilities.reveal（本批 false，第三项整项不渲染）
 - T2 合并态验证：vitest 378 passed（42 文件）；host-source-view E2E 1 passed（接线后 skip 解除）
+
+## T3 · Task 17（主 loop 自做，收口）
+
+- 文档：docs/reference/editor.md 增「离线与重连」「查看源文件」段、导出段补 TXT 只读快照口径、错误码补 NETWORK_UNREACHABLE / PAYLOAD_TOO_LARGE（REVEAL_DISABLED 未加——Task 16 未扇出）；web-editor-ux.md status→已交付 + §14 M7 设计现状。
+- 截图：default-1440x900 / drawer-expanded-1440x900 重拍 + offline-blocked-1440x900 新增（1440×900；经像素级对照验证 cooldown_frames 单行不折、列头中文、S/C/V 图例在位）。
+- known gap：本机（Windows）Chromium 下 Univer 数据行不上帧（新旧构建同样、headed/headless 同样、审计机正常）——列头/侧栏/抽屉/阻断页均正常渲染，仅数据行区域空白；E2E 全部走数据模型断言不受影响。截图数据行空白属本机渲染环境限制，非本批回归（已用 main@4c12a19 旧产物对照证实）。
+- editor_static 重建并提交。
+
+## 收口门槛（2026-09-04 实测 @ 集成分支尖）
+
+| 命令 | 结果 | 基线对比 |
+| --- | --- | --- |
+| pnpm install --frozen-lockfile | OK | — |
+| pnpm lint | PASS（eslint+tsc+check-deps） | 基线 PASS |
+| pnpm vitest run | **378 passed / 0 failed (42 files)** | 基线 313（+65；本机 Node 24 下 24 红基线不出现，Node 26 判据见交回物） |
+| pnpm e2e | **59 passed** | 基线 54（+5：offline 1 / errors 2 / source-view 1 / export-txt 1） |
+| python -m unittest discover | **168 OK** | 基线 150（+18） |
+| validate / format --check | OK / OK | — |
+| git diff --check / spec-lint | 空 / OK | — |
+| build 后 editor_static diff | 重建后已提交（Task 17） | 基线空 |
