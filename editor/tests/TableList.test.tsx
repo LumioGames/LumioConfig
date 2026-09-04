@@ -250,4 +250,135 @@ describe("TableList", () => {
     // 本机(Node 24)对照组:真实 storage 可用时不应落入垫片。
     expect(isStorageFallback("local")).toBe(false);
   });
+
+  /**
+   * M7-E §4 / S03:右键菜单。右键 / Shift+F10 / ContextMenu 键三入口,↑↓ Enter Esc
+   * 键盘操作,第三项(reveal)按 revealEnabled===true 整项渲染,否则整项不渲染。
+   */
+
+  function menuEl(): HTMLElement | null {
+    return document.querySelector('[role="menu"]');
+  }
+
+  function menuItems(): HTMLElement[] {
+    return Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+  }
+
+  function contextMenu(target: HTMLElement, x = 12, y = 24) {
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y });
+    act(() => {
+      target.dispatchEvent(event);
+    });
+    return event;
+  }
+
+  function press(target: HTMLElement, k: string, shift = false) {
+    act(() => {
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", { key: k, shiftKey: shift, bubbles: true, cancelable: true }),
+      );
+    });
+  }
+
+  function pressMenu(k: string) {
+    const menu = menuEl();
+    if (!menu) {
+      throw new Error("menu not open");
+    }
+    press(menu, k);
+  }
+
+  function rowOf(el: HTMLElement, name: string): HTMLElement {
+    return el.querySelector(`[data-testid="table-${name}"]`) as HTMLElement;
+  }
+
+  it("右键表名打开菜单:查看源文件/查看 Schema 两项带路径,并抑制浏览器默认菜单(M7-E S03)", () => {
+    const el = mountList();
+    const event = contextMenu(rowOf(el, "skills"));
+    expect(event.defaultPrevented).toBe(true);
+    const items = menuItems();
+    expect(items).toHaveLength(2);
+    expect(items[0]!.textContent).toContain(COPY.tableMenu.viewSource);
+    expect(items[0]!.textContent).toContain("tables/skills.txt");
+    expect(items[1]!.textContent).toContain(COPY.tableMenu.viewSchema);
+    expect(items[1]!.textContent).toContain("schemas/skills.json");
+  });
+
+  it("Shift+F10 与 ContextMenu 键都能打开菜单(键盘入口,S03)", () => {
+    const el = mountList();
+    press(rowOf(el, "effects"), "F10", true);
+    expect(menuEl()).not.toBeNull();
+    pressMenu("Escape");
+    expect(menuEl()).toBeNull();
+
+    press(rowOf(el, "items"), "ContextMenu");
+    expect(menuEl()).not.toBeNull();
+  });
+
+  it("菜单键盘操作:↓ 高亮第二项,Enter 执行 onViewSource(kind=schema),Esc 关闭(S03)", () => {
+    const viewed: Array<[string, string]> = [];
+    const el = mountList({ onViewSource: (table, kind) => viewed.push([table, kind]) });
+    press(rowOf(el, "skills"), "F10", true);
+    pressMenu("ArrowDown");
+    expect(menuItems()[1]!.className).toContain("is-active");
+    pressMenu("Enter");
+    expect(viewed).toEqual([["skills", "schema"]]);
+    expect(menuEl()).toBeNull();
+
+    // 重开后默认高亮第一项,Enter → 查看源文件(kind=table)
+    press(rowOf(el, "skills"), "F10", true);
+    pressMenu("Enter");
+    expect(viewed).toEqual([
+      ["skills", "schema"],
+      ["skills", "table"],
+    ]);
+
+    press(rowOf(el, "skills"), "F10", true);
+    pressMenu("Escape");
+    expect(menuEl()).toBeNull();
+  });
+
+  it("revealEnabled 缺省或 false:第三项整项不渲染,不是禁用态(S03)", () => {
+    const el = mountList();
+    contextMenu(rowOf(el, "skills"));
+    expect(menuItems()).toHaveLength(2);
+    expect(menuItems().some((item) => item.textContent?.includes(COPY.tableMenu.reveal))).toBe(false);
+    pressMenu("Escape");
+
+    const el2 = mountList({ revealEnabled: false });
+    contextMenu(rowOf(el2, "skills"));
+    expect(menuItems().some((item) => item.textContent?.includes(COPY.tableMenu.reveal))).toBe(false);
+  });
+
+  it("revealEnabled=true:第三项渲染,点击调 onReveal;未传 onReveal 时点击为 noop(M7-G 预留)", () => {
+    const revealed: string[] = [];
+    const el = mountList({ revealEnabled: true, onReveal: (table) => revealed.push(table) });
+    contextMenu(rowOf(el, "skills"));
+    const items = menuItems();
+    expect(items).toHaveLength(3);
+    expect(items[2]!.textContent).toContain(COPY.tableMenu.reveal);
+    act(() => {
+      items[2]!.click();
+    });
+    expect(revealed).toEqual(["skills"]);
+    expect(menuEl()).toBeNull();
+
+    // Host 端点未上线(M7-G):未接 onReveal 时点击不得抛。
+    const el2 = mountList({ revealEnabled: true });
+    contextMenu(rowOf(el2, "effects"));
+    const third = menuItems()[2]!;
+    expect(() =>
+      act(() => {
+        third.click();
+      }),
+    ).not.toThrow();
+  });
+
+  it("折叠态 rail 项右键同样出菜单(M7-E §4)", () => {
+    const el = mountList({ collapsed: true });
+    contextMenu(rowOf(el, "effects"));
+    const items = menuItems();
+    expect(items).toHaveLength(2);
+    expect(items[0]!.textContent).toContain("tables/effects.txt");
+  });
 });
