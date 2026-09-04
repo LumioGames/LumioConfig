@@ -38,3 +38,10 @@
   - note: App.tsx formats 传参由主 loop 接线落地；ExportTab 裸 sessionStorage 已迁移，守卫白名单清零（M7-K S03 收口）
 - 主 loop T1 接线提交：TopBar 路径传参 + ExportTab formats + errors onJump 反查（M7-B S04 修复）
 - T1 合并态验证：vitest 363 passed（41 文件）；E2E host-errors/host-offline/host-export 5 passed；lint 全绿
+
+## T2（Task 15 合入；Task 16 未扇出——M7-G Owner 授权闸门未勾）
+
+- Task 15 (M7-E tablelist-source-view): complete (commits 10bfd7a..83d5337, merged)
+  - note: worker 因账户周/月限额中断（1310，2026-09-07 重置），六个文件已就位，主 loop 代为验证（单测 28 绿/lint 绿/E2E skip 设计正确）并代收尾提交
+  - note: 接线点 2 由主 loop 落地——App.tsx 挂 SourceViewDialog、onViewSource→client.sourceFile、revealEnabled←capabilities.reveal（本批 false，第三项整项不渲染）
+- T2 合并态验证：vitest 378 passed（42 文件）；host-source-view E2E 1 passed（接线后 skip 解除）
