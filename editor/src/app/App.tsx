@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { HostApiError, api, readToken } from "../api/client";
+import {
+  HostApiError,
+  SSE_LIVENESS_TIMEOUT_MS,
+  api,
+  createLivenessWatchdog,
+  readToken,
+  subscribeEventsWithReconnect,
+} from "../api/client";
 import { LocalDraftSessionProvider } from "../api/draftSession";
 import type {
   CellToken,
@@ -171,6 +178,15 @@ export function App() {
   revisionRef.current = revision;
   uiFlagsRef.current = { inspectorOpen, sidebarCollapsed };
 
+  /** M7-A §6:网络不可达是掉线派生态,不是失败态——不落 failed(否则胶囊错配「提交失败」)。
+   *  仅首次连接(还在 Opening 阶段)需要离开 Opening,Blocked 整页阻断才可达。 */
+  const failOffline = useCallback(() => {
+    dispatch({ type: "online", online: false });
+    if (stateRef.current.phase === "Opening") {
+      dispatch({ type: "failed", hint: COPY.banner.offline });
+    }
+  }, [dispatch]);
+
   const persistView = useCallback((table: string) => {
     const snapshot = instanceRef.current?.univerAPI.getActiveWorkbook()?.save();
     if (!snapshot) {
@@ -191,6 +207,11 @@ export function App() {
     }
     const tokens = mergeCurrentCells(map, extractTokens(univerAPI, map));
     const dirty = countDirty(map, tokens);
+    // M7-B §2:当前表脏格数从 >0 变 0(还原/undo/撤销删行都经此处)即清错误,
+    // 不让上一次预检的残留与「无未提交改动」并存。
+    if (stateRef.current.dirtyCount > 0 && dirty === 0) {
+      setErrors([]);
+    }
     dispatch({ type: "dirty", dirtyCount: dirty });
     setDirtyCounts((current) => ({ ...current, [map.table]: dirty }));
     if (!hostMode || dirty <= 0) {
@@ -268,12 +289,16 @@ export function App() {
         setErrors([{ code: error.code, message: COPY.banner.failedDraftConflict }]);
         return undefined;
       }
+      if (error instanceof HostApiError && error.code === "NETWORK_UNREACHABLE") {
+        failOffline();
+        return undefined;
+      }
       dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
       return undefined;
     } finally {
       savingRef.current = false;
     }
-  }, [hostMode]);
+  }, [hostMode, failOffline]);
   persistDraftRef.current = persistDraft;
 
   const writeToken = useCallback(async (rowKey: string, column: string, token: CellToken, force = false) => {
@@ -497,6 +522,11 @@ export function App() {
       if (!container) {
         return;
       }
+      // M7-A §6:掉线时切表直接返回,保留当前工作簿——卸载 Univer 实例是
+      // 掉线白屏的直接成因(审计 §C-10)。Opening 阶段(首次连接尚未判定)放行。
+      if (hostMode && stateRef.current.phase !== "Opening" && !stateRef.current.online) {
+        return;
+      }
       if (mapRef.current) {
         persistView(mapRef.current.table);
         if (mapRef.current.table !== name) {
@@ -504,6 +534,8 @@ export function App() {
           setSubmitResult(null);
           setConflictResolved({});
           setSeenBannerOpen(false);
+          // M7-B §2:切表归零路径——新表以干净态打开,不携带旧表的预检错误。
+          setErrors([]);
         }
       }
       disposeSheet();
@@ -560,11 +592,15 @@ export function App() {
           }
           mountWorkbook(loaded.table, draft?.draftVersion ?? 0, undefined, draft);
         } catch (error) {
+          if (error instanceof HostApiError && error.code === "NETWORK_UNREACHABLE") {
+            failOffline();
+            return;
+          }
           dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
         }
       })();
     },
-    [disposeSheet, hostMode, mountWorkbook, persistView],
+    [disposeSheet, hostMode, mountWorkbook, persistView, failOffline],
   );
 
   const currentPatch = useCallback((): PatchObject | null => {
@@ -599,10 +635,14 @@ export function App() {
       dispatch({ type: "validated", ok: result.ok, hint: result.ok ? result.summary : "预检失败" });
       return result;
     } catch (error) {
+      if (error instanceof HostApiError && error.code === "NETWORK_UNREACHABLE") {
+        failOffline();
+        return undefined;
+      }
       dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
       return undefined;
     }
-  }, [currentPatch, hostMode]);
+  }, [currentPatch, hostMode, failOffline]);
 
   const submitNow = useCallback(async () => {
     if (!hostMode) {
@@ -680,10 +720,14 @@ export function App() {
       openTable(stateRef.current.table);
       return result;
     } catch (error) {
+      if (error instanceof HostApiError && error.code === "NETWORK_UNREACHABLE") {
+        failOffline();
+        return undefined;
+      }
       dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
       return undefined;
     }
-  }, [currentPatch, hostMode, openTable]);
+  }, [currentPatch, hostMode, openTable, failOffline]);
 
   const rebaseNow = useCallback(async () => {
     if (!hostMode) {
@@ -755,6 +799,10 @@ export function App() {
         }
         return result;
       } catch (error) {
+        if (error instanceof HostApiError && error.code === "NETWORK_UNREACHABLE") {
+          failOffline();
+          return undefined;
+        }
         dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
         return undefined;
       } finally {
@@ -764,7 +812,7 @@ export function App() {
     })();
     rebaseFlightRef.current = flight;
     return flight;
-  }, [disposeSheet, hostMode, mountWorkbook]);
+  }, [disposeSheet, hostMode, mountWorkbook, failOffline]);
   rebaseNowRef.current = rebaseNow;
 
   useEffect(() => {
@@ -794,9 +842,27 @@ export function App() {
         dispatch({ type: "online", online: true });
       })
       .catch((error: unknown) => {
+        if (error instanceof HostApiError && error.code === "NETWORK_UNREACHABLE") {
+          failOffline();
+          return;
+        }
         dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
       });
-    const stop = providerRef.current.subscribe((name, data) => {
+    // M7-A §6 接线:订阅生命周期 + 字节层心跳喂看门狗;断流/看门狗判死 → 掉线派生态,
+    // 重连(1s→2s→5s→10s 封顶)成功自动回在线;重连期间不刷数据、不动草稿(Task 3 驱动器保证)。
+    const watchdog = createLivenessWatchdog({
+      timeoutMs: SSE_LIVENESS_TIMEOUT_MS,
+      onDead: () => dispatch({ type: "online", online: false }),
+    });
+    watchdog.feed();
+    const stop = subscribeEventsWithReconnect({
+      onOpen: () => {
+        watchdog.feed();
+        dispatch({ type: "online", online: true });
+      },
+      onClose: () => dispatch({ type: "online", online: false }),
+      onHeartbeat: () => watchdog.feed(),
+      onEvent: (name, data) => {
       if (name === "schema_changed") {
         const eventTable = (data as { table?: string } | undefined)?.table;
         if (eventTable && eventTable !== stateRef.current.table) {
@@ -822,9 +888,10 @@ export function App() {
           await rebaseNow();
         })();
       }
+      },
     });
     return stop;
-  }, [hostMode, rebaseNow]);
+  }, [hostMode, rebaseNow, failOffline]);
 
   /** 提交入口:仅当会 commit / 导表时先弹一句话确认(ADR 0005)。 */
   const requestSubmit = useCallback(() => {
@@ -1362,7 +1429,13 @@ export function App() {
       <Drawer
         tabs={[
           { id: "patch", label: "补丁", count: state.dirtyCount },
-          { id: "errors", label: "错误", count: errors.length, tone: errors.length > 0 ? "danger" : undefined },
+          {
+            id: "errors",
+            label: "错误",
+            // M7-B §3:no-changes 态(dirtyCount===0)计数归 0、无 tone,不挂历史错误。
+            count: state.dirtyCount === 0 ? 0 : errors.length,
+            tone: state.dirtyCount > 0 && errors.length > 0 ? "danger" : undefined,
+          },
           {
             id: "conflicts",
             label: "冲突",
@@ -1415,13 +1488,14 @@ export function App() {
           <ErrorTab
             errors={errors as never}
             state={
-              errors.length > 0
-                ? "errors"
+              // M7-B §1:以状态为准,不以数组长度为准——dirtyCount===0 无条件优先 no-changes。
+              state.dirtyCount === 0
+                ? "no-changes"
                 : state.phase === "ReadyToSubmit"
                   ? "clean"
-                  : state.dirtyCount > 0
-                    ? "not-validated"
-                    : "no-changes"
+                  : errors.length > 0
+                    ? "errors"
+                    : "not-validated"
             }
             dirtyCount={state.dirtyCount}
             onJump={(row, column) => {
