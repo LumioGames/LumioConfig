@@ -22,6 +22,7 @@ export const COPY = {
     failedDraftConflict: "草稿已在别处更新",
     closed: "会话已结束",
     offline: "无法连接本机服务",
+    reconnecting: "正在重新连接…",
   },
   /** §5/§12:状态条辅助文案。 */
   status: {
@@ -39,6 +40,7 @@ export const COPY = {
     failedSchemaChanged: "这张表的结构已变化，需要刷新后重放草稿；草稿已保存。",
     failedDraftConflict: "另一个标签页保存了这张表的草稿。此页已停止编辑，刷新后接着改。",
     offline: "无法连接本机服务。请重新运行 serve，再打开新链接。",
+    reconnecting: "与本机服务断开了，正在自动重连。若一直连不上，请回终端重新运行 serve。",
     closed: "会话已结束。请重新打开链接；若链接已失效，请重新运行 serve 后打开新链接。",
     /** §8 末段 J3:打开表时修订/指纹与上次看到的不同 → 蓝底横幅 + [知道了](ack 写 seen)。 */
     changedSinceSeen: "自你上次打开以来这张表已变化",
@@ -57,6 +59,12 @@ export const COPY = {
     nothingToValidate: "没有改动可预检",
     validateBeforeSubmit: "先预检通过",
     fingerprintCopy: "点击复制指纹全文",
+  },
+  /** M7-D:顶栏表名菜单里的源文件 / Schema 路径条目与复制 toast。 */
+  paths: {
+    sourceFile: (path: string) => `源文件 ${path}`,
+    schemaFile: (path: string) => `Schema ${path}`,
+    copied: "已复制路径",
   },
   /** §8 补丁页签目标行:`→ main · a10eb3f · 自动 commit`。 */
   patchTarget: (branch: string, sha: string, autoCommit: boolean) =>
@@ -126,6 +134,22 @@ export const COPY = {
     noSelection: "先选中一个单元格",
     noBridge: "复制行暂不可用",
   },
+  /** M7-E:表列表右键菜单(TableList)。 */
+  tableMenu: {
+    viewSource: "查看源文件",
+    viewSchema: "查看 Schema",
+    reveal: "在资源管理器中显示",
+  },
+  /** M7-E:源文件只读查看器(SourceViewDialog)。 */
+  sourceView: {
+    title: (path: string) => `${path}（只读）`,
+    readOnlyNote: "只读快照。改这里不会改仓库；要改表请在表格里改，再提交补丁。",
+    loading: "正在读取…",
+    tooLarge: "文件太大，编辑器里不显示。请在编辑器外打开。",
+    failed: "读取失败。",
+    copyAll: "复制全文",
+    copied: "已复制全文",
+  },
   /** §12:首次打开 toast,不常驻。 */
   onboardingToast: "草稿会自动保存在本机，提交前不会写进仓库",
   /** §12:导出说明。 */
@@ -140,6 +164,10 @@ export const COPY = {
     target: "目标列",
     targetAll: "全部",
     submit: "导出",
+    /** M7-F:TXT 权威文本格式选项与两条说明(不做回导,ADR 0-1 §2)。 */
+    formatTxt: "TXT（权威文本格式）",
+    txtNote: "TXT 是源表格式的只读快照，不能拷回仓库覆盖。改表请在表格里改，再提交补丁。",
+    txtDraftNote: "含未提交草稿，与仓库不一致。",
   },
   /** §12:required 列守卫。 */
   validation: {
@@ -150,10 +178,31 @@ export const COPY = {
   cellMenu: {
     setNull: "设为 null ∅",
   },
-  /** §3:表格首空行 name 格占位,只由渲染层画(不进 v / token)。 */
+  /** §3:表格首空行 name 格占位,只由渲染层画(不进 v / token);M7-C 其余为列头图例。 */
   grid: {
     placeholderNewRow: "在此输入名称新增一行…",
+    visibilityLegend: "S 服务端 · C 客户端 · V 体素",
+    visibilityLegendTitle: "列的可见性",
+    visibilityLegendBody:
+      "S 服务端：只进服务端投影。C 客户端：会进客户端包，未标 C 的列在客户端投影里物理不存在。V 体素：进体素投影。多字母（如 SCV）表示这一列同时进多端。某列第一次标 C 是披露变更，必须过生产激活单，不能只在表里改。",
+    fullColumnName: (name: string) => `完整列名：${name}`,
   },
+  /** M7-C:schema 类型字面量 → 中文名;未知类型的回落原字面量由消费方(Task 4)处理。 */
+  columnType: {
+    u32: "整数",
+    i32: "整数",
+    f32: "小数",
+    f64: "小数",
+    string: "文本",
+    bool: "是否",
+    ref: "引用",
+  } as Record<string, string>,
+  /** M7-C:可见性单字符 → 中文名;未知字符原样保留由消费方(Task 4)处理。 */
+  visibility: {
+    S: "服务端",
+    C: "客户端",
+    V: "体素",
+  } as Record<string, string>,
   /** §6/§7:只读检查器文案。 */
   inspector: {
     emptyHint: "选中单元格后，此处显示详情",
