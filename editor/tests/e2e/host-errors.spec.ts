@@ -263,14 +263,12 @@ test.describe("host errors tab (M7-B, R-00397)", () => {
   /**
    * S04(审计 E-4 残留):预检失败 → 点错误项 → 断言 Univer 选区落到对应行列。
    *
-   * fixme 原因(2026-09-04,Task 11 实测):host 预检错误(patch.py `_field_errors`)
+   * 曾以 test.fixme 交付(Task 11 实测):host 预检错误(patch.py `_field_errors`)
    * 的 `row` 是**行名**("fireball"),而 App.tsx 错误页签 `onJump` 只按 rowKey
-   * ("40001")精确匹配,行名解析缺失 → `jumpToCell` 静默不跳,`lastJump()` 恒
-   * null。补丁页签 `onJump` 已有 name→rowKey 反查(`tokens[key]?.name?.raw ===
-   * name`),同样三行搬到 errors `onJump` 后本测试实测转绿(见 task-11-return
-   * 报告的验证补丁)。产品修复合入后删掉 `test.fixme` 即可恢复执行。
+   * ("40001")精确匹配,行名解析缺失 → `jumpToCell` 静默不跳。主 loop 已在接线点
+   * 落地 PatchTab 同款的 name→rowKey 反查,本测试恢复执行。
    */
-  test.fixme("S04 clicking an error item jumps the selection to that cell", async ({ page }) => {
+  test("S04 clicking an error item jumps the selection to that cell", async ({ page }) => {
     if (!host) {
       throw new Error("host missing");
     }

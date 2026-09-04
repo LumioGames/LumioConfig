@@ -119,6 +119,8 @@ export function App() {
   const [state, dispatch] = useReducer(reducer, INITIAL_EDITOR_STATE);
   const [tableNames, setTableNames] = useState<{ name: string; label?: string }[] | undefined>(undefined);
   const [tableSummaries, setTableSummaries] = useState<SessionTableSummary[] | undefined>(undefined);
+  // M7-F:导出格式列表由 Host capabilities 下发(当前 ["csv","tsv","txt"]),前端不写死。
+  const [exportFormats, setExportFormats] = useState<string[] | undefined>(undefined);
   const [dirtyCounts, setDirtyCounts] = useState<Record<string, number>>({});
   const [errors, setErrors] = useState<Array<{ code?: string; message?: string }>>([]);
   const [conflicts, setConflicts] = useState<RebaseConflict[]>([]);
@@ -835,6 +837,7 @@ export function App() {
       .then((session) => {
         setTableNames(session.tables.map((item: SessionTableSummary) => ({ name: item.name, label: item.name })));
         setTableSummaries(session.tables);
+        setExportFormats(session.capabilities?.export);
         setRevision(session.revision);
         setHistoryEnabled(Boolean((session as { capabilities?: { history?: boolean } }).capabilities?.history));
         setAutoCommit(session.settings.submit.autoCommit);
@@ -1330,6 +1333,8 @@ export function App() {
     >
       <TopBar
         tableName={state.table}
+        sourcePath={tableSummaries?.find((item) => item.name === state.table)?.sourcePath}
+        schemaPath={tableSummaries?.find((item) => item.name === state.table)?.schemaPath}
         revision={revision}
         view={view}
         dirtyCount={state.dirtyCount}
@@ -1499,8 +1504,12 @@ export function App() {
             }
             dirtyCount={state.dirtyCount}
             onJump={(row, column) => {
+              // Host 预检错误的 row 是行名(patch.py _field_errors),冲突项才是 rowId;
+              // 与 PatchTab onJump 同款的 name→rowKey 反查,两种负载都能跳格(M7-B S04)。
               const map = mapRef.current;
-              const rowKey = map?.rowKeys.find((key) => key === row);
+              const univerAPI = instanceRef.current?.univerAPI;
+              const tokens = map && univerAPI ? mergeCurrentCells(map, extractTokens(univerAPI, map)) : null;
+              const rowKey = map?.rowKeys.find((key) => key === row || tokens?.[key]?.name?.raw === row);
               jumpToCell(rowKey ?? row, column);
             }}
           />
@@ -1622,6 +1631,7 @@ export function App() {
         {drawerTab === "export" ? (
           <ExportTab
             tables={hostMode ? (tableNames?.map((item) => item.name) ?? [state.table]) : FIXTURES.map((f) => f.name)}
+            formats={exportFormats}
             onExport={async (req: ExportRequest): Promise<ExportResult> => {
               const result = await api<{ exportId: string; files: ExportResult["files"] }>("/api/export", {
                 method: "POST",
