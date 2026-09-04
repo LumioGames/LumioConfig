@@ -163,6 +163,7 @@ class Session:
                 {
                     "name": name,
                     "schemaPath": f"schemas/{name}.json",
+                    "sourcePath": f"tables/{name}.txt",
                     "rowCount": len(table.rows),
                     "sourceFingerprint": fps[name]["sourceFingerprint"],
                     "schemaFingerprint": fps[name]["schemaFingerprint"],
@@ -177,9 +178,10 @@ class Session:
             "capabilities": {
                 "submit": True,
                 "commit": self.commit_allowed,
-                "export": ["csv", "tsv"],
+                "export": ["csv", "tsv", "txt"],
                 "events": True,
                 "history": self.settings.vcs == "git",
+                "reveal": self.settings.allow_reveal,
             },
         }
 
