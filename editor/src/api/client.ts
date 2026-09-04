@@ -1,5 +1,5 @@
 import { safeStorage } from "../app/storage";
-import type { HistoryEntry } from "./types";
+import type { HistoryEntry, SourceFileResponse } from "./types";
 
 export class HostApiError extends Error {
   readonly code: string;
@@ -75,6 +75,18 @@ export async function history(
   }
   params.set("limit", String(limit));
   return api(`/api/tables/${encodeURIComponent(table)}/history?${params.toString()}`);
+}
+
+/**
+ * M7-E §3:只读源文件快照。`kind` 是闭合枚举,路径由 Host 按两个写死前缀拼装,
+ * 前端只传表名与 kind;超 2 MiB 时 Host 回 413 PAYLOAD_TOO_LARGE(走 HostApiError)。
+ */
+export async function sourceFile(
+  table: string,
+  kind: "table" | "schema",
+): Promise<SourceFileResponse> {
+  const params = new URLSearchParams({ kind });
+  return api(`/api/tables/${encodeURIComponent(table)}/source?${params.toString()}`);
 }
 
 /** M7-A §1:SSE 订阅生命周期回调。 */
