@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Button } from "../../components/ui";
 import { COPY } from "../../app/copy";
+import { safeStorage } from "../../app/storage";
 
 /**
  * 抽屉「导出」页签(设计稿 §8):表多选 / 格式 / 来源(仓库 · 含我的草稿)/
@@ -93,7 +94,8 @@ const FORMAT_LABELS: Record<string, string> = {
 /** 经 Authorization 拉取导出文件并触发浏览器下载(blob,同旧 ExportPanel)。 */
 function download(href: string): void {
   void (async () => {
-    const token = sessionStorage.getItem("lumio-token");
+    // M7-K:经 safeStorage 取 token,隐私模式/禁存储环境回落内存垫片而非抛异常。
+    const token = safeStorage("session").getItem("lumio-token");
     const response = await fetch(href, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
