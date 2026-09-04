@@ -65,3 +65,11 @@
 | validate / format --check | OK / OK | — |
 | git diff --check / spec-lint | 空 / OK | — |
 | build 后 editor_static diff | 重建后已提交（Task 17） | 基线空 |
+
+## 审查与终局
+
+- 深审（M7-A + M7-E，对抗式）：**MERGE**，无 P0/P1；报告 docs/reviews/2026-09-04-m7-ae-deep-review.md（reviewer 另跑 18 条恶意路径探针全部拒绝且零越界字节）。
+- 收口前最后修复：M7-B S02 新测试发现检查器开着切表 → dispose 竞态白屏（metaForSelection 在半销毁实例上 extractTokens 抛异常，审计 §C-10 一次性白屏同源）——try/catch 兜底修复，e2e 复绿。
+- 终局门槛：vitest **378 passed**（42 文件）/ e2e **60 passed** / python **168 OK** / validate·format·spec-lint·git-diff-check 全过 / editor_static 重建后零差异并已提交。
+- P2 清单（下批，见深审报告）：首连失败恢复后 phase=Failed 胶囊文案错配；看门狗无 cancel；黑洞连接不重连；api() 未包 response.text() reject；COPY.phase.reconnecting 无消费点；source_view 413 先读后判；非 UTF-8 decode 断连。
+- Task 16（M7-G reveal）未扇出——Owner 授权闸门未勾；Task 15 已按 capabilities.reveal=false 整项不渲染第三项。
