@@ -24,3 +24,17 @@
 
 - e1dc87c: T0 wiring（source_view 挂载 / txt 导出元数据 / 删 client.ts 守卫白名单临时项）
 - T0 合并态验证：python unittest 168 OK（基线 150）；vitest 350 passed（基线 313）；App.tsx tsc 红为计划内断点（接线点 1 前）
+
+## T1（5 张子卡，已全部合入）
+
+- Task 10 (M7-A offline-e2e): complete (commit 304f5f0, merged)
+  - note: S01 实测 ~10ms / S04 实测 ~830ms（预算 8000/12000ms）；S03 用 DOM 直发点击（Blocked 遮罩拦真实点击）
+- Task 11 (M7-B errors-e2e): complete (commit 5678ce4, merged)
+  - note: 发现产品缺陷——errors onJump 只按 rowKey 匹配而 Host 错误 row 是行名，静默不跳；3 行反查修复由主 loop 在接线提交落地并摘 test.fixme
+- Task 12 (M7-C toolbar-legend): complete (commits e9ba64c..f04908f, merged)
+- Task 13 (M7-D topbar-paths): complete (commits d40863c..9b6bc2e, merged)
+  - note: App.tsx 传参（sourcePath/schemaPath）由主 loop 接线落地；status-table 在 StatusBar（不在文件集），title 落在 topbar-table
+- Task 14 (M7-F export-tab-txt): complete (commits adfb664..da0ec08, merged)
+  - note: App.tsx formats 传参由主 loop 接线落地；ExportTab 裸 sessionStorage 已迁移，守卫白名单清零（M7-K S03 收口）
+- 主 loop T1 接线提交：TopBar 路径传参 + ExportTab formats + errors onJump 反查（M7-B S04 修复）
+- T1 合并态验证：vitest 363 passed（41 文件）；E2E host-errors/host-offline/host-export 5 passed；lint 全绿
