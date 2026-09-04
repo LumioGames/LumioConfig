@@ -70,6 +70,20 @@ function click(el: HTMLElement, testid: string) {
   });
 }
 
+/** jsdom 不合成原生按钮的 Enter 激活;按浏览器行为补发 click(userEvent 同款序列)。 */
+function pressEnter(el: HTMLElement) {
+  act(() => {
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    el.click();
+  });
+}
+
+function pressEscape(el: Element) {
+  act(() => {
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  });
+}
+
 afterEach(() => {
   if (root) {
     act(() => root!.unmount());
@@ -265,5 +279,76 @@ describe("GridToolbar hint and disabled states", () => {
     // 未实现 roving tabindex,role=region + aria-label 更诚实,且满足 axe region 规则。
     expect(toolbar?.getAttribute("role")).toBe("region");
     expect(toolbar?.getAttribute("aria-label")).toBe(COPY.toolbar.ariaLabel);
+  });
+});
+
+describe("GridToolbar visibility legend (M7-C S03)", () => {
+  it("renders the legend verbatim before the view hint, as a focusable native button", () => {
+    const { univerAPI } = makeUniverAPI(1);
+    const el = mount(<GridToolbar univerAPI={univerAPI} columnCount={9} canEdit />);
+    const legend = button(el, "tb-visibility-legend");
+    // 文案逐字来自 copy.ts 冻结键;复用 grid-toolbar__button(--color-text-muted,
+    // 11px),与列数提示同级弱化,不压过它。
+    expect(legend.textContent).toBe(COPY.grid.visibilityLegend);
+    expect(legend.className).toContain("grid-toolbar__button");
+    // 键盘可达:原生 button 不禁用、tabIndex 0,Tab 可聚焦。
+    expect(legend.disabled).toBe(false);
+    expect(legend.tabIndex).toBe(0);
+    // 位置:在「N 列 · 排序 / 筛选只影响视图」提示之前。
+    const hint = el.querySelector(".grid-toolbar__hint");
+    expect(hint?.textContent).toBe(COPY.toolbar.viewHint(9));
+    expect(
+      legend.compareDocumentPosition(hint as Node) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("clicking the legend opens the dialog with the frozen title and full body", () => {
+    const { univerAPI } = makeUniverAPI(1);
+    const el = mount(<GridToolbar univerAPI={univerAPI} columnCount={9} canEdit />);
+    expect(el.querySelector('[role="dialog"]')).toBeNull();
+    click(el, "tb-visibility-legend");
+    const dialog = el.querySelector('[role="dialog"]');
+    expect(dialog?.getAttribute("aria-modal")).toBe("true");
+    expect(dialog?.querySelector(".dialog__title")?.textContent).toBe(
+      COPY.grid.visibilityLegendTitle,
+    );
+    expect(dialog?.querySelector(".dialog__body")?.textContent).toBe(
+      COPY.grid.visibilityLegendBody,
+    );
+  });
+
+  it("Enter on the focused legend opens the dialog", () => {
+    const { univerAPI } = makeUniverAPI(1);
+    const el = mount(<GridToolbar univerAPI={univerAPI} columnCount={9} canEdit />);
+    const legend = button(el, "tb-visibility-legend");
+    legend.focus();
+    expect(document.activeElement).toBe(legend);
+    pressEnter(legend);
+    expect(el.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it("Escape closes the legend dialog", () => {
+    const { univerAPI } = makeUniverAPI(1);
+    const el = mount(<GridToolbar univerAPI={univerAPI} columnCount={9} canEdit />);
+    click(el, "tb-visibility-legend");
+    const dialog = el.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+    pressEscape(dialog as Element);
+    expect(el.querySelector('[role="dialog"]')).toBeNull();
+    expect(el.textContent).toContain(COPY.grid.visibilityLegend);
+  });
+
+  it("restores focus to the legend button after the dialog closes", () => {
+    const { univerAPI } = makeUniverAPI(1);
+    const el = mount(<GridToolbar univerAPI={univerAPI} columnCount={9} canEdit />);
+    const legend = button(el, "tb-visibility-legend");
+    legend.focus();
+    click(el, "tb-visibility-legend");
+    const dialog = el.querySelector('[role="dialog"]') as HTMLElement;
+    // 打开后焦点移入对话框(体内无可聚焦元素 → 容器自身持有焦点)。
+    expect(document.activeElement).toBe(dialog);
+    pressEscape(dialog);
+    // Dialog 卸载时还原打开前的焦点元素,即图例按钮。
+    expect(document.activeElement).toBe(legend);
   });
 });
