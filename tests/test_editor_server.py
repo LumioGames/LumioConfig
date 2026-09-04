@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from lumio_config.editor.server import create_server
+from lumio_config.editor.session import Session
 from lumio_config.editor.settings import load_settings
 from lumio_config.editor.vcs import ALLOWED_COMMANDS, GitAdapter, NoneAdapter, SvnAdapter, make_adapter, run_vcs
 from lumio_config.export import export_repository
@@ -24,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "tools" / "lumio_config.py"
 SESSION_KEYS = {"repoName", "revision", "tables", "schemas", "settings", "capabilities"}
 REVISION_KEYS = {"vcs", "id", "branch", "dirty"}
-TABLE_KEYS = {"name", "schemaPath", "rowCount", "sourceFingerprint", "schemaFingerprint"}
-CAPABILITY_KEYS = {"submit", "commit", "export", "events", "history"}
+TABLE_KEYS = {"name", "schemaPath", "sourcePath", "rowCount", "sourceFingerprint", "schemaFingerprint"}
+CAPABILITY_KEYS = {"submit", "commit", "export", "events", "history", "reveal"}
 CELL_KEYS = {"state", "raw", "effective"}
 
 
@@ -103,6 +104,20 @@ class SettingsTests(unittest.TestCase):
             self.assertTrue(public["submit"]["autoExport"])
             self.assertEqual(public["export"]["outDir"], "build/export")
             self.assertFalse(public["openPolicy"]["allowDirtyWorkingTree"])
+
+    def test_allow_reveal_defaults_false_and_stays_private(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_repo(root)
+            _git_init(root)
+            settings = load_settings(root)
+            self.assertIs(settings.allow_reveal, False)
+            public = settings.as_public()
+            self.assertEqual(set(public), {"vcs", "submit", "export", "openPolicy"})
+            self.assertEqual(set(public["submit"]), {"autoCommit", "autoExport"})
+            self.assertEqual(set(public["export"]), {"outDir"})
+            self.assertEqual(set(public["openPolicy"]), {"allowDirtyWorkingTree"})
+            self.assertNotIn("reveal", json.dumps(public))
 
     def test_invalid_vcs_names_the_key(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -258,11 +273,18 @@ class SessionContractTests(unittest.TestCase):
                 self.assertEqual(session["revision"]["vcs"], "git")
                 self.assertFalse(session["revision"]["dirty"])
                 self.assertEqual(set(session["capabilities"]), CAPABILITY_KEYS)
-                self.assertEqual(session["capabilities"]["export"], ["csv", "tsv"])
+                self.assertEqual(session["capabilities"]["export"], ["csv", "tsv", "txt"])
+                self.assertIs(session["capabilities"]["reveal"], False)
                 self.assertTrue(session["capabilities"]["events"])
                 skills_meta = next(item for item in session["tables"] if item["name"] == "skills")
                 self.assertEqual(set(skills_meta), TABLE_KEYS)
                 self.assertEqual(skills_meta["schemaPath"], "schemas/skills.json")
+                self.assertEqual(skills_meta["sourcePath"], "tables/skills.txt")
+                for item in session["tables"]:
+                    self.assertEqual(item["sourcePath"], f"tables/{item['name']}.txt")
+                    self.assertNotIn("\\", item["sourcePath"])
+                    self.assertNotIn(str(root), item["sourcePath"])
+                    self.assertFalse(item["sourcePath"].startswith(("/", "\\")))
                 self.assertTrue(skills_meta["sourceFingerprint"])
                 expected_fp = source_fingerprint(root / "tables" / "skills.txt", root / "schemas" / "skills.json")
                 self.assertEqual(skills_meta["sourceFingerprint"], expected_fp)
@@ -296,6 +318,22 @@ class SessionContractTests(unittest.TestCase):
                 self.assertEqual(export["targets"], ["S", "C", "V"])
             finally:
                 _stop(host)
+
+    def test_capabilities_reveal_follows_settings(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _copy_repo(root)
+            _git_init(root)
+            settings = load_settings(root)
+            self.assertIs(settings.allow_reveal, False)
+            adapter = make_adapter(root, settings)
+            session = Session(root, settings, adapter, False)
+            payload = session.session_payload("LumioConfig")
+            self.assertIs(payload["capabilities"]["reveal"], False)
+            settings.allow_reveal = True
+            session.reload_settings(settings)
+            payload = session.session_payload("LumioConfig")
+            self.assertIs(payload["capabilities"]["reveal"], True)
 
 
 class OpenPolicyTests(unittest.TestCase):
