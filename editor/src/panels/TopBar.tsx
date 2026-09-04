@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
 import { COPY } from "../app/copy";
 import type { PhaseView, PhaseViewTone } from "../app/phaseView";
-import { Button, Menu } from "../components/ui";
+import { Button, Menu, useToast, type MenuItem } from "../components/ui";
 
 /**
  * 顶栏(设计稿 §2、原型 README「顶栏」):42px,折叠按钮 · 品牌 / 表名 ⌄ · 修订 ·
@@ -17,6 +17,13 @@ export interface TopBarRevision {
 
 export interface TopBarProps {
   tableName: string;
+  /**
+   * M7-D:仓库相对源文件 / Schema 路径(Host 下发 `tables/<name>.txt` /
+   * `schemas/<name>.json`,POSIX 分隔符)。可选——宿主未接线时不渲染 ⌄ 路径菜单,
+   * 表名按钮 title 退化为按表名推导,不显示绝对路径。
+   */
+  sourcePath?: string;
+  schemaPath?: string;
   revision: TopBarRevision | null;
   view: PhaseView;
   dirtyCount: number;
@@ -182,6 +189,20 @@ const DIVIDER_STYLE: CSSProperties = {
   flex: "0 0 auto",
 };
 
+/** 表名旁 ⌄ 路径菜单触发钮(M7-D):与表名视觉成组,只承载菜单开合。 */
+const TABLE_MENU_TRIGGER_STYLE: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: 20,
+  height: 26,
+  padding: 0,
+  border: 0,
+  background: "transparent",
+  color: "var(--color-text-muted)",
+  cursor: "pointer",
+};
+
 function IconSidebar() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -227,6 +248,8 @@ function IconPanel() {
 
 export function TopBar({
   tableName,
+  sourcePath,
+  schemaPath,
   revision,
   view,
   dirtyCount,
@@ -242,14 +265,55 @@ export function TopBar({
 }: TopBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState({ x: 0, y: 0 });
+  const [tableMenuOpen, setTableMenuOpen] = useState(false);
+  const [tableMenuAnchor, setTableMenuAnchor] = useState({ x: 0, y: 0 });
+  const push = useToast();
   const revisionLabel = revisionText(revision);
   const tone = TONE_COLORS[view.tone];
   const phaseName = phaseNameOf(view);
+
+  /**
+   * M7-D:S04 兜底——`status-table` 在 StatusBar(不在本卡文件集),title 落在表名按钮;
+   * 优先用 Host 下发的 sourcePath,未接线时按表名推导,口径 `<表名> · tables/<表名>.txt`。
+   */
+  const sourceLabel = sourcePath ?? `tables/${tableName}.txt`;
+  /** M7-D:⌄ 菜单的两条只读路径条目,单独成组(group 空串:若日后前置切表项,自动出现组分隔)。 */
+  const pathMenuItems: MenuItem[] = [];
+  if (sourcePath) {
+    pathMenuItems.push({
+      id: "source-path",
+      group: "",
+      label: COPY.paths.sourceFile(sourcePath),
+      onSelect: () => copyPath(sourcePath),
+    });
+  }
+  if (schemaPath) {
+    pathMenuItems.push({
+      id: "schema-path",
+      group: "",
+      label: COPY.paths.schemaFile(schemaPath),
+      onSelect: () => copyPath(schemaPath),
+    });
+  }
+  const hasPaths = pathMenuItems.length > 0;
 
   function openMoreMenu(event: MouseEvent<HTMLButtonElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
     setMenuAnchor({ x: rect.right, y: rect.bottom + 4 });
     setMenuOpen(true);
+  }
+
+  function openTableMenu(event: MouseEvent<HTMLButtonElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setTableMenuAnchor({ x: rect.left, y: rect.bottom + 4 });
+    setTableMenuOpen(true);
+  }
+
+  /** M7-D:复制路径 + toast,与 StatusBar 指纹复制同款交互。 */
+  function copyPath(path: string) {
+    void navigator.clipboard.writeText(path).then(() => {
+      push(COPY.paths.copied);
+    });
   }
 
   return (
@@ -272,6 +336,7 @@ export function TopBar({
       <button
         type="button"
         data-testid="topbar-table"
+        title={`${tableName} · ${sourceLabel}`}
         style={{
           ...ACTION_BUTTON_STYLE,
           border: 0,
@@ -284,8 +349,27 @@ export function TopBar({
         onClick={onOpenPalette}
       >
         {tableName}
-        <IconChevronDown />
       </button>
+      {hasPaths ? (
+        <button
+          type="button"
+          data-testid="topbar-table-menu"
+          aria-haspopup="menu"
+          aria-expanded={tableMenuOpen}
+          style={TABLE_MENU_TRIGGER_STYLE}
+          onClick={openTableMenu}
+        >
+          <IconChevronDown />
+        </button>
+      ) : null}
+      {hasPaths ? (
+        <Menu
+          open={tableMenuOpen}
+          anchor={tableMenuAnchor}
+          onClose={() => setTableMenuOpen(false)}
+          items={pathMenuItems}
+        />
+      ) : null}
       {revisionLabel ? (
         <span data-testid="top-revision" title={revision ? revision.id : undefined} style={REVISION_STYLE}>
           {revisionLabel}
