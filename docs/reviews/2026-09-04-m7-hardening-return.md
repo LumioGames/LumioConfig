@@ -98,7 +98,7 @@ Task 16 未扇出（授权闸门未勾）。已交付的部分：`Settings.allow
 
 | 项 | 结论 | 证据 |
 | --- | --- | --- |
-| S01 | ⚠️ 部分 | 本机 Node **24.18.0** 下 vitest **378 passed / 0 failed（42 文件）**；Node 26 实机不可得（本机未装、限额期内不宜再装），以两条替代证据背书：storage.test.ts 显式模拟「全局 undefined/抛异常」场景 + 垫片退化单测在本机复现与 Node 26 完全同签名的 `TypeError ... reading 'getItem'` 后转绿。**建议 Owner 在 Node 26 机器复跑一次 `pnpm vitest run` 收口** |
+| S01 | ✅ | **双 Node 实测**：Node 24.18.0 → `378 passed / 0 failed`；**Node 26.4.0（便携版实机）→ `42 files passed，374 passed + 4 skipped（0 failed）`**。4 个 skip 均为「真实 storage 直通」类用例在无真实存储环境下的前提不成立跳过（Node 26 遮蔽，审计 §G-2），等价行为由垫片退化用例覆盖——与 storage.test.ts 既定口径一致 |
 | S02 | ✅ | engines.node = `>=22 <26`；README 止血说明按简报跳过（editor/README.md 不存在，报告已注明） |
 | S03 | ✅ | 守卫测试在库且全绿；白名单清零（client.ts 由 Task 3 迁移、ExportTab.tsx 由 Task 14 迁移后各删一行） |
 | S04 | ✅ | 垫片退化「每次都提示」单测；token 读取走 safeStorage("session") |
@@ -132,7 +132,6 @@ reviewer 裁决：**MERGE**（`docs/reviews/2026-09-04-m7-ae-deep-review.md`）�
 2. **本机渲染限制**：本 Windows 机器的 Chromium 下 Univer 数据行不上帧（新旧构建同样、headed/headless 同样；审计机正常——10.1% vs 2.8% 非白像素对照证实）。列头/侧栏/抽屉/阻断页渲染正常，E2E 全走数据模型断言不受影响；截图数据行空白属环境限制。已用 main@4c12a19 旧产物同机对照排除本批回归。
 3. M7-G 三条验收项（R-00401 S02–S04）待授权。
 4. M7-H/M7-I 时间盒内无回话即记「未获回话/未获签字」，实现卡继续冻结。
-5. Node 26 实机 vitest 复跑（M7-K S01 的最后一环）待有 Node 26 的机器。
 
 ## 4. 知识沉淀落点
 

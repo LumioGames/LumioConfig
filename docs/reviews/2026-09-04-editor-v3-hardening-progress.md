@@ -73,3 +73,8 @@
 - 终局门槛：vitest **378 passed**（42 文件）/ e2e **60 passed** / python **168 OK** / validate·format·spec-lint·git-diff-check 全过 / editor_static 重建后零差异并已提交。
 - P2 清单（下批，见深审报告）：首连失败恢复后 phase=Failed 胶囊文案错配；看门狗无 cancel；黑洞连接不重连；api() 未包 response.text() reject；COPY.phase.reconnecting 无消费点；source_view 413 先读后判；非 UTF-8 decode 断连。
 - Task 16（M7-G reveal）未扇出——Owner 授权闸门未勾；Task 15 已按 capabilities.reveal=false 整项不渲染第三项。
+
+## 追加（2026-09-04 下午，push 后）
+
+- main 已 push origin（`4c12a19..1d766ba`）；批次分支（m7/task-1..15 + feat/editor-v3-hardening）已删除。
+- **M7-K S01 收口**：便携版 Node 26.4.0 实机复跑 `pnpm vitest run` → **42 文件 passed，374 passed + 4 skipped（0 failed）**；Node 24 对照 378/0。TableList 三条「真实 storage 直通」用例补环境守卫（Node 26 无真实存储时静态 it.skip，与 storage.test.ts 口径一致，提交 `test(editor): skip real-storage passthrough cases...`）。
