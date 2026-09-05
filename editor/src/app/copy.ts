@@ -28,6 +28,8 @@ export const COPY = {
   status: {
     noUncommitted: "无未提交改动",
     uncommittedMerges: (n: number) => `${n} 次合入未 commit`,
+    /** QA P2-8:自动保存暂时没存上(401/5xx 等),改动仍在表格里,稍后自动重试。 */
+    draftSaveRetry: "草稿暂未保存，改动仍在表格里，稍后自动重试",
   },
   /** §5 横幅文案。 */
   banner: {

@@ -31,7 +31,9 @@ def _handle_source_request(handler: Any, params: dict[str, str]) -> None:
         return
     directory, suffix = target
     # Boundary 4: only tables the session actually loaded are readable.
-    if host.session.table_projection(table) is None:
+    # QA P2-6: 成员判断走 is_loaded,不算投影——table_projection 为指纹整读源文件,
+    # 会把「stat 先判大小再读」的次序翻回去。
+    if not host.session.is_loaded(table):
         handler._error(404, "UNKNOWN_TABLE", f"table {table} is not loaded")
         return
     root = host.root.resolve()
@@ -46,9 +48,17 @@ def _handle_source_request(handler: Any, params: dict[str, str]) -> None:
     if not path.is_file():
         handler._error(404, "NOT_FOUND", f"{directory}/{table}{suffix} does not exist")
         return
-    data = path.read_bytes()
-    if len(data) > MAX_SOURCE_BYTES:
+    # QA P2-6:先按 stat 判大小再读——超大文件整读进内存后才回 413,既白读又放大内存峰值。
+    if path.stat().st_size > MAX_SOURCE_BYTES:
         handler._error(413, "PAYLOAD_TOO_LARGE", f"{directory}/{table}{suffix} is larger than 2 MiB")
+        return
+    data = path.read_bytes()
+    # QA P2-7:非 UTF-8 字节在 handler 线程里裸抛 UnicodeDecodeError 会以
+    # RemoteDisconnected 断连收场(无 JSON 体,客户端误判为掉线);归类为 422 JSON 错误。
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        handler._error(422, "UNSUPPORTED_ENCODING", f"{directory}/{table}{suffix} is not valid UTF-8")
         return
     handler._json(
         200,
@@ -57,7 +67,7 @@ def _handle_source_request(handler: Any, params: dict[str, str]) -> None:
             "kind": kind,
             # POSIX-form relative path for the client; separators are hardcoded.
             "path": f"{directory}/{table}{suffix}",
-            "text": data.decode("utf-8"),
+            "text": text,
             "bytes": len(data),
         },
     )

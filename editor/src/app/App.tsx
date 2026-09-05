@@ -148,6 +148,8 @@ export function App() {
   const [submitConfirmOpen, setSubmitConfirmOpen] = useState(false);
   const [historyEnabled, setHistoryEnabled] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
+  // QA P2-5:掉线叠加态下自动重连是否已在跑(onClose 起为 true,onOpen 清零)。
+  const [reconnecting, setReconnecting] = useState(false);
   const [seenBannerOpen, setSeenBannerOpen] = useState(false);
   const [autoCommit, setAutoCommit] = useState(true);
   const [autoExport, setAutoExport] = useState(false);
@@ -194,6 +196,16 @@ export function App() {
     }
   }, [dispatch]);
 
+  /** QA P2-8:自动保存的统一(重)排程入口——编辑触发、保存失败重试、重连恢复三处共用。 */
+  const scheduleDraftSave = useCallback(() => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+    }
+    saveTimer.current = setTimeout(() => {
+      void persistDraftRef.current();
+    }, AUTOSAVE_MS);
+  }, []);
+
   const persistView = useCallback((table: string) => {
     const snapshot = instanceRef.current?.univerAPI.getActiveWorkbook()?.save();
     if (!snapshot) {
@@ -234,13 +246,8 @@ export function App() {
     ) {
       return;
     }
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-    }
-    saveTimer.current = setTimeout(() => {
-      void persistDraftRef.current();
-    }, AUTOSAVE_MS);
-  }, [hostMode]);
+    scheduleDraftSave();
+  }, [hostMode, scheduleDraftSave]);
 
   const persistDraft = useCallback(async (): Promise<number | undefined> => {
     if (!hostMode) {
@@ -300,12 +307,16 @@ export function App() {
         failOffline();
         return undefined;
       }
-      dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
+      // QA P2-8:自动保存的其余失败(401 换 token 竞态、5xx 等)不是会话终态——
+      // 落 generic failed 会错配「提交失败」并锁格(唯一逃生门重开表还会丢未保存
+      // 脏格)。回可编辑态保住脏格,重排一次自动保存等下一次落盘。
+      dispatch({ type: "draftSaveFailed", hint: COPY.status.draftSaveRetry });
+      scheduleDraftSave();
       return undefined;
     } finally {
       savingRef.current = false;
     }
-  }, [hostMode, failOffline]);
+  }, [hostMode, failOffline, scheduleDraftSave]);
   persistDraftRef.current = persistDraft;
 
   const writeToken = useCallback(async (rowKey: string, column: string, token: CellToken, force = false) => {
@@ -599,7 +610,12 @@ export function App() {
           }
           mountWorkbook(loaded.table, draft?.draftVersion ?? 0, undefined, draft);
         } catch (error) {
-          if (error instanceof HostApiError && error.code === "NETWORK_UNREACHABLE") {
+          if (
+            error instanceof HostApiError &&
+            (error.code === "NETWORK_UNREACHABLE" || error.code === "UNAUTHORIZED")
+          ) {
+            // QA P2-1/P2-8:坏 token 与 Host 不在的补救一致(重跑 serve 拿新链接),
+            // 归掉线派生态出 Blocked,不落「提交失败」。
             failOffline();
             return;
           }
@@ -834,16 +850,14 @@ export function App() {
     };
   }, [openTable]);
 
-  useEffect(() => {
-    if (!hostMode) {
-      return;
-    }
-      void api<SessionResponse>("/api/session")
+  /** QA P2-1:会话拉取独立成函数——首次拉取与「首连失败后重连恢复」两处共用。 */
+  const loadSession = useCallback((): Promise<void> => {
+    return api<SessionResponse>("/api/session")
       .then((session) => {
         setTableNames(session.tables.map((item: SessionTableSummary) => ({ name: item.name, label: item.name })));
         setTableSummaries(session.tables);
         setExportFormats(session.capabilities?.export);
-        setRevealEnabled(session.capabilities?.reveal === true);
+        setRevealEnabled(session.capabilities.reveal === true);
         setRevision(session.revision);
         setHistoryEnabled(Boolean((session as { capabilities?: { history?: boolean } }).capabilities?.history));
         setAutoCommit(session.settings.submit.autoCommit);
@@ -851,56 +865,110 @@ export function App() {
         dispatch({ type: "online", online: true });
       })
       .catch((error: unknown) => {
-        if (error instanceof HostApiError && error.code === "NETWORK_UNREACHABLE") {
+        if (
+          error instanceof HostApiError &&
+          (error.code === "NETWORK_UNREACHABLE" || error.code === "UNAUTHORIZED")
+        ) {
+          // 坏 token 与 Host 不在的补救一致(重跑 serve 拿新链接),归掉线派生态。
           failOffline();
           return;
         }
         dispatch({ type: "failed", hint: error instanceof Error ? error.message : String(error) });
       });
+  }, [failOffline]);
+
+  useEffect(() => {
+    if (!hostMode) {
+      return;
+    }
+    void loadSession();
     // M7-A §6 接线:订阅生命周期 + 字节层心跳喂看门狗;断流/看门狗判死 → 掉线派生态,
     // 重连(1s→2s→5s→10s 封顶)成功自动回在线;重连期间不刷数据、不动草稿(Task 3 驱动器保证)。
-    const watchdog = createLivenessWatchdog({
-      timeoutMs: SSE_LIVENESS_TIMEOUT_MS,
-      onDead: () => dispatch({ type: "online", online: false }),
-    });
-    watchdog.feed();
-    const stop = subscribeEventsWithReconnect({
-      onOpen: () => {
-        watchdog.feed();
-        dispatch({ type: "online", online: true });
-      },
-      onClose: () => dispatch({ type: "online", online: false }),
-      onHeartbeat: () => watchdog.feed(),
-      onEvent: (name, data) => {
-      if (name === "schema_changed") {
-        const eventTable = (data as { table?: string } | undefined)?.table;
-        if (eventTable && eventTable !== stateRef.current.table) {
-          return;
-        }
-        dispatch({ type: "schemaChanged" });
+    // QA P2-1/P2-8:重连成功还要清理连接类失败残留——首连失败(表未挂上)重走 session+开表;
+    // SavingDraft 卡死 / 无业务 failKind 的 Failed 回可编辑态并重排自动保存,脏格不丢。
+    const recoverOnReconnect = () => {
+      setReconnecting(false);
+      dispatch({ type: "online", online: true });
+      // 手动同步 ref:后续 openTable 的掉线守卫读的是 ref,不等下一次渲染。
+      stateRef.current = { ...stateRef.current, online: true };
+      const current = stateRef.current;
+      const recoverable =
+        current.phase === "SavingDraft" ||
+        (current.phase === "Failed" && current.failKind === "" && !mapRef.current);
+      if (!recoverable) {
         return;
       }
-      if (name === "repo_revision_changed") {
-        const eventTable = (data as { table?: string } | undefined)?.table;
-        if (eventTable && eventTable !== stateRef.current.table) {
-          return;
+      dispatch({ type: "recover" });
+      stateRef.current = {
+        ...stateRef.current,
+        phase: current.dirtyCount > 0 ? "ReadyDirty" : "ReadyClean",
+      };
+      if (mapRef.current) {
+        if (current.dirtyCount > 0) {
+          scheduleDraftSave();
         }
-        const phase = stateRef.current.phase;
-        if (phase === "Submitting" || phase === "Validating") {
-          return;
-        }
-        void (async () => {
-          await persistDraftRef.current();
-          rebasingRef.current = true;
-          stateRef.current = { ...stateRef.current, phase: "Stale" };
-          dispatch({ type: "stale", hint: "仓库已变化，草稿保留" });
-          await rebaseNow();
-        })();
+        return;
       }
+      void loadSession();
+      openTable(current.table);
+    };
+    // 看门狗 onDead 需要触发重建流,但事件流控制柄在下面才创建——先经持有对象桥接。
+    const eventStream: { current: ReturnType<typeof subscribeEventsWithReconnect> | null } = { current: null };
+    const watchdog = createLivenessWatchdog({
+      timeoutMs: SSE_LIVENESS_TIMEOUT_MS,
+      // QA P2-3:黑洞连接(无 FIN/RST)下 reader.read() 永挂、onClose 永远不来;
+      // 看门狗判死后主动 restart 重建流,否则停在掉线态永不恢复。
+      onDead: () => {
+        dispatch({ type: "online", online: false });
+        setReconnecting(true);
+        eventStream.current?.restart();
       },
     });
-    return stop;
-  }, [hostMode, rebaseNow, failOffline]);
+    watchdog.feed();
+    eventStream.current = subscribeEventsWithReconnect({
+      onOpen: () => {
+        watchdog.feed();
+        recoverOnReconnect();
+      },
+      onClose: () => {
+        dispatch({ type: "online", online: false });
+        setReconnecting(true);
+      },
+      onHeartbeat: () => watchdog.feed(),
+      onEvent: (name, data) => {
+        if (name === "schema_changed") {
+          const eventTable = (data as { table?: string } | undefined)?.table;
+          if (eventTable && eventTable !== stateRef.current.table) {
+            return;
+          }
+          dispatch({ type: "schemaChanged" });
+          return;
+        }
+        if (name === "repo_revision_changed") {
+          const eventTable = (data as { table?: string } | undefined)?.table;
+          if (eventTable && eventTable !== stateRef.current.table) {
+            return;
+          }
+          const phase = stateRef.current.phase;
+          if (phase === "Submitting" || phase === "Validating") {
+            return;
+          }
+          void (async () => {
+            await persistDraftRef.current();
+            rebasingRef.current = true;
+            stateRef.current = { ...stateRef.current, phase: "Stale" };
+            dispatch({ type: "stale", hint: "仓库已变化，草稿保留" });
+            await rebaseNow();
+          })();
+        }
+      },
+    });
+    return () => {
+      eventStream.current?.dispose();
+      // QA P2-2:看门狗的在计时定时器一并清掉,防卸载(HMR/测试)后 onDead 仍派发。
+      watchdog.dispose();
+    };
+  }, [hostMode, loadSession, openTable, scheduleDraftSave, rebaseNow, failOffline]);
 
   /** 提交入口:仅当会 commit / 导表时先弹一句话确认(ADR 0005)。 */
   const requestSubmit = useCallback(() => {
@@ -1337,7 +1405,10 @@ export function App() {
   const view = phaseView(state, {
     revision: revision ?? undefined,
     conflictCount: conflicts.length,
+    reconnecting,
   });
+  // M7-D:当前表的源文件路径(TopBar 菜单与 StatusBar 的 status-table title 共用)。
+  const currentSourcePath = tableSummaries?.find((item) => item.name === state.table)?.sourcePath;
 
   return (
     <ToastProvider>
@@ -1348,7 +1419,7 @@ export function App() {
     >
       <TopBar
         tableName={state.table}
-        sourcePath={tableSummaries?.find((item) => item.name === state.table)?.sourcePath}
+        sourcePath={currentSourcePath}
         schemaPath={tableSummaries?.find((item) => item.name === state.table)?.schemaPath}
         revision={revision}
         view={view}
@@ -1702,6 +1773,7 @@ export function App() {
       ) : null}
       <StatusBar
         tableName={state.table}
+        sourcePath={currentSourcePath}
         rowCount={state.rowCount}
         draftVersion={state.draftVersion}
         dirtyCount={state.dirtyCount}

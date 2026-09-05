@@ -108,6 +108,37 @@ describe("failKind 契约(ADR 0005:取代 hint 子串判断)", () => {
     expect(canRefreshOnly(typed)).toBe(true);
   });
 
+  it("QA P2-8:draftSaveFailed 回可编辑态保脏格,不落 Failed", () => {
+    const dirty = reducer(INITIAL_EDITOR_STATE, { type: "dirty", dirtyCount: 1 });
+    const saving = reducer(dirty, { type: "saving" });
+    const failed = reducer(saving, { type: "draftSaveFailed", hint: "草稿暂未保存，改动仍在表格里，稍后自动重试" });
+    expect(failed.phase).toBe("ReadyDirty");
+    expect(failed.dirtyCount).toBe(1);
+    expect(failed.hint).toContain("草稿暂未保存");
+    expect(canEdit(failed)).toBe(true);
+    // 无脏格时回 ReadyClean。
+    const clean = reducer(INITIAL_EDITOR_STATE, { type: "open", table: "skills", fingerprint: "fp", rowCount: 1 });
+    const cleanAfter = reducer(clean, { type: "draftSaveFailed", hint: "草稿暂未保存，改动仍在表格里，稍后自动重试" });
+    expect(cleanAfter.phase).toBe("ReadyClean");
+  });
+
+  it("QA P2-1/P2-8:recover 只清连接类残留,不清业务 failKind 的 Failed", () => {
+    // SavingDraft 卡死(掉线发生在保存中)→ 按脏格数恢复。
+    const saving = reducer(INITIAL_EDITOR_STATE, { type: "dirty", dirtyCount: 2 });
+    const savingStuck = reducer(saving, { type: "saving" });
+    expect(reducer(savingStuck, { type: "recover" }).phase).toBe("ReadyDirty");
+    // 无 failKind 的 Failed(首连失败/连接类)→ 恢复。
+    const genericFailed = reducer(savingStuck, { type: "failed", hint: "无法连接本机服务" });
+    expect(reducer(genericFailed, { type: "recover" }).phase).toBe("ReadyDirty");
+    // 业务终态(VCS / SCHEMA_CHANGED / DRAFT_VERSION_CONFLICT)不恢复。
+    for (const failKind of ["VCS", "SCHEMA_CHANGED", "DRAFT_VERSION_CONFLICT"] as const) {
+      const business = reducer(savingStuck, { type: "failed", hint: "x", failKind });
+      expect(reducer(business, { type: "recover" }).phase).toBe("Failed");
+    }
+    // 其余阶段是 no-op。
+    expect(reducer(saving, { type: "recover" }).phase).toBe("ReadyDirty");
+  });
+
   it("离开 Failed 的动作清空 failKind", () => {
     const failed = reducer(INITIAL_EDITOR_STATE, { type: "schemaChanged" });
     const opened = reducer(failed, { type: "open", table: "skills", fingerprint: "fp", rowCount: 1 });

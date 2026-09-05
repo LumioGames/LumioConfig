@@ -202,4 +202,90 @@ test.describe("host offline (M7-A R-00396 S01/S03/S04)", () => {
     expect(restored).toBe("null");
     expect(pageErrors, `uncaught page errors across journey: ${pageErrors.map(String).join("; ")}`).toHaveLength(0);
   });
+
+  // QA P2-1:首连失败(会话拉取/开表全 401-equivalent 失败)落 Blocked 后,
+  // 网络恢复时必须走出 Failed——重走 session + 开表回 ReadyClean,不停在「提交失败」。
+  test("P2-1 first-connect failure recovers to ReadyClean after unblock", async ({ page }) => {
+    if (!host) {
+      throw new Error("host missing");
+    }
+    const pageErrors: Error[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error));
+
+    // /api/** 一律拒绝(比 kill Host 温和:页面静态资源照常加载,只断 API 面)。
+    await page.route("**/api/**", (route) => route.abort("connectionrefused"));
+    await page.goto(host.url);
+    // 会话拉取与开表都失败 → 掉线派生态出 Blocked(Opening 阶段落 failed 才可达)。
+    await page.locator('[role="alertdialog"]').waitFor({ timeout: OFFLINE_BUDGET_MS });
+    await expect(page.getByTestId("status-online")).toHaveText(/离线/);
+    expect(await page.getByText("提交失败").count()).toBe(0);
+
+    // 解除阻断:SSE 退避重连成功 → 恢复逻辑重走 session + 开表 → 回可编辑的 Ready 态且工作簿
+    // 重新挂上(串行套件里 test 1 存过草稿,重放后是 ReadyDirty——脏格回来了也算恢复)。
+    const unblockedAt = Date.now();
+    await page.unroute("**/api/**");
+    try {
+      await page.waitForFunction(
+        () =>
+          (window.__lumioPoc?.phase?.() === "ReadyClean" || window.__lumioPoc?.phase?.() === "ReadyDirty") &&
+          window.__lumioPoc?.map?.() != null,
+        undefined,
+        { timeout: RECONNECT_BUDGET_MS },
+      );
+    } catch {
+      const dump = await page.evaluate(() => ({
+        phase: window.__lumioPoc?.phase?.(),
+        hint: window.__lumioPoc?.hint?.(),
+        mapAlive: window.__lumioPoc?.map?.() != null,
+        online: document.querySelector('[data-testid="status-online"]')?.textContent,
+        capsuleTitle: document.querySelector('[data-testid="status-phase"]')?.getAttribute("title"),
+      }));
+      throw new Error(`P2-1 recovery incomplete: ${JSON.stringify(dump)}`);
+    }
+    console.log(`[QA P2-1] recovered ${Date.now() - unblockedAt}ms after unblock (budget ${RECONNECT_BUDGET_MS}ms)`);
+    await expect(page.getByTestId("status-online")).toHaveText(/在线/);
+    expect(await page.evaluate(() => window.__lumioPoc?.map?.() != null)).toBe(true);
+    expect(await page.getByText("提交失败").count()).toBe(0);
+    expect(pageErrors, `uncaught page errors: ${pageErrors.map(String).join("; ")}`).toHaveLength(0);
+  });
+
+  // QA P2-8:脏格自动保存吃到 401(换 token 竞态的最坏形状:Host 在,旧 token 失效)
+  // 不得落 Failed/「提交失败」锁格;401 解除后自动重试必须把草稿真正存上。
+  test("QA-P2-8 autosave 401 keeps grid editable and retries to saved", async ({ page }) => {
+    if (!host) {
+      throw new Error("host missing");
+    }
+    const pageErrors: Error[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error));
+
+    await waitPoc(page, host.url);
+    await expect(page.getByTestId("status-online")).toHaveText(/在线/);
+
+    await page.route("**/api/drafts/**", (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ code: "UNAUTHORIZED", message: "missing or invalid bearer token", errors: [] }),
+      }),
+    );
+    await page.evaluate(() => window.__lumioPoc?.applyFourState("40001", "display_name", "null"));
+    // 自动保存(AUTOSAVE_MS=2s)吃到 401 → draftSaveFailed:ReadyDirty 可编辑、脏格保留、
+    // hint 给出「草稿暂未保存…」而不是「提交失败」胶囊。
+    await page.waitForFunction(() => (window.__lumioPoc?.hint?.() ?? "").includes("草稿暂未保存"), undefined, {
+      timeout: 8_000,
+    });
+    expect(await page.getByText("提交失败").count()).toBe(0);
+    expect(await page.evaluate(() => window.__lumioPoc?.phase?.())).toBe("ReadyDirty");
+    expect(await page.evaluate(() => window.__lumioPoc?.map?.() != null)).toBe(true);
+
+    // 401 解除:重排的自动保存成功 → 草稿版本前进,脏格原样还在。
+    await page.unroute("**/api/drafts/**");
+    await page.waitForFunction(() => (window.__lumioPoc?.draftVersion?.() ?? 0) > 0, undefined, {
+      timeout: 8_000,
+    });
+    const restored = await page.evaluate(() => window.__lumioPoc?.extractTokens()?.["40001"]?.display_name?.raw);
+    expect(restored).toBe("null");
+    expect(await page.getByText("提交失败").count()).toBe(0);
+    expect(pageErrors, `uncaught page errors: ${pageErrors.map(String).join("; ")}`).toHaveLength(0);
+  });
 });

@@ -11,6 +11,8 @@ import { useToast } from "../components/ui";
 
 export interface StatusBarProps {
   tableName: string;
+  /** M7-D S04:Host 下发的源文件路径(title 用);未接线时按表名推导 `tables/<表名>.txt`。 */
+  sourcePath?: string;
   rowCount: number;
   draftVersion: number;
   dirtyCount: number;
@@ -87,6 +89,7 @@ const ONLINE_DOT_STYLE: CSSProperties = {
 
 export function StatusBar({
   tableName,
+  sourcePath,
   rowCount,
   draftVersion,
   dirtyCount,
@@ -106,7 +109,8 @@ export function StatusBar({
 
   return (
     <footer className="status-bar" data-testid="status-bar" style={BAR_STYLE}>
-      <span data-testid="status-table" style={SEGMENT_STYLE}>
+      {/* M7-D S04:悬浮可取「表名 · 源文件路径」(需求原文的兜底落点)。 */}
+      <span data-testid="status-table" title={`${tableName} · ${sourcePath ?? `tables/${tableName}.txt`}`} style={SEGMENT_STYLE}>
         {tableName}
       </span>
       <span data-testid="status-rows" style={SEGMENT_STYLE}>

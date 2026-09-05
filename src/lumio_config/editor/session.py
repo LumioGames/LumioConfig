@@ -103,6 +103,14 @@ class Session:
             }
         return out
 
+    def is_loaded(self, name: str) -> bool:
+        """QA P2-6: 只判「表是否在会话里」。
+
+        `table_projection` 会为指纹整读源文件;像 source_view 这类只需要成员判断的
+        边界检查用它,会把「先判大小再读」的次序又翻回去。
+        """
+        return name in self.schemas and name in self.tables
+
     def table_projection(self, name: str) -> dict[str, Any] | None:
         schema = self.schemas.get(name)
         table = self.tables.get(name)
