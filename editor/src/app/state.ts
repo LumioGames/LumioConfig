@@ -18,6 +18,10 @@ export type EditorAction =
   | { type: "dirty"; dirtyCount: number }
   | { type: "saving" }
   | { type: "saved"; draftVersion: number }
+  /** QA P2-8:自动保存的非业务失败(401/5xx 等)——回可编辑态保脏格,不落 Failed。 */
+  | { type: "draftSaveFailed"; hint: string }
+  /** QA P2-1/P2-8:连接恢复时清理连接类失败残留(SavingDraft 卡死 / 无业务 failKind 的 Failed)。 */
+  | { type: "recover" }
   | { type: "stale"; hint: string }
   | { type: "failed"; hint: string; failKind?: FailKind }
   | { type: "online"; online: boolean }
@@ -84,6 +88,22 @@ export function reducer(state: EditorState, action: EditorAction): EditorState {
         draftVersion: action.draftVersion,
         failKind: "",
       };
+    case "draftSaveFailed":
+      // QA P2-8:草稿没存上不是会话失败——脏格仍在表格里,回到可编辑态等重试;
+      // 落 Failed 会错配「提交失败」胶囊并锁格,而唯一逃生门(重开表)会丢未保存脏格。
+      return {
+        ...state,
+        phase: state.dirtyCount > 0 ? "ReadyDirty" : "ReadyClean",
+        hint: action.hint,
+        failKind: "",
+      };
+    case "recover":
+      // QA P2-1/P2-8:SSE 重连成功后清理连接类残留。带业务 failKind 的 Failed
+      // (VCS/SCHEMA_CHANGED/DRAFT_VERSION_CONFLICT)是真实业务终态,不清。
+      if (state.phase === "SavingDraft" || (state.phase === "Failed" && state.failKind === "")) {
+        return { ...state, phase: state.dirtyCount > 0 ? "ReadyDirty" : "ReadyClean" };
+      }
+      return state;
     case "stale":
       return { ...state, phase: "Stale", hint: action.hint, failKind: "" };
     case "failed":

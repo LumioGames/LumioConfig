@@ -216,6 +216,20 @@ describe("createLivenessWatchdog", () => {
   it("SSE_LIVENESS_TIMEOUT_MS 为 5000(Host 心跳 1s 的 5 倍余量)", () => {
     expect(SSE_LIVENESS_TIMEOUT_MS).toBe(5_000);
   });
+
+  it("QA P2-2:dispose 清掉在计时定时器,onDead 不再触发;dispose 后 feed 不再重新计时", () => {
+    vi.useFakeTimers();
+    const onDead = vi.fn();
+    const watchdog = createLivenessWatchdog({ timeoutMs: 5_000, onDead });
+    watchdog.feed();
+    watchdog.dispose();
+    vi.advanceTimersByTime(120_000);
+    expect(onDead).not.toHaveBeenCalled();
+    // dispose 后的 feed 是惰性 no-op,不会重新埋雷。
+    watchdog.feed();
+    vi.advanceTimersByTime(120_000);
+    expect(onDead).not.toHaveBeenCalled();
+  });
 });
 
 describe("退避重连", () => {
@@ -238,7 +252,7 @@ describe("退避重连", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
     const cb = makeCallbacks();
-    const dispose = subscribeEventsWithReconnect(cb);
+    const handle = subscribeEventsWithReconnect(cb);
 
     await vi.advanceTimersByTimeAsync(0);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -263,7 +277,7 @@ describe("退避重连", () => {
     expect(fetchMock).toHaveBeenCalledTimes(6);
     expect(warnSpy).toHaveBeenCalledTimes(6);
 
-    dispose();
+    handle.dispose();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(fetchMock).toHaveBeenCalledTimes(6);
   });
@@ -284,7 +298,7 @@ describe("退避重连", () => {
       }),
     );
     const cb = makeCallbacks();
-    const dispose = subscribeEventsWithReconnect(cb);
+    const handle = subscribeEventsWithReconnect(cb);
 
     await vi.advanceTimersByTimeAsync(0);
     expect(cb.onOpen).not.toHaveBeenCalled();
@@ -304,7 +318,92 @@ describe("退避重连", () => {
     expect(call).toBe(2);
     await vi.advanceTimersByTimeAsync(1);
     expect(call).toBe(3);
-    dispose();
+    handle.dispose();
+  });
+
+  it("QA P2-3:restart 拆掉健康流,不给调用方发 onClose,并按退避重连", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const first = controlledStream();
+    const second = controlledStream();
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        call += 1;
+        return sseResponse(call === 1 ? first.stream : second.stream);
+      }),
+    );
+    const cb = makeCallbacks();
+    const handle = subscribeEventsWithReconnect(cb);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cb.onOpen).toHaveBeenCalledTimes(1);
+
+    // 黑洞场景:流还开着但永远没有字节。看门狗判死 → restart。
+    handle.restart();
+    await vi.advanceTimersByTimeAsync(0);
+    // 主动拆除是静默的:不触发调用方 onClose(避免与重连循环重复计数),
+    // 旧流也不再派发事件。
+    expect(cb.onClose).not.toHaveBeenCalled();
+    first.push('event: ghost\ndata: {"ok":true}\n\n');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cb.onEvent).not.toHaveBeenCalled();
+
+    // 计一次失败 → 1s 退避后重建,新流恢复心跳与事件。
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(call).toBe(2);
+    expect(cb.onOpen).toHaveBeenCalledTimes(2);
+    second.push('event: reborn\ndata: {"ok":true}\n\n');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cb.onEvent).toHaveBeenCalledWith("reborn", { ok: true });
+    handle.dispose();
+  });
+
+  it("QA P2-3 代际守卫:建流 fetch 未决时 restart,迟到的旧流回调被丢弃、自行销毁", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const oldStream = controlledStream();
+    const newStream = controlledStream();
+    let call = 0;
+    let releaseOld: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        call += 1;
+        if (call === 1) {
+          // 黑洞建流:fetch 挂起不返回(既不成功也不失败)。
+          return new Promise<Response>((resolve) => {
+            releaseOld = resolve;
+          });
+        }
+        return sseResponse(newStream.stream);
+      }),
+    );
+    const cb = makeCallbacks();
+    const handle = subscribeEventsWithReconnect(cb);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(call).toBe(1);
+
+    // 看门狗判死 → restart:退避后第二次连接成功。
+    handle.restart();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(call).toBe(2);
+    expect(cb.onOpen).toHaveBeenCalledTimes(1);
+
+    // 旧 fetch 现在才返回:代际不符 → 不误报 onOpen、回调被丢弃、旧流自行销毁。
+    releaseOld?.(sseResponse(oldStream.stream));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cb.onOpen).toHaveBeenCalledTimes(1);
+    oldStream.push('event: stale\ndata: {"ok":true}\n\n');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cb.onEvent).not.toHaveBeenCalled();
+
+    // 新流仍活着:推事件可达(证明 stopStream 未被旧流覆盖)。
+    newStream.push('event: fresh\ndata: {"ok":true}\n\n');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cb.onEvent).toHaveBeenCalledWith("fresh", { ok: true });
+    handle.dispose();
   });
 });
 
@@ -329,6 +428,22 @@ describe("api 网络不可达", () => {
     );
     expect(error).toBeInstanceOf(HostApiError);
     expect((error as HostApiError).code).toBe("VERSION_CONFLICT");
+  });
+
+  it("QA P2-4:响应头已到、body 中途断(response.text() reject)→ 同归 NETWORK_UNREACHABLE", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          ({ ok: true, status: 200, statusText: "OK", text: () => Promise.reject(new TypeError("body broke")) }) as unknown as Response,
+      ),
+    );
+    const error = await api("/api/tables/skills").then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(HostApiError);
+    expect((error as HostApiError).code).toBe("NETWORK_UNREACHABLE");
   });
 });
 

@@ -392,4 +392,25 @@ describe("M7-C header readability", () => {
       | undefined)?.lumio;
     expect(lumio?.headerTitle?.startsWith(COPY.grid.fullColumnName("damage"))).toBe(true);
   });
+
+  it("QA-P3-2:header tooltip 三行——完整列名 / 中文类型·可见性(与列头第二行同源) / 约束", () => {
+    const table = loadJson("skills.json");
+    const { workbook } = buildWorkbook(table);
+    const damage = (workbook.sheets.skills?.cellData["0"]?.["4"]?.custom as
+      | { lumio?: { headerTitle?: string } }
+      | undefined)?.lumio?.headerTitle;
+    const lines = damage?.split("\n");
+    expect(lines?.[0]).toBe(COPY.grid.fullColumnName("damage"));
+    expect(lines?.[1]).toBe("整数 · 服务端");
+    expect(lines?.[2]).toContain("必填");
+    expect(lines?.[2]).toContain("范围");
+    // 英文字面量不再出现在悬浮 title(类型/可见性与列头同一套中文)。
+    expect(damage).not.toContain("i32");
+    expect(damage).not.toContain("可见性 S");
+    // id 列(u32 · SCV)同源展开。
+    const id = (workbook.sheets.skills?.cellData["0"]?.["0"]?.custom as
+      | { lumio?: { headerTitle?: string } }
+      | undefined)?.lumio?.headerTitle;
+    expect(id?.split("\n")[1]).toBe("整数 · 服务端·客户端·体素");
+  });
 });

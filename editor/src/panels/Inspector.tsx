@@ -4,7 +4,7 @@ import { Button } from "../components/ui";
 import type { CellState, CellToken } from "../api/types";
 import { invalidReason, type CellMeta } from "../spreadsheet/cellMeta";
 import { FOUR_STATE_MENU, tokenForDeleteKey, type FourStateKind } from "../spreadsheet/fourState";
-import { columnTypeLabel } from "../spreadsheet/projection";
+import { columnTypeDualLabel, visibilityLabel } from "../spreadsheet/projection";
 import { tokenEqual } from "../spreadsheet/tokens";
 
 /**
@@ -254,7 +254,8 @@ export function Inspector({
       {/* 列约束 */}
       <section style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <div style={SECTION_TITLE_STYLE}>{COPY.inspector.constraintTitle}</div>
-        <ConstraintRow label={labels.type} value={columnTypeLabel(column)} />
+        {/* QA-P3-2:类型双显(中文 + 括号保字面量)、可见性展开中文,与列头第二行同一套文案。 */}
+        <ConstraintRow label={labels.type} value={columnTypeDualLabel(column)} />
         <ConstraintRow
           label={labels.required}
           value={column.required === true ? COPY.inspector.constraintValues.yes : COPY.inspector.constraintValues.no}
@@ -267,7 +268,7 @@ export function Inspector({
         {hasRange ? <ConstraintRow label={labels.range} value={rangeText} /> : null}
         <ConstraintRow
           label={labels.visibility}
-          value={column.visibility ?? COPY.inspector.constraintValues.none}
+          value={column.visibility ? visibilityLabel(column.visibility) : COPY.inspector.constraintValues.none}
         />
         {/* TableColumn 暂无描述字段(Host 侧 schema 未提供),占位「无」待补。 */}
         <ConstraintRow label={labels.description} value={COPY.inspector.constraintValues.none} />

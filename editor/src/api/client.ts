@@ -50,7 +50,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (response.status === 204) {
     return undefined as T;
   }
-  const text = await response.text();
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (error) {
+    // QA P2-4:响应头已到、body 中途断(读 body 时连接掉)与 fetch reject 同类,
+    // 也是"网络不可达"——不包住会漏出裸 TypeError,被调用方当业务失败落
+    // generic failed(胶囊错配「提交失败」)。
+    const message = error instanceof Error ? error.message : "network unreachable";
+    throw new HostApiError("NETWORK_UNREACHABLE", message);
+  }
   let payload: { code?: string; message?: string; errors?: unknown[] } = {};
   try {
     payload = text ? (JSON.parse(text) as typeof payload) : {};
@@ -186,6 +195,12 @@ export async function subscribeEvents(cb: EventStreamCallbacks): Promise<() => v
  */
 export const SSE_LIVENESS_TIMEOUT_MS = 5_000;
 
+export interface LivenessWatchdog {
+  feed(): void;
+  /** QA P2-2:清掉在计时的一次性定时器;dispose 后 feed 不再重新计时(HMR/测试卸载防漏)。 */
+  dispose(): void;
+}
+
 /**
  * M7-A §4:存活看门狗。`feed()` 重置计时;`timeoutMs` 内没被 feed 过就调一次
  * `onDead`(只调一次,直到下次 `feed()` 复活)。创建后不计时,首次 `feed()` 才开始。
@@ -193,15 +208,23 @@ export const SSE_LIVENESS_TIMEOUT_MS = 5_000;
 export function createLivenessWatchdog(opts: {
   timeoutMs: number;
   onDead: () => void;
-}): { feed(): void } {
+}): LivenessWatchdog {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let dead = false;
+  let disposed = false;
+  const clear = () => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+  };
   return {
     feed() {
-      dead = false;
-      if (timer !== undefined) {
-        clearTimeout(timer);
+      if (disposed) {
+        return;
       }
+      dead = false;
+      clear();
       timer = setTimeout(() => {
         timer = undefined;
         if (dead) {
@@ -210,6 +233,11 @@ export function createLivenessWatchdog(opts: {
         dead = true;
         opts.onDead();
       }, opts.timeoutMs);
+    },
+    dispose() {
+      disposed = true;
+      dead = true;
+      clear();
     },
   };
 }
@@ -223,14 +251,27 @@ export function reconnectDelayMs(consecutiveFailures: number): number {
   return RECONNECT_STEPS_MS[index];
 }
 
+/** M7-A §5:`subscribeEventsWithReconnect` 的控制柄。 */
+export interface EventStreamHandle {
+  /** 停止一切(含挂起的重连);当前流静默拆除,不触发 onClose。 */
+  dispose(): void;
+  /**
+   * QA P2-3:主动拆掉当前流并按退避重连。黑洞连接(无 FIN/RST)下 `reader.read()`
+   * 永远挂起,onClose 不会来——只有调用方(看门狗 onDead)能判死;判死后经
+   * restart 重建流,否则永远停在掉线态。
+   */
+  restart(): void;
+}
+
 /**
  * M7-A §5:带退避重连的事件流订阅。断线/建流失败后按 reconnectDelayMs 重连,
  * 重连成功再次走 onOpen(失败计数清零);重连期间不刷数据、不动草稿(由调用方保证);
  * 每次失败只写一条 console.warn,不刷屏。dispose 后立即停止重连。
  */
-export function subscribeEventsWithReconnect(cb: EventStreamCallbacks): () => void {
+export function subscribeEventsWithReconnect(cb: EventStreamCallbacks): EventStreamHandle {
   let disposed = false;
   let failures = 0;
+  let generation = 0;
   let stopStream: (() => void) | undefined;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -241,42 +282,51 @@ export function subscribeEventsWithReconnect(cb: EventStreamCallbacks): () => vo
     }
   };
 
+  const scheduleReconnect = (reason: "ended" | "error" | "stale" | "restart") => {
+    failures += 1;
+    const delayMs = reconnectDelayMs(failures);
+    console.warn(`[sse] 事件流断开(${reason}),${delayMs / 1000}s 后第 ${failures} 次重连`);
+    clearRetry();
+    retryTimer = setTimeout(connect, delayMs);
+  };
+
   const connect = () => {
     if (disposed) {
       return;
     }
+    // generation:P2-3 的 restart 可能拆掉一条还在建流(fetch 未决)的连接;
+    // 每次连接自增,迟到的回调(onOpen/onClose/事件与 .then)发现代际不符即丢弃,
+    // 不覆盖新流的 stopStream、不误报 onOpen、不重复排重连。
+    const myGeneration = ++generation;
+    const stale = () => disposed || myGeneration !== generation;
     void subscribeEvents({
       onEvent: (name, data) => {
-        if (!disposed) {
+        if (!stale()) {
           cb.onEvent(name, data);
         }
       },
       onHeartbeat: () => {
-        if (!disposed) {
+        if (!stale()) {
           cb.onHeartbeat?.();
         }
       },
       onOpen: () => {
-        if (!disposed) {
+        if (!stale()) {
           failures = 0;
           cb.onOpen?.();
         }
       },
       onClose: (reason) => {
-        if (disposed) {
+        if (stale()) {
           return;
         }
         cb.onClose?.(reason);
         stopStream?.();
         stopStream = undefined;
-        failures += 1;
-        const delayMs = reconnectDelayMs(failures);
-        console.warn(`[sse] 事件流断开(${reason}),${delayMs / 1000}s 后第 ${failures} 次重连`);
-        clearRetry();
-        retryTimer = setTimeout(connect, delayMs);
+        scheduleReconnect(reason);
       },
     }).then((dispose) => {
-      if (disposed) {
+      if (stale()) {
         dispose();
         return;
       }
@@ -285,10 +335,24 @@ export function subscribeEventsWithReconnect(cb: EventStreamCallbacks): () => vo
   };
 
   connect();
-  return () => {
-    disposed = true;
-    clearRetry();
-    stopStream?.();
-    stopStream = undefined;
+  return {
+    dispose() {
+      disposed = true;
+      clearRetry();
+      generation += 1;
+      stopStream?.();
+      stopStream = undefined;
+    },
+    restart() {
+      if (disposed) {
+        return;
+      }
+      // 主动拆除不改写调用方的 onClose 语义:静默 cancel(不触发 onClose),
+      // 计一次失败走统一退避。
+      stopStream?.();
+      stopStream = undefined;
+      clearRetry();
+      scheduleReconnect("restart");
+    },
   };
 }

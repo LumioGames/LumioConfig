@@ -99,7 +99,8 @@ export interface SessionCapabilities {
   events: boolean;
   /** §9:修订历史能力;Host 端 `vcs == "git"` 才为 true,svn / none 为 false(页签不渲染)。 */
   history: boolean;
-  /** M7-G:在资源管理器中显示(reveal);默认 false,CLI `serve --allow-reveal` 显式开启。 */
+  /** M7-G:在资源管理器中显示(reveal)。未实现——Host 恒下发 false,CLI 也没有对应开关
+   *  (QA 2026-09-04 指出的注释漂移:不要照旧注释去找不存在的 `serve --allow-reveal`)。 */
   reveal: boolean;
 }
 

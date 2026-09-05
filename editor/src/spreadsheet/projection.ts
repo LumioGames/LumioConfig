@@ -187,15 +187,29 @@ function localizedTypeLabel(column: TableColumn): string {
 }
 
 /** M7-C S01:可见性逐字符走 COPY.visibility 展开、`·` 连接;未知字符原样保留。 */
-function visibilityLabel(visibility: string): string {
+export function visibilityLabel(visibility: string): string {
   return [...visibility].map((char) => COPY.visibility?.[char] ?? char).join("·");
 }
 
-/** §6 列头两行文本:`name * 🔒` / `类型中文名 · 可见性中文名`(M7-C S01 中文化)。 */
-function headerText(column: TableColumn): string {
+/**
+ * M7-C S01 / QA-P3-2:列头第二行与悬浮 title 第二行共用的「中文类型 · 中文可见性」段。
+ * 单一来源,悬浮与列头永不漂移成两套文案。
+ */
+export function headerSecondLine(column: TableColumn): string {
   const type = localizedTypeLabel(column);
-  const second = column.visibility ? `${type} · ${visibilityLabel(column.visibility)}` : type;
-  return `${headerFirstLine(column)}\n${second}`;
+  return column.visibility ? `${type} · ${visibilityLabel(column.visibility)}` : type;
+}
+
+/** QA-P3-2:检查器「类型」双显——中文名在前,括号保 schema 字面量(i32/u32 译名相同但不失区分);未知类型原样。 */
+export function columnTypeDualLabel(column: TableColumn): string {
+  const raw = columnTypeLabel(column);
+  const localized = COPY.columnType?.[raw];
+  return localized && localized !== raw ? `${localized}（${raw}）` : raw;
+}
+
+/** §6 列头两行文本:`name * 🔒` / `中文类型 · 中文可见性`(M7-C S01 中文化)。 */
+function headerText(column: TableColumn): string {
+  return `${headerFirstLine(column)}\n${headerSecondLine(column)}`;
 }
 
 /**
@@ -220,32 +234,37 @@ export function columnWidth(column: TableColumn): number {
   return Math.min(240, Math.max(112, raw));
 }
 
-/** §6 列头 title:完整列名 / 类型 / 默认值 / 范围 / 枚举 / 可见性(TableColumn 暂无描述字段,待 Host 补)。 */
+/**
+ * §6 / QA-P3-2 列头 title,三行:完整列名 / 中文类型·可见性(与列头第二行同源同函数) /
+ * 约束(必填 · 默认值 · 枚举 · 范围)。类型与可见性不再出现英文字面量——悬浮与列头一套中文,
+ * 对 M7-C「现有内容不删」的有意修订:约束信息保留,只换排版与语言(交回文档记决策)。
+ */
 function headerTitleText(column: TableColumn): string {
   const labels = COPY.inspector.constraintLabels;
-  const parts: string[] = [
+  const lines: string[] = [
     COPY.grid.fullColumnName?.(column.name) ?? column.name,
-    `${labels.type} ${columnTypeLabel(column)}`,
+    headerSecondLine(column),
   ];
+  const constraints: string[] = [];
   if (column.required === true) {
-    parts.push(labels.required);
+    constraints.push(labels.required);
   }
   if (column.default !== undefined) {
-    parts.push(`${labels.default} ${String(column.default)}`);
+    constraints.push(`${labels.default} ${String(column.default)}`);
   }
   const options = enumOptions(column);
   if (options.length) {
-    parts.push(`${labels.enum} ${options.join(" / ")}`);
+    constraints.push(`${labels.enum} ${options.join(" / ")}`);
   }
   if (column.minimum !== undefined || column.maximum !== undefined) {
     const min = column.minimum !== undefined ? `≥${column.minimum}` : undefined;
     const max = column.maximum !== undefined ? `≤${column.maximum}` : undefined;
-    parts.push(`${labels.range} ${[min, max].filter(Boolean).join(" 且 ")}`);
+    constraints.push(`${labels.range} ${[min, max].filter(Boolean).join(" 且 ")}`);
   }
-  if (column.visibility) {
-    parts.push(`${labels.visibility} ${column.visibility}`);
+  if (constraints.length) {
+    lines.push(constraints.join(" · "));
   }
-  return parts.join(" · ");
+  return lines.join("\n");
 }
 
 function displayValue(

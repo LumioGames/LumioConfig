@@ -6,6 +6,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -94,6 +95,36 @@ class _ServerTestCase(unittest.TestCase):
     def assertNoOutsideBytes(self, raw: bytes) -> None:
         self.assertNotIn(ROOT_SECRET, raw)
         self.assertNotIn(PARENT_SECRET, raw)
+
+    def _write_oversized_fixtures(self) -> None:
+        source = (self.root / "tables" / "skills.txt").read_text(encoding="utf-8")
+        lines = source.splitlines()
+        header_index = next(index for index, line in enumerate(lines) if line.startswith("|"))
+        header = lines[header_index]
+        separator = lines[header_index + 1]
+        columns = [cell.strip() for cell in header.strip("|").split("|")]
+        cells = []
+        for index, column in enumerate(columns):
+            if column == "id":
+                cells.append(str(900000 + index))
+            elif column == "name":
+                cells.append(f"big_{index}")
+            else:
+                cells.append("x" * 240)
+        row = "| " + " | ".join(cells) + " |"
+        count = MAX_SOURCE_BYTES // len(row.encode("utf-8")) + 2
+        big_text = "\n".join(["table: big", "schema: schemas/big.json", "", header, separator] + [row] * count) + "\n"
+        (self.root / "tables" / "big.txt").write_text(big_text, encoding="utf-8", newline="\n")
+        schema = json.loads((self.root / "schemas" / "skills.json").read_text(encoding="utf-8"))
+        schema["table"] = "big"
+        (self.root / "schemas" / "big.json").write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
+
+        large_schema = json.loads((self.root / "schemas" / "skills.json").read_text(encoding="utf-8"))
+        large_schema["table"] = "large"
+        large_schema["description"] = "L" * (MAX_SOURCE_BYTES + 128)
+        (self.root / "schemas" / "large.json").write_text(json.dumps(large_schema, indent=2) + "\n", encoding="utf-8")
+        large_text = "\n".join(["table: large", "schema: schemas/large.json", "", header, separator, row]) + "\n"
+        (self.root / "tables" / "large.txt").write_text(large_text, encoding="utf-8", newline="\n")
 
 
 class SourceViewContentTests(_ServerTestCase):
@@ -224,36 +255,6 @@ class SourceViewBoundaryTests(_ServerTestCase):
 
 
 class SourceViewSizeLimitTests(_ServerTestCase):
-    def _write_oversized_fixtures(self) -> None:
-        source = (self.root / "tables" / "skills.txt").read_text(encoding="utf-8")
-        lines = source.splitlines()
-        header_index = next(index for index, line in enumerate(lines) if line.startswith("|"))
-        header = lines[header_index]
-        separator = lines[header_index + 1]
-        columns = [cell.strip() for cell in header.strip("|").split("|")]
-        cells = []
-        for index, column in enumerate(columns):
-            if column == "id":
-                cells.append(str(900000 + index))
-            elif column == "name":
-                cells.append(f"big_{index}")
-            else:
-                cells.append("x" * 240)
-        row = "| " + " | ".join(cells) + " |"
-        count = MAX_SOURCE_BYTES // len(row.encode("utf-8")) + 2
-        big_text = "\n".join(["table: big", "schema: schemas/big.json", "", header, separator] + [row] * count) + "\n"
-        (self.root / "tables" / "big.txt").write_text(big_text, encoding="utf-8", newline="\n")
-        schema = json.loads((self.root / "schemas" / "skills.json").read_text(encoding="utf-8"))
-        schema["table"] = "big"
-        (self.root / "schemas" / "big.json").write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
-
-        large_schema = json.loads((self.root / "schemas" / "skills.json").read_text(encoding="utf-8"))
-        large_schema["table"] = "large"
-        large_schema["description"] = "L" * (MAX_SOURCE_BYTES + 128)
-        (self.root / "schemas" / "large.json").write_text(json.dumps(large_schema, indent=2), encoding="utf-8")
-        large_text = "\n".join(["table: large", "schema: schemas/large.json", "", header, separator, row]) + "\n"
-        (self.root / "tables" / "large.txt").write_text(large_text, encoding="utf-8", newline="\n")
-
     def test_oversized_file_returns_payload_too_large(self):
         self._write_oversized_fixtures()
         self.assertGreater((self.root / "tables" / "big.txt").stat().st_size, MAX_SOURCE_BYTES)
@@ -273,6 +274,48 @@ class SourceViewSizeLimitTests(_ServerTestCase):
         self.assertEqual(body.get("code"), "PAYLOAD_TOO_LARGE", body)
         self.assertLess(len(raw), 64 * 1024)
         self.assertNoOutsideBytes(raw)
+
+    def test_oversized_file_is_rejected_before_read_bytes(self):
+        """QA P2-6: 413 判定必须先于整读(stat 先行),超大文件不再被读进内存。"""
+        self._write_oversized_fixtures()
+        host = self._server()
+        status, _, _ = _get(host, "/api/tables/big")
+        self.assertEqual(status, 200)
+        with mock.patch.object(
+            Path,
+            "read_bytes",
+            side_effect=AssertionError("oversized file must be rejected via stat before read_bytes"),
+        ):
+            status, body, raw = _get(host, "/api/tables/big/source?kind=table")
+        self.assertEqual(status, 413, body)
+        self.assertEqual(body.get("code"), "PAYLOAD_TOO_LARGE", body)
+        self.assertNoOutsideBytes(raw)
+
+
+class SourceViewEncodingTests(_ServerTestCase):
+    """QA P2-7: 非 UTF-8 源文件回 422 JSON,不再以 RemoteDisconnected 断连收场。"""
+
+    def test_non_utf8_table_returns_json_error_and_host_stays_alive(self):
+        host = self._server()
+        # 复刻 QA 场景:会话已加载,表文件在磁盘上被改写成非 UTF-8。
+        path = self.root / "tables" / "skills.txt"
+        path.write_bytes(path.read_bytes() + b"\xff\xfe\x80")
+        status, body, raw = _get(host, "/api/tables/skills/source?kind=table")
+        self.assertEqual(status, 422, body)
+        self.assertEqual(body.get("code"), "UNSUPPORTED_ENCODING", body)
+        self.assertIn(b"not valid UTF-8", raw)
+        self.assertNoOutsideBytes(raw)
+        # Host 与该表会话仍然健康(旧缺陷形状是本请求断连)。
+        status, _, _ = _get(host, "/api/tables/skills")
+        self.assertEqual(status, 200)
+
+    def test_non_utf8_schema_returns_json_error(self):
+        host = self._server()
+        path = self.root / "schemas" / "skills.json"
+        path.write_bytes(path.read_bytes() + b"\xff")
+        status, body, _ = _get(host, "/api/tables/skills/source?kind=schema")
+        self.assertEqual(status, 422, body)
+        self.assertEqual(body.get("code"), "UNSUPPORTED_ENCODING", body)
 
 
 if __name__ == "__main__":

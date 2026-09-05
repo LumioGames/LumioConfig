@@ -80,6 +80,17 @@ describe("StatusBar 状态条(§2/原型 README)", () => {
     expect(q(el, "status-online").textContent).toContain("在线");
   });
 
+  it("M7-D S04:status-table 的 title 含源文件路径(下发优先,未接线按表名推导)", () => {
+    // 未下发 sourcePath:按表名推导。
+    const derived = mountBar(<StatusBar {...baseProps()} />);
+    expect(q(derived, "status-table").getAttribute("title")).toBe("skills · tables/skills.txt");
+    // Host 下发 sourcePath:逐字使用。
+    const given = mountBar(
+      <StatusBar {...baseProps({ tableName: "effects", sourcePath: "tables/effects.txt" })} />,
+    );
+    expect(q(given, "status-table").getAttribute("title")).toBe("effects · tables/effects.txt");
+  });
+
   it("dirtyCount=0:显示 无未提交改动,点击不打开补丁页签", () => {
     const props = baseProps({ dirtyCount: 0 });
     const el = mountBar(<StatusBar {...props} />);

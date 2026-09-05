@@ -100,8 +100,22 @@ describe("Inspector(只读检查器,设计稿 §7)", () => {
     expect(el.querySelector('[data-testid="inspector"]')).toBeNull();
   });
 
-  it("shows breadcrumb, column name with required/readonly tags and the current value", () => {
+  it("QA-P3-2:列约束类型双显(中文+括号保字面量)、可见性展开中文,与列头同一套", () => {
     const el = mountInspector({});
+    const text = el.textContent ?? "";
+    expect(text).toContain("整数（i32）");
+    expect(text).toContain("服务端");
+    expect(text).not.toMatch(/类型\s+i32/);
+    // SCV 逐字符展开;u32 与 i32 译名相同但字面量可辨。
+    const scv = mountInspector({
+      meta: buildMeta({ column: { ...damageColumn, name: "id", type: "u32", visibility: "SCV" } }),
+    });
+    const scvText = scv.textContent ?? "";
+    expect(scvText).toContain("整数（u32）");
+    expect(scvText).toContain("服务端·客户端·体素");
+  });
+
+  it("shows breadcrumb, column name with required/readonly tags and the current value", () => {    const el = mountInspector({});
     const panel = el.querySelector('[data-testid="inspector"]') as HTMLElement;
     expect(panel.textContent).toContain("skills · fireball");
     expect(panel.textContent).toContain("damage");

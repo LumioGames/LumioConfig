@@ -65,6 +65,8 @@ const STATIC_PHASE_NAMES: ReadonlyArray<readonly [string, string]> = [
   [COPY.phase.failedDraftConflict, "Failed"],
   [COPY.phase.closed, "Closed"],
   [COPY.phase.offline, "Offline"],
+  // QA P2-5:「正在重新连接…」是掉线叠加态的重连变体(§5 同一行),枚举值仍 Offline。
+  [COPY.phase.reconnecting, "Offline"],
 ];
 const NUMBERED_PHASE_NAMES: ReadonlyArray<readonly [RegExp, string]> = [
   [/^\d+ 格未提交$/, "ReadyDirty"],
@@ -273,8 +275,9 @@ export function TopBar({
   const phaseName = phaseNameOf(view);
 
   /**
-   * M7-D:S04 兜底——`status-table` 在 StatusBar(不在本卡文件集),title 落在表名按钮;
-   * 优先用 Host 下发的 sourcePath,未接线时按表名推导,口径 `<表名> · tables/<表名>.txt`。
+   * M7-D S04:status-table 的 title 是需求的原始落点(已接线,见 StatusBar);
+   * 表名按钮的 title 是同一口径的第二悬浮点。优先用 Host 下发的 sourcePath,
+   * 未接线时按表名推导,口径 `<表名> · tables/<表名>.txt`。
    */
   const sourceLabel = sourcePath ?? `tables/${tableName}.txt`;
   /** M7-D:⌄ 菜单的两条只读路径条目,单独成组(group 空串:若日后前置切表项,自动出现组分隔)。 */

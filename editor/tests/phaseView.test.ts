@@ -189,4 +189,18 @@ describe("phaseView 按 §5 状态表派生", () => {
     expect(ready.can).toEqual({ edit: false, validate: false, submit: false, export: false });
     expect(ready.gridLocked).toBe(true);
   });
+
+  it("QA P2-5:重连在跑时掉线叠加态切「正在重新连接…」,锁定与 can 不变", () => {
+    const view = phaseView(at("ReadyDirty", { online: false }), { reconnecting: true });
+    expect(view.label).toBe("正在重新连接…");
+    expect(view.tone).toBe("red");
+    expect(view.spin).toBe(true);
+    expect(view.gridLocked).toBe(true);
+    expect(view.can).toEqual({ edit: false, validate: false, submit: false, export: false });
+    expect(view.banner?.text).toContain("正在自动重连");
+    // 未传 reconnecting(尚未开始重试)维持原掉线文案。
+    const before = phaseView(at("ReadyDirty", { online: false }));
+    expect(before.label).toBe("无法连接本机服务");
+    expect(before.spin).toBe(false);
+  });
 });

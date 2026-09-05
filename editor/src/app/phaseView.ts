@@ -41,6 +41,8 @@ export interface PhaseViewRevision {
 export interface PhaseViewContext {
   revision?: PhaseViewRevision | null;
   conflictCount?: number;
+  /** QA P2-5:掉线叠加态下是否已有自动重连在跑(首条 onClose 起为 true,onOpen 清零)。 */
+  reconnecting?: boolean;
 }
 
 const NO_CAN: PhaseView["can"] = { edit: false, validate: false, submit: false, export: false };
@@ -58,11 +60,16 @@ function revisionLabel(revision: PhaseViewRevision | null | undefined): string |
  */
 export function phaseView(state: EditorState, context?: PhaseViewContext): PhaseView {
   if (!state.online) {
+    // QA P2-5:重连已在跑时文案切「正在重新连接…」(M7-A §7 冻结文案首次接线),
+    // 结构与掉线分支一致——仍是叠加态,锁定与四项 can 不变。
     return {
-      label: COPY.phase.offline,
+      label: context?.reconnecting ? COPY.phase.reconnecting : COPY.phase.offline,
       tone: "red",
-      spin: false,
-      banner: { text: COPY.banner.offline, actions: [] },
+      spin: Boolean(context?.reconnecting),
+      banner: {
+        text: context?.reconnecting ? COPY.banner.reconnecting : COPY.banner.offline,
+        actions: [],
+      },
       gridLocked: true,
       can: { ...NO_CAN },
     };
