@@ -26,3 +26,4 @@ metadata:
 - 空 `ops` 提交不得走 `git commit`（工作树无改动会变成 `VCS_COMMIT_FAILED`）；提交成功后重载表要先把 `mapRef` 置空，否则下一拍 `executeCommand` 会打在已 dispose 的 Univer 上。
 - Univer 键盘提交的 `value` 携带整格旧 `custom`，拦截器不能把既有四态元数据当用户意图；`executeCommand` 造的参数形状不等于真实输入，拦截器改动必须有真实键盘用例。
 - 派活提示词里写了台账要求，不等于台账会存在。`.sdd/` 整目录 gitignore 会让台账在收口后蒸发；下一轮审计因此付出了重建全部证据的代价。台账的落点必须是入库路径。
+- M8 C# Reader 的 `schemaFingerprint` 必须按端过滤可见列（并写入 `target`）。对全表列做哈希会让 S-only 类型变更改写 C/V 文件，破坏「改数值生成物不变、改类型只改对应端」。

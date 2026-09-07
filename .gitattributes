@@ -5,4 +5,5 @@
 *.yml text eol=lf
 *.txt text eol=lf
 *.html text eol=lf
+*.cs text eol=lf
 src/lumio_config/editor_static/** text eol=lf

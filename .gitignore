@@ -17,5 +17,8 @@ registry/.issue.lock
 testdata/unicode/rust/target/
 testdata/unicode/csharp/bin/
 testdata/unicode/csharp/obj/
+tests/csharp-reader-smoke/generated/
+tests/csharp-reader-smoke/bin/
+tests/csharp-reader-smoke/obj/
 # Claude Code agent worktrees (parallel workers)
 .claude/worktrees/

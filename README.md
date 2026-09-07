@@ -46,7 +46,7 @@ LumioConfig 是工具仓，不是游戏运行时仓。它保存策划表的权�
 - 在导出时执行类型、引用、默认值、可见性和三端投影检查。
 - 生成服务器（`S`）、客户端（`C`）和 Voxel（`V`）的只读 JSON 投影及三重指纹。
 - 以名字补丁为唯一写入口：机器门结构化报错，发号台在合入时分配终身编号。
-- 为后续 Web 编辑器、AI 五动作接口、Rust/C# 只读生成面和发布工具提供稳定的目录边界。
+- 为后续 Web 编辑器、AI 五动作接口、Rust/C# 只读生成面和发布工具提供稳定的目录边界。M8 已由 `export --csharp-out` 生成只含类型与读法的 C# Reader（`generated/csharp/`）。
 
 ## 明确不负责什么
 
@@ -102,6 +102,7 @@ LumioConfig 是工具仓，不是游戏运行时仓。它保存策划表的权�
 python tools/lumio_config.py validate
 python tools/lumio_config.py format --check
 python tools/lumio_config.py export --out build/export
+python tools/lumio_config.py export --out build/export --csharp-out generated/csharp
 python tools/lumio_config.py patch validate path/to/patch.json
 ```
 
