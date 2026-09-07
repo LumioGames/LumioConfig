@@ -33,6 +33,7 @@
 - **操作手册**：[`docs/management/operations.md`](docs/management/operations.md)
 - **源格式**：[`docs/reference/source-format.md`](docs/reference/source-format.md)
 - **命令行**：[`docs/reference/cli.md`](docs/reference/cli.md)
+- **C# typed Reader（M8 冻结接口）**：[`docs/reference/csharp-reader.md`](docs/reference/csharp-reader.md)
 - **验证证据清单**：[`docs/operations/validation-evidence.md`](docs/operations/validation-evidence.md)
 - **本地脚本**：[`scripts/README.md`](scripts/README.md)
 
