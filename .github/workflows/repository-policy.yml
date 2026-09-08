@@ -21,7 +21,7 @@ jobs:
   validate:
     name: Validate source and tooling
     if: github.event_name != 'schedule'
-    runs-on: [self-hosted, lumio, macOS, ARM64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -56,7 +56,7 @@ jobs:
   editor:
     name: Editor lint, test, and reproducible build
     if: github.event_name != 'schedule'
-    runs-on: [self-hosted, lumio, macOS, ARM64]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: editor
@@ -84,7 +84,7 @@ jobs:
   editor-e2e:
     name: Editor Playwright e2e
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: [self-hosted, lumio, macOS, ARM64]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: editor
@@ -101,7 +101,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Playwright Chromium
-        run: pnpm exec playwright install chromium
+        run: pnpm exec playwright install --with-deps chromium
       - name: Build static host
         run: pnpm build
       - name: E2E
