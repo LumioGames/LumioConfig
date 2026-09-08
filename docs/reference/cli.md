@@ -48,6 +48,8 @@
 ## export
 
     python tools/lumio_config.py export --out build/export
+    python tools/lumio_config.py export --out build/export --csharp-out generated/csharp
+    python tools/lumio_config.py export --out build/export --csharp-out generated/csharp --csharp-namespace Lumio.Config.Generated
 
 先验证源，再按 engine→platform→server→product→environment 合并 `layers/` overlay，做单位换算，生成：
 
@@ -56,7 +58,9 @@
 - `origins.json` 每值出处层标签
 - `manifest.json` 发布清单，含内容/包裹/底稿三指纹与 `compilerHash` / `inputHash` / `outputHash`
 
-输出目录是生成物，默认被 Git 忽略。
+`--csharp-out` 另写一份只含类型与读法的 C# 源码（`<Table>Row` / `<Table>Table`），不含行数值；签名与列映射见 [`csharp-reader.md`](csharp-reader.md)。不传该参数时 JSON 字节与既有 `--out` 行为不变。`--csharp-namespace` 可选，默认 `Lumio.Config.Generated`。
+
+JSON 输出目录是生成物，默认被 Git 忽略。C# 生成物按 `generated/README.md` 随源提交或由命令重建。
 
 ## serve
 

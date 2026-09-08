@@ -26,7 +26,7 @@ python tools/lumio_config.py export --out <dir> --csharp-out <dir>
   voxel/<Table>Table.cs
 ```
 
-端目录与 JSON 投影一致：`S` → `server`，`C` → `client`，`V` → `voxel`。每端只生成该端可见列（Schema `visibility` 含该端字母）。一张表一端一个 `.cs` 文件，内含 `<Table>Row` 与 `<Table>Table`。
+端目录与 JSON 投影一致：`S` → `server`，`C` → `client`，`V` → `voxel`。每端只生成该端可见列（Schema `visibility` 含该端字母）。一张表在某一端至少有一列可见时，该端一个 `.cs` 文件，内含 `<Table>Row` 与 `<Table>Table`；某一端零列可见则不写该端文件。
 
 `--csharp-namespace <name>` 可选，默认 `Lumio.Config.Generated`。实际命名空间再按端追加一段：
 
@@ -72,7 +72,7 @@ Rust 一路本仓本卡不生成。Rust 应对齐同一套列名、同一套类�
 // </auto-generated>
 ```
 
-`schemaFingerprint` 是对该表 Schema 中影响读法的字段做 canonical JSON 后的 SHA-256 hex（列按 `ordinal` 排序）：`table`、`idColumn`、每列的 `name` / `ordinal` / `type` / `required` / `visibility` / `enumValues` / `refTarget`。不含行数据、不含 `default` 数值、不含 `minimum` / `maximum`（范围由机器门在导表时强制，不进入 Reader 签名）。
+`schemaFingerprint` 是对该**端可见列**影响读法的字段做 canonical JSON 后的 SHA-256 hex（列按 `ordinal` 排序）：`table`、`idColumn`、`target`、每列的 `name` / `ordinal` / `type` / `required` / `visibility` / `enumValues` / `refTarget`。不含行数据、不含 `default` 数值、不含 `minimum` / `maximum`（范围由机器门在导表时强制，不进入 Reader 签名）。因此改 S 端专用列的类型只改 `server/<Table>Table.cs`，C/V 文件字节不变。
 
 UTF-8、LF、文件末尾换行。同源两次生成必须逐字节相同。
 

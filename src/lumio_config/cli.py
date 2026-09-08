@@ -6,6 +6,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .codegen.csharp import CSHARP_NAMESPACE_DEFAULT, write_csharp_readers
 from .export import ValidationFailure, export_repository
 from .ids import verify_registry
 from .patch import apply_patch, validate_patch
@@ -67,6 +68,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     exporter = subparsers.add_parser("export", help="export deterministic target projections")
     exporter.add_argument("--out", type=Path, required=True)
+    exporter.add_argument("--csharp-out", type=Path, default=None, dest="csharp_out", help="write typed C# readers (types only, no row values)")
+    exporter.add_argument(
+        "--csharp-namespace",
+        default=CSHARP_NAMESPACE_DEFAULT,
+        help=f"root namespace for generated C# (default {CSHARP_NAMESPACE_DEFAULT})",
+    )
     _root_argument(exporter)
 
     patch = subparsers.add_parser("patch", help="validate or apply a name-only source patch")
@@ -117,11 +124,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "format":
         return _format_tables(root, args.check)
     if args.command == "export":
+        json_out = (root / args.out) if not args.out.is_absolute() else args.out
+        csharp_out = None
+        if args.csharp_out is not None:
+            csharp_out = (root / args.csharp_out) if not args.csharp_out.is_absolute() else args.csharp_out
         try:
-            manifest = export_repository(root, (root / args.out) if not args.out.is_absolute() else args.out)
+            manifest = export_repository(root, json_out)
         except ValidationFailure as failure:
             print(json.dumps(failure.errors, ensure_ascii=False, indent=2, sort_keys=True))
             return 1
+        if csharp_out is not None:
+            schemas, _tables, load_errors = load_sources(root)
+            if load_errors:
+                print(json.dumps([error.as_dict() for error in load_errors], ensure_ascii=False, indent=2, sort_keys=True))
+                return 1
+            write_csharp_readers(csharp_out, schemas, args.csharp_namespace)
         print(f"export: OK ({len(manifest['tables'])} table(s))")
         return 0
     if args.command == "patch":

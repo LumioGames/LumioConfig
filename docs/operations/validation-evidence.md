@@ -7,7 +7,8 @@ node <lumio-plugin-dir>/tools/spec-lint.mjs .
 python -m unittest discover -s tests -v
 python tools/lumio_config.py validate
 python tools/lumio_config.py format --check
-python tools/lumio_config.py export --out build/export
+python tools/lumio_config.py export --out build/export --csharp-out generated/csharp
+git diff --exit-code -- generated/csharp
 python tools/lumio_config.py patch validate path/to/patch.json
 git diff --check
 ```
