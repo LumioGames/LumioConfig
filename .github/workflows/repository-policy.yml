@@ -5,14 +5,23 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # 02:00 Asia/Shanghai
+    - cron: '0 18 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: config-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
 jobs:
   validate:
     name: Validate source and tooling
-    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    runs-on: [self-hosted, lumio, macOS, ARM64]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -41,7 +50,8 @@ jobs:
 
   editor:
     name: Editor lint, test, and reproducible build
-    runs-on: ubuntu-latest
+    if: github.event_name != 'schedule'
+    runs-on: [self-hosted, lumio, macOS, ARM64]
     defaults:
       run:
         working-directory: editor
@@ -68,7 +78,8 @@ jobs:
 
   editor-e2e:
     name: Editor Playwright e2e
-    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, lumio, macOS, ARM64]
     defaults:
       run:
         working-directory: editor
@@ -85,7 +96,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install chromium
       - name: Build static host
         run: pnpm build
       - name: E2E
