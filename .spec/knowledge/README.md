@@ -29,7 +29,7 @@ metadata:
 | [features/editor-ui-primitives.md](features/editor-ui-primitives.md) | editor/ 面板共享的 Button/Panel/DataTable 基础组件与 design token——改 editor/src/panels 或新增面板时查 |
 | [features/web-editor-ux.md](features/web-editor-ux.md) | 网页编辑器 v3 界面设计（IA、状态映射、令牌、抽屉、检查器、快捷键、文案表）——改 editor/ 布局、面板或用户文案时查 |
 
-C# typed Table Reader 的冻结接口在仓根 [`docs/reference/csharp-reader.md`](../../docs/reference/csharp-reader.md)（R-00535 / Runtime R-00544），不在 `.spec/knowledge/features/` 另立一份。
+C# typed Table Reader 的冻结接口在仓根 [`docs/reference/csharp-reader.md`](../../docs/reference/csharp-reader.md)（R-00535 / Runtime R-00544），不在 `.spec/knowledge/features/` 另立一份。Sample 消费面交接（三张玩法表、manifest 样例、消费方 AC）在 [`docs/reference/sample-config-handoff.md`](../../docs/reference/sample-config-handoff.md)。
 
 ## lessons（经验）
 

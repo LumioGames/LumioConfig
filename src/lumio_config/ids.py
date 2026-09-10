@@ -15,6 +15,9 @@ ID_NAMESPACES = {
     "skills": (40000, 49999),
     "effects": (50000, 59999),
     "drops": (60000, 69999),
+    "movement": (70000, 79999),
+    "mining": (80000, 89999),
+    "attributes": (90000, 99999),
 }
 
 
