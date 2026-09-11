@@ -471,7 +471,8 @@ def _validate_patch_errors(root: Path, patch: dict[str, Any]) -> list[Validation
     schemas, tables, load_errors = load_sources(root)
     errors.extend(load_errors)
     if table_name not in schemas or table_name not in tables:
-        errors.append(_error(table_name, code="PATCH_UNKNOWN_TABLE", message=f"table {table_name} is not a source table", suggestion="use skills, effects, or drops"))
+        known = ", ".join(sorted(schemas))
+        errors.append(_error(table_name, code="PATCH_UNKNOWN_TABLE", message=f"table {table_name} is not a source table", suggestion=f"use one of {known}"))
         return errors
     schema = schemas[table_name]
     table = tables[table_name]

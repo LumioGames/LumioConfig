@@ -18,7 +18,23 @@ from lumio_config.validate import load_sources
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "tools" / "lumio_config.py"
 SMOKE_DIR = ROOT / "tests" / "csharp-reader-smoke"
-ROW_LITERALS = ("40001", "40002", "50001", "50002", "60001", "60002", "fireball", "frostbolt", "ember_cache")
+ROW_LITERALS = (
+    "40001",
+    "40002",
+    "50001",
+    "50002",
+    "60001",
+    "60002",
+    "70001",
+    "80001",
+    "90001",
+    "90002",
+    "fireball",
+    "frostbolt",
+    "ember_cache",
+    "1.25",
+    "0.35",
+)
 
 
 def _copy_repo(dst: Path) -> None:
@@ -69,6 +85,12 @@ class CsharpCodegenTests(unittest.TestCase):
                 "server/DropsTable.cs",
                 "client/DropsTable.cs",
                 "voxel/DropsTable.cs",
+                "server/MovementTable.cs",
+                "client/MovementTable.cs",
+                "server/MiningTable.cs",
+                "client/MiningTable.cs",
+                "server/AttributesTable.cs",
+                "client/AttributesTable.cs",
             ]
             for relative in expected:
                 path = csharp / relative
@@ -244,6 +266,78 @@ class CsharpCodegenTests(unittest.TestCase):
             code = cli_main(["export", "--out", str(out), "--csharp-out", str(csharp), "--root", str(ROOT)])
             self.assertEqual(code, 0)
             self.assertTrue((csharp / "server" / "SkillsTable.cs").is_file())
+
+
+class SampleTableReaderTests(unittest.TestCase):
+    """Sample 消费面（R-00535 / 审计 P1-10）：步长/半径/体力/矿石有 typed Reader，数值只在 JSON。"""
+
+    def test_sample_table_readers_match_consumed_types(self):
+        schemas, _tables, errors = load_sources(ROOT)
+        self.assertEqual(errors, [])
+        files = generate_csharp_readers(schemas)
+        movement = files["server/MovementTable.cs"]
+        self.assertIn("public double StepMeters { get; }", movement)
+        self.assertIn("public double SweepRadiusMeters { get; }", movement)
+        self.assertIn("TryGet(uint id, out MovementRow row)", movement)
+        mining = files["server/MiningTable.cs"]
+        self.assertIn("public long StaminaCost { get; }", mining)
+        self.assertIn("public int VeinHitsToBreak { get; }", mining)
+        self.assertIn("public int OrePerVein { get; }", mining)
+        attributes = files["server/AttributesTable.cs"]
+        self.assertIn("public long Initial { get; }", attributes)
+
+    def test_sample_tables_emit_no_voxel_reader(self):
+        schemas, _tables, errors = load_sources(ROOT)
+        self.assertEqual(errors, [])
+        files = generate_csharp_readers(schemas)
+        for name in ("MovementTable.cs", "MiningTable.cs", "AttributesTable.cs"):
+            self.assertNotIn(f"voxel/{name}", files)
+
+    def test_sample_row_values_live_only_in_exported_json(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "repo"
+            _copy_repo(root)
+            out = Path(temp) / "out"
+            csharp = Path(temp) / "csharp"
+            self.assertEqual(_run_cli("export", "--out", str(out), "--csharp-out", str(csharp), root=root).returncode, 0)
+            movement = json.loads((out / "server" / "movement.json").read_text(encoding="utf-8"))
+            self.assertEqual(movement["rows"], [{"id": 70001, "name": "default", "step_meters": 1.25, "sweep_radius_meters": 0.35}])
+            attributes = json.loads((out / "server" / "attributes.json").read_text(encoding="utf-8"))
+            self.assertEqual(attributes["rows"], [{"id": 90001, "initial": 17, "name": "Stamina"}, {"id": 90002, "initial": 9, "name": "Ore"}])
+            for path in csharp.rglob("*.cs"):
+                for banned in ROW_LITERALS:
+                    self.assertNotIn(banned, path.read_text(encoding="utf-8"), f"{path.name} leaked {banned}")
+            for end in ("server", "client"):
+                text = (csharp / end / "AttributesTable.cs").read_text(encoding="utf-8")
+                self.assertNotIn("Stamina", text)
+                self.assertNotIn("Ore", text)
+
+
+class LoudFailureTests(unittest.TestCase):
+    """消费方兜底可删的前提：缺表/错 schema 在导表侧就非零退出。"""
+
+    def test_missing_table_file_fails_export_non_zero(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "repo"
+            _copy_repo(root)
+            (root / "tables" / "movement.txt").unlink()
+            result = _run_cli("export", "--out", str(Path(temp) / "out"), "--csharp-out", str(Path(temp) / "cs"), root=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("MISSING_TABLE", result.stdout + result.stderr)
+
+    def test_wrong_schema_type_fails_export_non_zero(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "repo"
+            _copy_repo(root)
+            schema_path = root / "schemas" / "mining.json"
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            for column in schema["columns"]:
+                if column["name"] == "stamina_cost":
+                    column["type"] = "bool"
+            schema_path.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8", newline="\n")
+            result = _run_cli("export", "--out", str(Path(temp) / "out"), "--csharp-out", str(Path(temp) / "cs"), root=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("TYPE_MISMATCH", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

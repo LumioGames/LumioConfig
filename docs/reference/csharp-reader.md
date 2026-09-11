@@ -148,6 +148,8 @@ public readonly struct SkillsTable
 
 M9 不得在 Runtime 内存里另存一份表结构；列集合、顺序与 C# 类型以本生成物为准。换二进制内芯时只替换 M9 的解析，不改本签名。
 
+Sample 消费面（`movement` / `mining` / `attributes` 三表的行号、端 manifest 样例与消费方验收判据）另见 [`sample-config-handoff.md`](sample-config-handoff.md)。
+
 ## 确定性与「只含类型」证据
 
 1. 同一份源、两次 `export --csharp-out`，对应 `.cs` 逐字节相同。

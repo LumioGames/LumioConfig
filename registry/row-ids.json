@@ -15,5 +15,15 @@
     "skills": {},
     "effects": {},
     "drops": {}
+  },
+  "movement": {
+    "default": 70001
+  },
+  "mining": {
+    "default": 80001
+  },
+  "attributes": {
+    "Stamina": 90001,
+    "Ore": 90002
   }
 }
