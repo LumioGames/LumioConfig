@@ -36,6 +36,47 @@ if (movement.TryGet(70001, out MovementRow row))
 foreach (AttributesRow attribute in attributes.Rows) { /* Name == "Stamina", Initial == 17 */ }
 ```
 
+## 取件路径：`sync` 命令（CF1，取代手抄）
+
+消费仓不得再从 `generated/csharp/` 手工复制文件。正式路径是本仓的同步命令：在持有 LumioConfig 检出（clone 或 submodule）的机器上、从检出内运行，Reader 永远从当前真源现场重生成，不信任任何缓存副本：
+
+```bash
+# 同步：把选定范围的 Reader 写进消费仓，并落一份校验 manifest
+python tools/lumio_config_sync.py sync \
+  --dest <消费仓>/src/.../generated/config \
+  --tables movement,mining,attributes \
+  --targets server,client
+
+# 核验：消费仓 CI 例行跑，从当前源重生成并逐字节比对
+python tools/lumio_config_sync.py check \
+  --dest <消费仓>/src/.../generated/config
+```
+
+规则与保证：
+
+- 产物是 `dest/server|client|voxel/<Table>Table.cs` 加 `dest/csharp-sync-manifest.json`；与 `export --csharp-out` 同源同算法，同一份源两路输出逐字节相同。
+- `--tables` / `--targets` 缺省为全部；**两侧都显式给出**的 (表， 端) 若该端零可见列，报 `SYNC_TABLE_NOT_VISIBLE` 非零退出。`--namespace` 缺省 `Lumio.Config.Generated`（与仓内提交的 Reader 一致），check 时缺省沿用 manifest 记录的命名空间。
+- manifest 只含校验元数据：每文件 SHA-256 与 schemaFingerprint、来源 revision、`inputFingerprint`（与 export 根 `manifest.json` 的 `inputHash` 同算法——两值相等即证明 Reader 与 JSON 出自同一份源状态）、全部文件的聚合指纹。**不含任何行数值**；它是核验凭证，不是程序集资源（AC 5 不变）。
+- 幂等：源未变时重复 `sync` 零字节改动，消费仓 `git diff` 为空。「重跑生成 → diff 为空」由 `check` 在消费仓 CI 里变成机器门，任何不一致非零退出并输出 JSON 报告。`sync` 顺手清掉带生成头但已不在产物集里的孤儿文件（上游删表/改端遗留）。
+- 换行纪律：产物是 UTF-8 + LF + 末尾换行（与本仓 `.gitattributes` 的 `*.cs text eol=lf` 一致）。消费仓必须给自己的 vendored 目录钉同样规则（如 `.gitattributes` 写 `src/.../generated/config/** text eol=lf`），否则 Windows `autocrlf` 检出成 CRLF 后 `check` 逐字节比对必然失配。
+- 失败码（非零退出，JSON 报告）：
+
+| 失败码 | 触发 |
+| --- | --- |
+| `SOURCE_LOAD_FAILED` / `SYNC_CODEGEN_FAILED` | 上游源加载失败 / schema 无法投影成 Reader |
+| `SYNC_UNKNOWN_TABLE` / `SYNC_UNKNOWN_TARGET` | 选择集含未知表 / 端 |
+| `SYNC_TABLE_NOT_VISIBLE` | 显式选定的表在该端零可见列 |
+| `SYNC_MANIFEST_MISSING` / `SYNC_MANIFEST_INVALID` / `SYNC_MANIFEST_REQUIRED` | check 找不到 / 不认识 manifest / 显式禁用了 manifest |
+| `SYNC_MANIFEST_FILE_MISSING` | 当前源会生成、manifest 未记（上游新增；重跑 sync） |
+| `SYNC_FILE_MISSING` / `SYNC_HASH_MISMATCH` | manifest 列的文件缺失 / 字节 SHA-256 与记录不符 |
+| `SYNC_DRIFT` | 与当前源重生成结果不一致；附诊断区分 `schema-changed-upstream`（重跑 sync）与 `modified-after-sync`（拷贝后被手改），并给出新旧 schemaFingerprint |
+| `SYNC_ORPHAN` | 带生成头但不在当前产物集里的 `.cs`（check 报漂移，sync 清除） |
+| `SYNC_AGGREGATE_MISMATCH` | 聚合指纹不符 |
+
+选同步命令而非发包是 bootstrap 阶段的现实约束：本仓尚无包仓库与发布通道，而 `generated/README.md` 已要求未来发布必须随产物记录生成命令、源提交与指纹——manifest 正是这份记录，将来转发布通道时直接随包走。
+
+Sample 对接（其 S2）：把上面两条命令接进仓库脚本与 CI，退役手工复制流程；本仓不替 Sample 改任何文件。下节五条消费方 AC 一字不动：`check` 只解决「手抄会静默漂移」这一个问题，不碰装载语义（那是 R-00544）。
+
 ## 最小样例 manifest 格式
 
 端 manifest（`server/manifest.json`，客户端为 `client/manifest.json`、`target: "C"`）原文摘录——`tables` 内每张表一条，字段即消费方需要的全部：
