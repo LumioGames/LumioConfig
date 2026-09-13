@@ -2,6 +2,13 @@ using Server = Lumio.Config.Generated.Server;
 using Client = Lumio.Config.Generated.Client;
 using Voxel = Lumio.Config.Generated.Voxel;
 
+if (args.Length > 0)
+{
+    ImmutabilityChecks.Run(args[0]);
+    Console.WriteLine($"csharp-reader-smoke: {args[0]} OK");
+    return;
+}
+
 // Compile-only smoke: construct typed tables from caller-supplied rows.
 // No table source values live in generated code (R-00535 / ADR-077 §3).
 var serverSkills = new Server.SkillsTable(Array.Empty<Server.SkillsRow>());

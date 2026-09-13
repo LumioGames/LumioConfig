@@ -8,6 +8,7 @@
 #nullable enable
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace Lumio.Config.Generated.Client;
@@ -35,6 +36,7 @@ public readonly struct SkillsRow
 public readonly struct SkillsTable
 {
     private readonly SkillsRow[] _rows;
+    private readonly IReadOnlyList<SkillsRow> _readOnlyRows;
     private readonly Dictionary<uint, int> _index;
 
     public SkillsTable(IReadOnlyList<SkillsRow> rows)
@@ -62,12 +64,13 @@ public readonly struct SkillsTable
         }
 
         _rows = copy;
+        _readOnlyRows = new ReadOnlyRows(copy);
         _index = index;
     }
 
     public int Count => _rows.Length;
 
-    public IReadOnlyList<SkillsRow> Rows => _rows;
+    public IReadOnlyList<SkillsRow> Rows => _readOnlyRows;
 
     public bool TryGet(uint id, out SkillsRow row)
     {
@@ -79,5 +82,22 @@ public readonly struct SkillsTable
 
         row = default;
         return false;
+    }
+
+    // Expose only traversal; collection interfaces such as SyncRoot can leak storage.
+    private sealed class ReadOnlyRows : IReadOnlyList<SkillsRow>
+    {
+        private readonly SkillsRow[] _items;
+
+        public ReadOnlyRows(SkillsRow[] items) => _items = items;
+
+        public int Count => _items.Length;
+
+        public SkillsRow this[int index] => _items[index];
+
+        public IEnumerator<SkillsRow> GetEnumerator() =>
+            ((IEnumerable<SkillsRow>)_items).GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

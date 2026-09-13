@@ -8,6 +8,7 @@
 #nullable enable
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace Lumio.Config.Generated.Client;
@@ -38,6 +39,7 @@ public readonly struct MiningRow
 public readonly struct MiningTable
 {
     private readonly MiningRow[] _rows;
+    private readonly IReadOnlyList<MiningRow> _readOnlyRows;
     private readonly Dictionary<uint, int> _index;
 
     public MiningTable(IReadOnlyList<MiningRow> rows)
@@ -65,12 +67,13 @@ public readonly struct MiningTable
         }
 
         _rows = copy;
+        _readOnlyRows = new ReadOnlyRows(copy);
         _index = index;
     }
 
     public int Count => _rows.Length;
 
-    public IReadOnlyList<MiningRow> Rows => _rows;
+    public IReadOnlyList<MiningRow> Rows => _readOnlyRows;
 
     public bool TryGet(uint id, out MiningRow row)
     {
@@ -82,5 +85,22 @@ public readonly struct MiningTable
 
         row = default;
         return false;
+    }
+
+    // Expose only traversal; collection interfaces such as SyncRoot can leak storage.
+    private sealed class ReadOnlyRows : IReadOnlyList<MiningRow>
+    {
+        private readonly MiningRow[] _items;
+
+        public ReadOnlyRows(MiningRow[] items) => _items = items;
+
+        public int Count => _items.Length;
+
+        public MiningRow this[int index] => _items[index];
+
+        public IEnumerator<MiningRow> GetEnumerator() =>
+            ((IEnumerable<MiningRow>)_items).GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }
