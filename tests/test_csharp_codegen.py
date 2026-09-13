@@ -228,7 +228,7 @@ class CsharpCodegenTests(unittest.TestCase):
             text = (csharp / "voxel" / "DropsTable.cs").read_text(encoding="utf-8")
             self.assertIn("namespace Game.Tables.Voxel;", text)
 
-    def test_smoke_csproj_builds_against_generated_readers(self):
+    def test_smoke_csproj_runs_immutable_generated_readers(self):
         with tempfile.TemporaryDirectory() as temp:
             csharp = Path(temp) / "csharp"
             json_out = Path(temp) / "json"
@@ -258,6 +258,25 @@ class CsharpCodegenTests(unittest.TestCase):
                 "Build succeeded" in combined or "已成功生成" in combined,
                 combined,
             )
+            for scenario in (
+                "array-alias",
+                "generic-list-alias",
+                "list-alias",
+                "sync-root-alias",
+                "input-and-old-snapshot",
+                "zero-allocation",
+            ):
+                with self.subTest(scenario=scenario):
+                    run = subprocess.run(
+                        ["dotnet", str(project_dir / "bin" / "Debug" / "net8.0" /
+                                       "Lumio.Config.Generated.Smoke.dll"), scenario],
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        env=env,
+                    )
+                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                    self.assertIn(f"{scenario} OK", run.stdout)
 
     def test_cli_module_entry_accepts_csharp_out(self):
         with tempfile.TemporaryDirectory() as temp:

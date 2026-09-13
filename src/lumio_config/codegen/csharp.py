@@ -240,6 +240,7 @@ def render_table_source(
 #nullable enable
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace {namespace};
@@ -258,6 +259,7 @@ public readonly struct {row_type}
 public readonly struct {table_type}
 {{
     private readonly {row_type}[] _rows;
+    private readonly IReadOnlyList<{row_type}> _readOnlyRows;
     private readonly Dictionary<{id_type}, int> _index;
 
     public {table_type}(IReadOnlyList<{row_type}> rows)
@@ -285,12 +287,13 @@ public readonly struct {table_type}
         }}
 
         _rows = copy;
+        _readOnlyRows = new ReadOnlyRows(copy);
         _index = index;
     }}
 
     public int Count => _rows.Length;
 
-    public IReadOnlyList<{row_type}> Rows => _rows;
+    public IReadOnlyList<{row_type}> Rows => _readOnlyRows;
 
     public bool TryGet({id_type} id, out {row_type} row)
     {{
@@ -302,6 +305,23 @@ public readonly struct {table_type}
 
         row = default;
         return false;
+    }}
+
+    // Expose only traversal; collection interfaces such as SyncRoot can leak storage.
+    private sealed class ReadOnlyRows : IReadOnlyList<{row_type}>
+    {{
+        private readonly {row_type}[] _items;
+
+        public ReadOnlyRows({row_type}[] items) => _items = items;
+
+        public int Count => _items.Length;
+
+        public {row_type} this[int index] => _items[index];
+
+        public IEnumerator<{row_type}> GetEnumerator() =>
+            ((IEnumerable<{row_type}>)_items).GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }}
 }}
 """
