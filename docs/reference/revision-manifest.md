@@ -12,6 +12,12 @@
 
 其它既有字段（`formatVersion`、`baselineId`、`sourceFingerprint`、`tables`、`origins`、compiler/input/output hash）见导表器；本卡只冻结上面三组身份。
 
+## 分端交付集合
+
+根清单的 `tables[]` 和内容、源指纹仍覆盖完整源表集。分端清单的 `tables[]` 只列出该端至少有一列可见的表，与 C# Reader 生成集合一致；零可见列表既不写投影文件，也不写分端描述符，不以 `{}` 行占位。可见表的 JSON 格式不变，`contentFingerprint` 仍为完整语义表的指纹，描述符及 chunk 的 `packageFingerprint` 仍为对应投影文件精确字节的 SHA256。
+
+同目录重复导出时，当前源表若在某端变成零可见列，编译器删除该表在该端的既有 `<table>.json`。清理仅针对当前源表的固定输出路径，不扫描删除其它文件；移除或改名源表后的旧文件清理不属于此行为。全新导出与重复导出在相同附加文件下应逐字节一致（`outputHash` 仍计入输出目录内的附加文件）。
+
 ## 运行时应如何钉版、备货、拒错版
 
 1. **钉版。** 实例启动与 Replay 元数据记录 `revisionId`（内容根）。不要用工作树 dirty 状态或时间戳当版本。

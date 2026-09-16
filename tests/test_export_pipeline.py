@@ -8,7 +8,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from lumio_config.export import ValidationFailure, export_repository
+from lumio_config.codegen.csharp import generate_csharp_readers, pascal_case
 from lumio_config.fingerprint import package_fingerprint
+from lumio_config.manifest import TARGET_DIRS
+from lumio_config.validate import load_sources
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -194,6 +197,59 @@ class UnitConversionTests(unittest.TestCase):
 
 
 class ManifestAndHashTests(unittest.TestCase):
+    def test_full_source_delivery_matches_readers_and_preserves_source_identity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)
+            release = export_repository(ROOT, output)
+            schemas, _, errors = load_sources(ROOT)
+            self.assertFalse(errors)
+            readers = generate_csharp_readers(schemas)
+            self.assertEqual(len(release["tables"]), 6)
+            identities = {entry["table"]: entry for entry in release["tables"]}
+            for target, folder in TARGET_DIRS.items():
+                expected = set(schemas) if target != "V" else {"skills", "effects", "drops"}
+                manifest = json.loads((output / folder / "manifest.json").read_bytes())
+                self.assertEqual({entry["table"] for entry in manifest["tables"]}, expected)
+                self.assertEqual({path.stem for path in (output / folder).glob("*.json")}, expected | {"manifest"})
+                self.assertEqual(
+                    {f"{folder}/{pascal_case(name)}Table.cs" for name in expected},
+                    {path for path in readers if path.startswith(folder + "/")},
+                )
+                for entry in manifest["tables"]:
+                    data = (output / entry["path"]).read_bytes()
+                    payload = json.loads(data)
+                    self.assertEqual(entry["packageFingerprint"], package_fingerprint(data))
+                    self.assertEqual(payload["contentFingerprint"], identities[entry["table"]]["contentFingerprint"])
+                    visible = {c["name"] for c in schemas[entry["table"]]["columns"] if target in c["visibility"]}
+                    for row in payload["rows"]:
+                        self.assertLessEqual(set(row), visible)
+
+    def test_visibility_changes_remove_only_current_table_outputs_and_match_fresh_export(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, reused = (Path(temp) / name for name in ("repo", "reused"))
+            _write_mini_values(root)
+            schema_path = root / "schemas/values.json"
+            schema = json.loads(schema_path.read_bytes())
+            export_repository(root, reused)
+            for folder in TARGET_DIRS.values():
+                (reused / folder / "unrelated.json").write_bytes(b'{"keep": true}\n')
+            for visibility in ("S", "C", "V", "SCV"):
+                for column in schema["columns"]:
+                    column["visibility"] = visibility
+                schema_path.write_text(json.dumps(schema), encoding="utf-8")
+                export_repository(root, reused)
+                with tempfile.TemporaryDirectory() as clean:
+                    fresh = Path(clean)
+                    for folder in TARGET_DIRS.values():
+                        (fresh / folder).mkdir(parents=True)
+                        (fresh / folder / "unrelated.json").write_bytes(b'{"keep": true}\n')
+                    export_repository(root, fresh)
+                    for target, folder in TARGET_DIRS.items():
+                        self.assertEqual((reused / folder / "values.json").exists(), target in visibility)
+                        self.assertEqual((reused / folder / "unrelated.json").read_bytes(), b'{"keep": true}\n')
+                    snapshot = lambda base: {p.relative_to(base): p.read_bytes() for p in base.rglob("*") if p.is_file()}
+                    self.assertEqual(snapshot(reused), snapshot(fresh))
+
     def test_four_layer_manifests_and_chunk_fingerprint_equals_package(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "repo"
