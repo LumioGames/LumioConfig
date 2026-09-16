@@ -251,13 +251,17 @@ def export_repository(root: Path, output: Path) -> dict[str, Any]:
         }
         for target in TARGETS:
             target_dir = TARGET_DIRS[target]
+            relative = Path(target_dir) / f"{table_name}.json"
+            if not any(target in str(column.get("visibility", "S")) for column in _column_map(schema).values()):
+                # Retire only this compiler-owned path when visibility changes.
+                (output / relative).unlink(missing_ok=True)
+                continue
             payload = {
                 "table": table_name,
                 "target": target,
                 "contentFingerprint": content_hash,
                 "rows": _project(typed, schema, target),
             }
-            relative = Path(target_dir) / f"{table_name}.json"
             data = _write_json(output / relative, payload)
             package_hash = package_fingerprint(data)
             descriptor = table_descriptor(
