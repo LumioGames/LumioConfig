@@ -16,6 +16,27 @@ LumioConfig 侧对 Sample 的交付面：**三张玩法常量表 + typed Table R
 
 现有 `skills` / `effects` / `drops` 三表不变。数值改动的唯一路径：改 `tables/*.txt`（走补丁通道）→ 重新 export → 重启进程。改数值不重编任何程序集。
 
+### 共享预测列（`sharedPrediction`，R-00693）
+
+分端导出的两端兼容判据只看**已声明的共享预测列**（[`split-export.md`](../../.spec/knowledge/features/split-export.md) §7）。判据是「这一列的值有没有被两端同一段代码读进 GAS 预测计算」——只被 `*.Server.cs` 读、客户端靠复制字段看到结果的列不算。本仓源按 Sample 的实际读点逐列判定如下：
+
+| 列 | 声明 | 依据（Sample 读点） |
+| --- | --- | --- |
+| `movement.step_meters` | ✅ | `Abilities/MoveAbility.cs:121` `CanActivate`，`[AbilityType(Prediction = PredictionKind.LogicPredict)]`，共享 `.cs` 两端同码；另 `MineAbility.cs:86 WithinReach` 同为 `LogicPredict` |
+| `movement.sweep_radius_meters` | ✅ | `Abilities/MoveAbility.cs:123` `CanActivate`，同上；客户端预测碰撞扫掠与服务端权威用同一半径 |
+| `mining.stamina_cost` | ✅ | `Abilities/MineAbility.cs:114` `Execute`（`LogicPredict`）读基础账扣减；基础账是 `Scope.Owner`，预测世界算得出（`gas.md` M4 准入③） |
+| `mining.cooldown_ticks` | ✅（仅 Sample 源有此列） | `Abilities/MineAbility.cs:128` `Execute` `SetCooldown`，`LogicPredict`，两端同码；准入②冷却复查两端必须同值 |
+| `mining.vein_hits_to_break` | ❌ | 只在 `Components/Vein/VeinReserveComponent.Server.cs:10` `PostAttribute` 读；客户端只看复制的 `Remaining`（`Sync<int>`），不参与预测计算 |
+| `mining.ore_per_vein` | ❌ | 只在 `SampleMiningComponent.Server.cs:189` `StageFinal` 读，服务端独有 |
+| `attributes.initial` | 待裁 | `Config/SampleConfigBinding.cs:29` `TryGetSeedValue` 两端都装；但 `gas.md` M5 写明远端权威投影不重新播种、预测克隆继承 Base/Current，联网下客户端不会用自己的 `initial`。见本节末 |
+| `attributes.name` | 待裁 | `MineAbility.cs:113` `config.Stamina.Name` 在预测路径上读；但行选取 `Rows.Single(row => row.Name == "Stamina")` 用的是共享代码里的硬编码串，单端改名会在 `Project()` 当场抛异常而不是静默分叉。见本节末 |
+
+`skills` / `effects` / `drops` 全表零 C# 读点，不声明。
+
+**两处待裁**（`attributes.initial` / `attributes.name`）本轮**不声明**：它们确实出现在两端编译的文件里，但都不构成「两端各算一遍、结果必须相同」的预测输入——前者被权威复制值覆盖，后者失配是硬失败而非分叉。要不要把它们纳入是归属边界问题，由架构仓裁。
+
+空声明集合下 `verify-split` 比的是同一个常量、**永远通过**；非空后单端漂移即以 `SHARED_PREDICTION_VALUE_MISMATCH` 退出 1。两条回归测试在 `tests/test_split_export.py::SharedPredictionTests`。
+
 ## 生成命令与 Reader
 
 ```bash
