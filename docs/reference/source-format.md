@@ -34,3 +34,7 @@ Schema 每列有唯一整数 `ordinal`，改名或重排 JSON 数组后仍识别
 ## 可见性
 
 Schema 的列声明 visibility，可取 S、C、V 的非空组合。未声明时默认只导出 S。客户端投影不会携带仅 S/V 的列。
+
+## 共享预测列
+
+列上可加 `"sharedPrediction": true`，表示该列的值被两端同一段代码读进 GAS 预测计算。它是分端导出两端兼容校验的唯一判据（[`split-export.md`](../../.spec/knowledge/features/split-export.md) §7），其 `visibility` 必须同时含 S 与 C，否则 `validate` 与 `export` 报 `SHARED_PREDICTION_NOT_SHARED`。逐列判定结果见 [`sample-config-handoff.md`](sample-config-handoff.md)。

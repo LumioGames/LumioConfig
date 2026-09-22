@@ -15,6 +15,18 @@ from lumio_config.split import SPLIT_SPEC_VERSION, verify_split
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "tools" / "lumio_config.py"
 
+# The columns this repository's own source declares as shared GAS prediction inputs.
+# Keep in sync with schemas/*.json; the rationale per column is in
+# docs/reference/sample-config-handoff.md.
+REPO_SHARED_PREDICTION_COLUMNS = [
+    "mining.stamina_cost",
+    "movement.step_meters",
+    "movement.sweep_radius_meters",
+]
+# sha256 of the canonical payload when nothing is declared: {"columns": [], "values": {}}.
+# It is a constant, which is exactly why an empty declaration set is not an assertion.
+EMPTY_SHARED_PREDICTION_FINGERPRINT = "697d43dfa016bcd44630c7a35d8460f0bfb45c701afa0b106251d28d891a53eb"
+
 
 def _copy_repo(dst: Path) -> None:
     for name in ("schemas", "tables", "registry"):
@@ -235,14 +247,49 @@ class SharedPredictionTests(unittest.TestCase):
             self.assertEqual(client_block, server_block)
             self.assertEqual(len(client_block["fingerprint"]), 64)
 
-    def test_undeclared_repository_gets_an_empty_but_defined_block(self):
+    def test_repository_source_declares_a_non_empty_shared_prediction_set(self):
+        """The repository's own source must keep declaring columns.
+
+        An empty ``columns`` array makes ``verify-split`` compare a constant against
+        itself, so the check passes no matter what the two ends contain. This test is
+        the guard against silently falling back to that state (R-00693).
+        """
         with tempfile.TemporaryDirectory() as temp:
             root, client, server = (Path(temp) / name for name in ("repo", "client", "server"))
             _copy_repo(root)
             export_repository_split(root, client, server)
             block = json.loads((client / "manifest.json").read_text(encoding="utf-8"))["sharedPrediction"]
-            self.assertEqual(block["columns"], [])
+            self.assertEqual(block["columns"], REPO_SHARED_PREDICTION_COLUMNS)
+            self.assertNotEqual(block["fingerprint"], EMPTY_SHARED_PREDICTION_FINGERPRINT)
             self.assertEqual(len(block["fingerprint"]), 64)
+            server_block = json.loads((server / "manifest.json").read_text(encoding="utf-8"))["sharedPrediction"]
+            self.assertEqual(block, server_block)
+
+    def test_repository_source_shared_column_drift_is_caught(self):
+        """Machine form of the R-00693 mutation proof, on the real source.
+
+        Give one end a source whose declared shared column holds a different value and
+        ``verify-split`` must refuse; put the value back and it must accept.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            root, drifted = Path(temp) / "repo", Path(temp) / "repo-drifted"
+            client, server = Path(temp) / "client", Path(temp) / "server"
+            _copy_repo(root)
+            export_repository_split(root, client, server)
+
+            _copy_repo(drifted)
+            source = (drifted / "tables" / "movement.txt").read_text(encoding="utf-8")
+            self.assertIn("1.25", source)
+            (drifted / "tables" / "movement.txt").write_text(
+                source.replace("1.25", "1.30"), encoding="utf-8", newline="\n"
+            )
+            export_repository_split(drifted, Path(temp) / "client-drifted", server)
+            report = verify_split(client, server)
+            self.assertFalse(report["ok"], report)
+            self.assertEqual([error["code"] for error in report["errors"]], ["SHARED_PREDICTION_VALUE_MISMATCH"])
+
+            export_repository_split(root, Path(temp) / "client-restored", server)
+            self.assertTrue(verify_split(client, server)["ok"])
 
     def test_declared_column_must_be_visible_to_both_ends(self):
         with tempfile.TemporaryDirectory() as temp:

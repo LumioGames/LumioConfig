@@ -130,7 +130,8 @@ python tools/lumio_config.py verify-split --client-out <DIR> --server-out <DIR> 
 ```
 
 - 该列的 `visibility` 必须同时含 `S` 与 `C`，否则 `validate` 与 `export` 都报 `SHARED_PREDICTION_NOT_SHARED`。参与同一段 GAS 预测的参数两端都得看得见。
-- 未声明任何列时，`columns` 为空数组、`fingerprint` 是空集合的聚合指纹（定值），校验平凡通过。这是当前状态，不是缺陷。
+- **判据（逐列过，不凭感觉）**：该列的值是否被**同一段两端共享的代码**读进 GAS 预测计算——客户端在预测世界里算一遍、服务端在权威世界里算同一遍。只被 `*.Server.cs` 读、客户端经复制字段看到结果的列**不声明**（它不参与预测，只是被复制）；只被客户端表现读的列同理。
+- 未声明任何列时，`columns` 为空数组、`fingerprint` 是空集合的聚合指纹（定值 `697d43df…`），两端比的是同一个常量——**校验平凡通过，等于没有断言**。空集合是未接线状态，不是可接受的终态；R-00693 起本仓源已声明非空集合，并由 `tests/test_split_export.py::SharedPredictionTests` 的两条测试守住（集合非空 + 单端漂移必须被 `verify-split` 拒绝）。
 
 **指纹算法**：对已声明列按 `"<table>.<column>"` 排序，取该列**投影后的类型化值**（含单位换算结果），按行的 id 列值排序，canonical JSON 后 sha256：
 

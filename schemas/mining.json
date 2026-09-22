@@ -22,7 +22,8 @@
       "type": "i64",
       "required": true,
       "minimum": 0,
-      "visibility": "CS"
+      "visibility": "CS",
+      "sharedPrediction": true
     },
     {
       "name": "vein_hits_to_break",
