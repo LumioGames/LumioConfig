@@ -103,7 +103,11 @@ python tools/lumio_config.py validate
 python tools/lumio_config.py format --check
 python tools/lumio_config.py export --out build/export
 python tools/lumio_config.py export --out build/export --csharp-out generated/csharp
+python tools/lumio_config.py export --client-out build/client --server-out build/server
+python tools/lumio_config.py verify-split --client-out build/client --server-out build/server
 python tools/lumio_config.py patch validate path/to/patch.json
 ```
+
+分端导出（`C` 一个目录、`S` 与 `V` 另一个目录）的冻结接口见 [`.spec/knowledge/features/split-export.md`](.spec/knowledge/features/split-export.md)；单根 `--out` 保留可用。
 
 `build/` 是本地生成目录，不提交到 Git。请先阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md) 和 [`SECURITY.md`](SECURITY.md)。

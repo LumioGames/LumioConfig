@@ -62,6 +62,22 @@
 
 JSON 输出目录是生成物，默认被 Git 忽略。C# 生成物按 `generated/README.md` 随源提交或由命令重建。
 
+### 分端导出（split-export/1）
+
+    python tools/lumio_config.py export --client-out Client/Config/Tables --server-out Server/Config/Tables
+
+把 `C` 投影写进第一个目录、`S` 与 `V` 投影写进第二个目录（VoxelEngine 跑在 DS 进程里）。投影文件与分端清单的字节与单根模式相同；每端根另写一份**端 manifest**（`endpoint` / `targets` / 本端 `outputHash` / 共享预测指纹）。`origins.json` 含服务端列名，只写 server 端。
+
+`--out` 与 `--client-out` / `--server-out` 互斥；缺一端、两端目录重叠或互为父子目录时退出码 2（`SPLIT_OUT_CONFLICT` / `SPLIT_OUT_INCOMPLETE` / `SPLIT_OUT_OVERLAP`）。单根模式保留可用，字段、字节与退出码均不变。完整接口与指纹口径见 [`split-export.md`](../../.spec/knowledge/features/split-export.md)。
+
+## verify-split
+
+    python tools/lumio_config.py verify-split --client-out <dir> --server-out <dir> [--json]
+
+只读两端的 `manifest.json`，判定**已声明的共享预测配置**是否兼容：列集合与指纹相等即兼容（退出 0）。两端 `revisionId` 不同只记 `SPLIT_REVISION_DIFFERS` 提示，不判不兼容——**不以整套端侧配置哈希相等作为一致判据**（ADR-102）。列集合不同报 `SHARED_PREDICTION_COLUMNS_DIFFER`、指纹不同报 `SHARED_PREDICTION_VALUE_MISMATCH`，退出 1；端身份不成对报 `SPLIT_ENDPOINT_INVALID`、清单缺失报 `SPLIT_MANIFEST_MISSING`，退出 2。
+
+共享预测列在 schema 列上声明 `"sharedPrediction": true`，其 `visibility` 必须同时含 `S` 与 `C`，否则 `validate` 与 `export` 报 `SHARED_PREDICTION_NOT_SHARED`。
+
 ## serve
 
     python tools/lumio_config.py serve [--port 0] [--no-open] [--root <repo>]

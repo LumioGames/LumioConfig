@@ -262,6 +262,8 @@ def validate_repository(root: Path) -> list[dict[str, str]]:
             visibility = _visibility(column)
             if not visibility or not visibility.issubset(set(TARGETS)):
                 errors.append(_error(table_name, column=name, code="INVALID_VISIBILITY", message=f"{name} visibility must contain only S, C, or V", suggestion="set visibility to a non-empty S/C/V combination"))
+            if column.get("sharedPrediction") is True and not {"S", "C"}.issubset(visibility):
+                errors.append(_error(table_name, column=name, code="SHARED_PREDICTION_NOT_SHARED", message=f"{name} declares sharedPrediction but is not visible to both S and C", suggestion="give the column a visibility containing S and C, or drop sharedPrediction"))
             if kind == "enum" and not isinstance(column.get("enumValues"), list):
                 errors.append(_error(table_name, column=name, code="ENUM_VALUES_MISSING", message=f"{name} enumValues must be an array", suggestion="declare the closed enum values"))
 

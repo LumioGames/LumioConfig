@@ -18,6 +18,10 @@
 
 同目录重复导出时，当前源表若在某端变成零可见列，编译器删除该表在该端的既有 `<table>.json`。清理仅针对当前源表的固定输出路径，不扫描删除其它文件；移除或改名源表后的旧文件清理不属于此行为。全新导出与重复导出在相同附加文件下应逐字节一致（`outputHash` 仍计入输出目录内的附加文件）。
 
+## 分端导出模式下的身份字段（split-export/1）
+
+`export --client-out/--server-out` 时没有单根清单，每端根各有一份端 manifest。三组身份字段在两端各自成立：`revisionId == contentFingerprint`（两端相等，整次编译口径）、`publicRoot == packageFingerprint`（**只覆盖本端包**，两端不等属正常）、`projectionRoots` 只列本端投影且不得等于本端 `publicRoot`。`releaseFingerprint` 覆盖三投影全部包、两端相等，用来证明两端出自同一次编译；`outputHash` 只覆盖本端树。运行时据此钉版时仍钉 `revisionId`，**不要用 `packageFingerprint` 或 `outputHash` 判断两端是否一致**。字段表与兼容校验口径见 [`split-export.md`](../../.spec/knowledge/features/split-export.md)。
+
 ## 运行时应如何钉版、备货、拒错版
 
 1. **钉版。** 实例启动与 Replay 元数据记录 `revisionId`（内容根）。不要用工作树 dirty 状态或时间戳当版本。

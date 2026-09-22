@@ -12,8 +12,17 @@ from .fingerprint import (
     package_fingerprint,
     source_fingerprint,
 )
-from .manifest import LAYER_ORDER, TARGET_DIRS, build_release_manifest, build_target_manifest, table_descriptor
+from .manifest import (
+    END_TARGETS,
+    LAYER_ORDER,
+    TARGET_DIRS,
+    build_end_manifest,
+    build_release_manifest,
+    build_target_manifest,
+    table_descriptor,
+)
 from .model import Cell, TableParseError, TableSource, ValidationError
+from .split import shared_prediction_block
 from .text_table import parse_table
 from .validate import (
     TARGETS,
@@ -203,9 +212,12 @@ def merge_layer_overlays(
     return rows, origins, errors
 
 
-def export_repository(root: Path, output: Path) -> dict[str, Any]:
-    root = Path(root)
-    output = Path(output)
+CompiledTable = tuple[TableSource, dict[str, Any], str, str, list[dict[str, Any]]]
+
+
+def _compile_repository(
+    root: Path,
+) -> tuple[dict[str, CompiledTable], dict[str, dict[str, dict[str, str]]], dict[str, Any]]:
     errors = validate_repository(root)
     if errors:
         raise ValidationFailure(errors)
@@ -214,15 +226,9 @@ def export_repository(root: Path, output: Path) -> dict[str, Any]:
         raise ValidationFailure([error.as_dict() for error in load_errors])
     tick_rate = load_tick_rate(root)
 
-    table_entries: list[dict[str, Any]] = []
-    target_tables: dict[str, list[dict[str, Any]]] = {target: [] for target in TARGETS}
-    all_content: list[str] = []
-    all_source: list[str] = []
-    all_packages: list[str] = []
     origins_payload: dict[str, dict[str, dict[str, str]]] = {}
     layer_errors: list[ValidationError] = []
-
-    compiled: dict[str, tuple[TableSource, dict[str, Any], str, str, list[dict[str, Any]]]] = {}
+    compiled: dict[str, CompiledTable] = {}
     for table_name in sorted(schemas):
         schema = schemas[table_name]
         table = tables[table_name]
@@ -240,18 +246,29 @@ def export_repository(root: Path, output: Path) -> dict[str, Any]:
 
     if layer_errors:
         raise ValidationFailure([error.as_dict() for error in layer_errors])
+    return compiled, origins_payload, schemas
 
+
+def _emit_projections(
+    output: Path,
+    targets: tuple[str, ...],
+    compiled: dict[str, CompiledTable],
+) -> tuple[list[str], list[str]]:
+    """Write the given projections under one output root.
+
+    Returns the package fingerprints written here and the tables that produced at
+    least one file here. Projection payloads and per-target manifests are the same
+    bytes whichever output root they land in.
+    """
     output.mkdir(parents=True, exist_ok=True)
+    target_tables: dict[str, list[dict[str, Any]]] = {target: [] for target in targets}
+    packages: list[str] = []
+    present: list[str] = []
     for table_name in sorted(compiled):
-        working, schema, content_hash, source_hash, typed = compiled[table_name]
-        entry: dict[str, Any] = {
-            "table": table_name,
-            "contentFingerprint": content_hash,
-            "sourceFingerprint": source_hash,
-        }
-        for target in TARGETS:
-            target_dir = TARGET_DIRS[target]
-            relative = Path(target_dir) / f"{table_name}.json"
+        _working, schema, content_hash, source_hash, typed = compiled[table_name]
+        emitted = False
+        for target in targets:
+            relative = Path(TARGET_DIRS[target]) / f"{table_name}.json"
             if not any(target in str(column.get("visibility", "S")) for column in _column_map(schema).values()):
                 # Retire only this compiler-owned path when visibility changes.
                 (output / relative).unlink(missing_ok=True)
@@ -272,25 +289,96 @@ def export_repository(root: Path, output: Path) -> dict[str, Any]:
                 package_hash,
             )
             target_tables[target].append(descriptor)
-            all_packages.append(package_hash)
-        table_entries.append(entry)
-        all_content.append(content_hash)
-        all_source.append(source_hash)
-
-    _write_json(output / "origins.json", origins_payload)
-    for target in TARGETS:
+            packages.append(package_hash)
+            emitted = True
+        if emitted:
+            present.append(table_name)
+    for target in targets:
         _write_json(output / TARGET_DIRS[target] / "manifest.json", build_target_manifest(target, target_tables[target]))
+    return packages, present
 
+
+def _table_entries(compiled: dict[str, CompiledTable], names: list[str]) -> list[dict[str, Any]]:
+    return [
+        {
+            "table": name,
+            "contentFingerprint": compiled[name][2],
+            "sourceFingerprint": compiled[name][3],
+        }
+        for name in names
+    ]
+
+
+def export_repository(root: Path, output: Path) -> dict[str, Any]:
+    root = Path(root)
+    output = Path(output)
+    compiled, origins_payload, _schemas = _compile_repository(root)
+
+    output.mkdir(parents=True, exist_ok=True)
+    packages, _present = _emit_projections(output, TARGETS, compiled)
+    _write_json(output / "origins.json", origins_payload)
+
+    names = sorted(compiled)
     manifest = build_release_manifest(
         baseline_id=_baseline_id(root),
         targets=list(TARGETS),
-        tables=table_entries,
-        content_fingerprint=aggregate_fingerprint(all_content),
-        package_fingerprint=aggregate_fingerprint(all_packages),
-        source_fingerprint=aggregate_fingerprint(all_source),
+        tables=_table_entries(compiled, names),
+        content_fingerprint=aggregate_fingerprint([compiled[name][2] for name in names]),
+        package_fingerprint=aggregate_fingerprint(packages),
+        source_fingerprint=aggregate_fingerprint([compiled[name][3] for name in names]),
         compiler_hash=_compiler_hash(),
         input_hash=_input_hash(root),
         output_hash=_output_hash(output),
     )
     _write_json(output / "manifest.json", manifest)
     return manifest
+
+
+def export_repository_split(root: Path, client_out: Path, server_out: Path) -> dict[str, dict[str, Any]]:
+    """split-export/1: write the C projection and the S+V projections to two roots.
+
+    Contract: `.spec/knowledge/features/split-export.md`.
+    """
+    root = Path(root)
+    ends: dict[str, Path] = {"client": Path(client_out), "server": Path(server_out)}
+    compiled, origins_payload, schemas = _compile_repository(root)
+
+    shared = shared_prediction_block(schemas, {name: compiled[name][4] for name in compiled})
+    names = sorted(compiled)
+    baseline_id = _baseline_id(root)
+    compiler_hash = _compiler_hash()
+    input_hash = _input_hash(root)
+    content_all = aggregate_fingerprint([compiled[name][2] for name in names])
+    source_all = aggregate_fingerprint([compiled[name][3] for name in names])
+
+    emitted: dict[str, tuple[list[str], list[str]]] = {}
+    for endpoint, output in ends.items():
+        output.mkdir(parents=True, exist_ok=True)
+        emitted[endpoint] = _emit_projections(output, END_TARGETS[endpoint], compiled)
+        if endpoint == "server":
+            # Layer provenance names server-only columns; it stays on the server end.
+            _write_json(output / "origins.json", origins_payload)
+
+    release_fingerprint = aggregate_fingerprint([hash for packages, _ in emitted.values() for hash in packages])
+
+    manifests: dict[str, dict[str, Any]] = {}
+    for endpoint, output in ends.items():
+        packages, present = emitted[endpoint]
+        manifest = build_end_manifest(
+            endpoint=endpoint,
+            baseline_id=baseline_id,
+            targets=list(END_TARGETS[endpoint]),
+            tables=_table_entries(compiled, present),
+            content_fingerprint=content_all,
+            package_fingerprint=aggregate_fingerprint(packages),
+            source_fingerprint=source_all,
+            release_fingerprint=release_fingerprint,
+            compiler_hash=compiler_hash,
+            input_hash=input_hash,
+            output_hash=_output_hash(output),
+            shared_prediction=shared,
+            origins="origins.json" if endpoint == "server" else None,
+        )
+        _write_json(output / "manifest.json", manifest)
+        manifests[endpoint] = manifest
+    return manifests
