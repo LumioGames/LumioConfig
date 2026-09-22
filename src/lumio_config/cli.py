@@ -7,11 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .codegen.csharp import CSHARP_NAMESPACE_DEFAULT, write_csharp_readers
-from .export import ValidationFailure, export_repository
+from .export import ValidationFailure, export_repository, export_repository_split
 from .ids import verify_registry
 from .patch import apply_patch, validate_patch
 from .preview import preview_patch
 from .query import CONTRACT, query_card, query_row, query_schema, query_table
+from .split import verify_split
 from .text_table import format_table_text, parse_table
 from .validate import load_sources, validate_repository
 
@@ -30,6 +31,27 @@ def _print_json(value: object) -> None:
 
 def _resolve_root(value: Path | None) -> Path:
     return value.resolve() if value else Path(__file__).resolve().parents[2]
+
+
+def _resolve_out(root: Path, value: Path) -> Path:
+    return value if value.is_absolute() else root / value
+
+
+def _split_out_error(args: argparse.Namespace) -> str | None:
+    """split-export/1 §3: --out and the two split roots are mutually exclusive."""
+    split = (args.client_out, args.server_out)
+    if args.out is not None:
+        if any(value is not None for value in split):
+            return "SPLIT_OUT_CONFLICT: --out cannot be combined with --client-out/--server-out"
+        return None
+    if all(value is None for value in split):
+        return "SPLIT_OUT_INCOMPLETE: pass --out, or both --client-out and --server-out"
+    if any(value is None for value in split):
+        return "SPLIT_OUT_INCOMPLETE: split export needs both --client-out and --server-out"
+    client, server = (value.resolve() for value in split)
+    if client == server or client in server.parents or server in client.parents:
+        return "SPLIT_OUT_OVERLAP: the two endpoint directories must not overlap"
+    return None
 
 
 def _format_tables(root: Path, check: bool) -> int:
@@ -67,7 +89,9 @@ def build_parser() -> argparse.ArgumentParser:
     _root_argument(formatter)
 
     exporter = subparsers.add_parser("export", help="export deterministic target projections")
-    exporter.add_argument("--out", type=Path, required=True)
+    exporter.add_argument("--out", type=Path, default=None, help="single-root export (all three projections under one directory)")
+    exporter.add_argument("--client-out", type=Path, default=None, dest="client_out", help="split-export/1: directory for the C projection")
+    exporter.add_argument("--server-out", type=Path, default=None, dest="server_out", help="split-export/1: directory for the S and V projections")
     exporter.add_argument("--csharp-out", type=Path, default=None, dest="csharp_out", help="write typed C# readers (types only, no row values)")
     exporter.add_argument(
         "--csharp-namespace",
@@ -101,6 +125,12 @@ def build_parser() -> argparse.ArgumentParser:
     registry.add_argument("mode", choices=["verify"])
     _root_argument(registry)
 
+    verify = subparsers.add_parser("verify-split", help="check split-export/1 shared prediction compatibility")
+    verify.add_argument("--client-out", type=Path, required=True, dest="client_out")
+    verify.add_argument("--server-out", type=Path, required=True, dest="server_out")
+    verify.add_argument("--json", action="store_true", dest="as_json")
+    _root_argument(verify)
+
     serve_cmd = subparsers.add_parser("serve", help="start the local loopback editor host")
     serve_cmd.add_argument("--port", type=int, default=0, help="port (0 = ephemeral)")
     serve_cmd.add_argument("--no-open", action="store_true", help="do not open a browser")
@@ -124,12 +154,26 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "format":
         return _format_tables(root, args.check)
     if args.command == "export":
-        json_out = (root / args.out) if not args.out.is_absolute() else args.out
+        split_error = _split_out_error(args)
+        if split_error is not None:
+            print(split_error)
+            return 2
         csharp_out = None
         if args.csharp_out is not None:
             csharp_out = (root / args.csharp_out) if not args.csharp_out.is_absolute() else args.csharp_out
         try:
-            manifest = export_repository(root, json_out)
+            if args.out is not None:
+                manifest = export_repository(root, _resolve_out(root, args.out))
+                tables = len(manifest["tables"])
+                mode = "export"
+            else:
+                manifests = export_repository_split(
+                    root,
+                    _resolve_out(root, args.client_out),
+                    _resolve_out(root, args.server_out),
+                )
+                tables = len(manifests["server"]["tables"])
+                mode = "export (split-export/1)"
         except ValidationFailure as failure:
             print(json.dumps(failure.errors, ensure_ascii=False, indent=2, sort_keys=True))
             return 1
@@ -139,8 +183,26 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps([error.as_dict() for error in load_errors], ensure_ascii=False, indent=2, sort_keys=True))
                 return 1
             write_csharp_readers(csharp_out, schemas, args.csharp_namespace)
-        print(f"export: OK ({len(manifest['tables'])} table(s))")
+        print(f"{mode}: OK ({tables} table(s))")
         return 0
+    if args.command == "verify-split":
+        client_out = _resolve_out(root, args.client_out)
+        server_out = _resolve_out(root, args.server_out)
+        for directory in (client_out, server_out):
+            if not (directory / "manifest.json").is_file():
+                print(f"SPLIT_MANIFEST_MISSING: {directory / 'manifest.json'}")
+                return 2
+        report = verify_split(client_out, server_out)
+        if args.as_json:
+            _print_json(report)
+        else:
+            for note in report["notes"]:
+                print(f"note {note['code']}: {note['message']}")
+            for error in report["errors"]:
+                print(f"{error['code']}: {error['message']}")
+            if report["ok"]:
+                print("verify-split: OK")
+        return 0 if report["ok"] else 1
     if args.command == "patch":
         payload = json.loads(args.patch_path.read_text(encoding="utf-8"))
         if args.mode == "validate":

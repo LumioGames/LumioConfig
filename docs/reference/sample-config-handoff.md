@@ -23,6 +23,15 @@ python tools/lumio_config.py export --out build/export --csharp-out generated/cs
 ```
 
 - JSON：`build/export/server|client/<table>.json` + 各端 `manifest.json` + 根 `manifest.json`。
+- ADR-115 目标布局用分端导出（游戏仓迁移完成后即用此条，单根模式在迁移期继续可用）：
+
+  ```bash
+  python tools/lumio_config.py export \
+    --client-out <游戏仓>/Client/Config/Tables \
+    --server-out <游戏仓>/Server/Config/Tables
+  ```
+
+  `C` 投影进 `Client/Config/Tables`，`S` 与 `V` 进 `Server/Config/Tables`；投影文件与分端清单字节不变，消费方读表代码不用改，只是多了一份端 manifest。接口见 [`split-export.md`](../../.spec/knowledge/features/split-export.md)。
 - C# Reader：`generated/csharp/server|client/<Table>Table.cs`，命名空间 `Lumio.Config.Generated.Server` / `.Client`。生成物只含类型与读法，无行数值；签名冻结见 [`csharp-reader.md`](csharp-reader.md)。
 
 读法（装载后）：
