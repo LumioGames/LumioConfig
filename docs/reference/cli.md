@@ -74,9 +74,11 @@ JSON 输出目录是生成物，默认被 Git 忽略。C# 生成物按 `generate
 
     python tools/lumio_config.py verify-split --client-out <dir> --server-out <dir> [--json]
 
-只读两端的 `manifest.json`，判定**已声明的共享预测配置**是否兼容：列集合与指纹相等即兼容（退出 0）。两端 `revisionId` 不同只记 `SPLIT_REVISION_DIFFERS` 提示，不判不兼容——**不以整套端侧配置哈希相等作为一致判据**（ADR-102）。列集合不同报 `SHARED_PREDICTION_COLUMNS_DIFFER`、指纹不同报 `SHARED_PREDICTION_VALUE_MISMATCH`，退出 1；端身份不成对报 `SPLIT_ENDPOINT_INVALID`、清单缺失报 `SPLIT_MANIFEST_MISSING`，退出 2。
+判定**已声明的共享预测配置**是否兼容，分两步。先查每端自己：按本端 `manifest.json` 声明的共享预测列，从本端行文件（client 端 `client/<table>.json`、server 端 `server/<table>.json`）重算指纹，与本端记录的 `sharedPrediction` 比；对不上（行被改而清单没改、清单被改而行没改、行文件缺失）报 `SHARED_PREDICTION_RECORD_MISMATCH`。再比两端：列集合与指纹相等即兼容（退出 0）。两端 `revisionId` 不同只记 `SPLIT_REVISION_DIFFERS` 提示，不判不兼容——**不以整套端侧配置哈希相等作为一致判据**（ADR-102）。列集合不同报 `SHARED_PREDICTION_COLUMNS_DIFFER`、指纹不同报 `SHARED_PREDICTION_VALUE_MISMATCH`；以上都退出 1。端身份不成对报 `SPLIT_ENDPOINT_INVALID`、清单缺失报 `SPLIT_MANIFEST_MISSING`，退出 2。`--json` 报告带 `exitCode`，与进程退出码一致。
 
-共享预测列在 schema 列上声明 `"sharedPrediction": true`，其 `visibility` 必须同时含 `S` 与 `C`，否则 `validate` 与 `export` 报 `SHARED_PREDICTION_NOT_SHARED`。
+它不证明产物来源：两端的行文件与清单被一起改得自洽时照样通过，那归发布签名；未声明列与本端整棵树也不在它的范围里。边界全表见 [`split-export.md`](../../.spec/knowledge/features/split-export.md) §7「信任边界」。
+
+共享预测列在 schema 列上声明 `"sharedPrediction": true`，其 `visibility` 必须同时含 `S` 与 `C`，否则 `validate` 与 `export` 报 `SHARED_PREDICTION_NOT_SHARED`；声明了共享预测列的表，id 列必须叫 `id` 且对 `S`、`C` 都可见，否则报 `SHARED_PREDICTION_ID_NOT_SHARED`。
 
 ## serve
 

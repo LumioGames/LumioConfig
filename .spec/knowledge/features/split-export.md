@@ -35,7 +35,7 @@ python tools/lumio_config.py export --out build/export [--csharp-out DIR] [--csh
 # 分端模式（本规范新增）
 python tools/lumio_config.py export --client-out <Client/Config/Tables> --server-out <Server/Config/Tables> [--csharp-out DIR] [--csharp-namespace NS]
 
-# 两端兼容校验（只读两份 manifest.json）
+# 两端校验（读两端 manifest.json，并从本端行文件重算共享预测指纹，见 §7）
 python tools/lumio_config.py verify-split --client-out <DIR> --server-out <DIR> [--json]
 ```
 
@@ -44,7 +44,7 @@ python tools/lumio_config.py verify-split --client-out <DIR> --server-out <DIR> 
 - 相对路径相对仓库根解析，与 `--out` 同规则。
 - 目标目录已存在时按表增量覆盖：可见性收窄导致某表在某端消失时，编译器只删自己拥有的那一个路径（与单根模式同一条规则），不清扫目录里的其他文件。
 - `export` 成功退出码 0；源校验失败打印错误 JSON 并以 1 退出，与单根模式一致。
-- `verify-split` 兼容退出 0，不兼容退出 1，参数错误退出 2。
+- `verify-split` 兼容退出 0，不兼容（含某端记录与本端行文件对不上）退出 1，参数错误退出 2（清单缺失 `SPLIT_MANIFEST_MISSING`、端身份不成对 `SPLIT_ENDPOINT_INVALID`）。
 
 ## 4. 各端目录形状
 
@@ -130,6 +130,7 @@ python tools/lumio_config.py verify-split --client-out <DIR> --server-out <DIR> 
 ```
 
 - 该列的 `visibility` 必须同时含 `S` 与 `C`，否则 `validate` 与 `export` 都报 `SHARED_PREDICTION_NOT_SHARED`。参与同一段 GAS 预测的参数两端都得看得见。
+- 声明了共享预测列的表，其 id 列必须叫 `id`（`idColumn` 省略或写 `id`），且 `visibility` 同时含 `S` 与 `C`，否则 `validate` 与 `export` 都报 `SHARED_PREDICTION_ID_NOT_SHARED`。原因：指纹里每个值都和它所在行的 id 配对，`verify-split` 要从每端自己的行文件把这些配对重算出来，而本版本的行文件不写 id 列叫什么，只能按 `id` 读。
 - **判据（逐列过，不凭感觉）**：该列的值是否被**同一段两端共享的代码**读进 GAS 预测计算——客户端在预测世界里算一遍、服务端在权威世界里算同一遍。只被 `*.Server.cs` 读、客户端经复制字段看到结果的列**不声明**（它不参与预测，只是被复制）；只被客户端表现读的列同理。
 - 未声明任何列时，`columns` 为空数组、`fingerprint` 是空集合的聚合指纹（定值 `697d43df…`），两端比的是同一个常量——**校验平凡通过，等于没有断言**。空集合是未接线状态，不是可接受的终态；R-00693 起本仓源已声明非空集合，并由 `tests/test_split_export.py::SharedPredictionTests` 的两条测试守住（集合非空 + 单端漂移必须被 `verify-split` 拒绝）。
 
@@ -140,13 +141,19 @@ python tools/lumio_config.py verify-split --client-out <DIR> --server-out <DIR> 
  "values": {"movement": {"step_meters": [[70001, 1.25]]}}}
 ```
 
-值取自同一次编译的同一份类型化行，因此两端由构造即相等；写进两端 manifest 是给**跨次编译**的消费方作证据。
+值取自同一次编译的同一份类型化行，因此两端由构造即相等。写进两端 manifest 的是导出器的**自报值**，供**跨次编译**的两端互相比对；它自己不证明本端行文件没被改过——这一点靠 `verify-split` 从行重算（见下「信任边界」）。
 
-**校验口径**（`verify-split` 与消费方自检同一套）：
+**校验口径**（消费方要自检，就调 `verify-split` 或照同样两步做；只比两份 manifest 的记录值不算校验）：
+
+`verify-split` 分两步，结果全部报出、不在第一条错处停：
+
+1. **本端完整性**（每端各自做）：按本端 manifest 里 `sharedPrediction.columns` 列出的列，读本端行文件——client 端读 `client/<table>.json`（`C` 投影），server 端读 `server/<table>.json`（`S` 投影）——用导出时同一算法重算整块 `sharedPrediction`（`specVersion` / `columns` / `fingerprint`），与本端记录逐字段比。
+2. **两端兼容**：比两端记录的 `columns` 与 `fingerprint`。
 
 | 情况 | 判定 | 码 |
 | --- | --- | --- |
-| 两端 `sharedPrediction.columns` 与 `fingerprint` 均相等 | 兼容，退出 0 | — |
+| 两端记录都能从本端行文件重算出来，且两端 `columns` 与 `fingerprint` 均相等 | 兼容，退出 0 | — |
+| 某端记录与本端行文件重算结果不一致（行被改、记录被改、声明表的行文件缺失或读不了、记录缺失或格式不对） | 不兼容，退出 1 | `SHARED_PREDICTION_RECORD_MISMATCH`（信息以 `client:` / `server:` 开头标明哪端） |
 | 声明列集合不同 | 不兼容，退出 1 | `SHARED_PREDICTION_COLUMNS_DIFFER` |
 | 列集合相同、指纹不同 | 不兼容，退出 1 | `SHARED_PREDICTION_VALUE_MISMATCH` |
 | `endpoint` 不是一个 client 一个 server | 参数错，退出 2 | `SPLIT_ENDPOINT_INVALID` |
@@ -154,9 +161,24 @@ python tools/lumio_config.py verify-split --client-out <DIR> --server-out <DIR> 
 
 最后一行是本节的要害：两端来自不同次编译（画质表改过、服务端存储参数改过）**不构成不兼容**；只有已声明的共享预测配置对不上才不兼容。
 
+**信任边界**（`verify-split` 管什么、不管什么）：
+
+| 改动 | 结果 | 靠哪一步 |
+| --- | --- | --- |
+| 改了某端行文件里已声明列的值或行 id、删了行或整个行文件，manifest 没跟着改 | 拒绝，`SHARED_PREDICTION_RECORD_MISMATCH` | 第 1 步 |
+| 改了 manifest 里的记录，行文件没改（两端改成同一个假值也一样） | 拒绝，`SHARED_PREDICTION_RECORD_MISMATCH` | 第 1 步 |
+| 同一端的行文件与记录一起按算法改得自洽 | 拒绝，`SHARED_PREDICTION_VALUE_MISMATCH` | 第 2 步 |
+| 两端的行文件与记录都改得自洽 | **通过**——这和一次真实编译无法区分 | 不管 |
+| 未声明列的值、行文件里的其他字段、本端整棵树 | **不看** | 不管 |
+
+- `verify-split` 证明的是「每端记录与本端行文件一致、两端记录一致」，**不证明产物出自哪次编译、是谁编的**。那是真实性问题，归架构仓 `config-table.md` 的 M5 人门签名（R-00328：没签名的版本生产环境拒绝装载）；本命令不做、也不假装做。
+- 本端整棵树有没有被改，由 §6 的范围类指纹（`outputHash` / `packageFingerprint`）回答，查它们是装载方在装载边界的事（`config-table.md`「Runtime Config」职责）；`verify-split` 不重算它们。
+- 表中每一行在 `tests/test_split_export.py::VerifySplitTests` 都有对应测试（「本端整棵树」一项除外，它本来就不在本命令范围）；「两端一起改」与「未声明列」两项测的是**确实通过**（`test_trust_boundary_rows_and_record_rewritten_together`），证明这是边界而不是漏测。
+
 ## 8. 验收
 
 - [ ] 分端导出把 `C` 与 `S`+`V` 写到两个不同目录，client 端不含 `server/` `voxel/` 任何文件。
 - [ ] 分端导出两次到不同临时目录，逐字节相同。
 - [ ] 单根模式保留可用，既有测试计数不变。
 - [ ] 两端一致性判据是 `sharedPrediction`，不是整树哈希相等。
+- [ ] 只改某端行文件、不改 manifest，`verify-split` 以 `SHARED_PREDICTION_RECORD_MISMATCH` 退出 1。

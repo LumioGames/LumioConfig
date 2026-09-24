@@ -125,7 +125,7 @@ def build_parser() -> argparse.ArgumentParser:
     registry.add_argument("mode", choices=["verify"])
     _root_argument(registry)
 
-    verify = subparsers.add_parser("verify-split", help="check split-export/1 shared prediction compatibility")
+    verify = subparsers.add_parser("verify-split", help="re-derive each end's split-export/1 shared prediction record from its rows, then compare the two ends")
     verify.add_argument("--client-out", type=Path, required=True, dest="client_out")
     verify.add_argument("--server-out", type=Path, required=True, dest="server_out")
     verify.add_argument("--json", action="store_true", dest="as_json")
@@ -202,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{error['code']}: {error['message']}")
             if report["ok"]:
                 print("verify-split: OK")
-        return 0 if report["ok"] else 1
+        return report["exitCode"]
     if args.command == "patch":
         payload = json.loads(args.patch_path.read_text(encoding="utf-8"))
         if args.mode == "validate":
