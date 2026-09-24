@@ -35,7 +35,7 @@ LumioConfig 侧对 Sample 的交付面：**三张玩法常量表 + typed Table R
 
 **两处待裁**（`attributes.initial` / `attributes.name`）本轮**不声明**：它们确实出现在两端编译的文件里，但都不构成「两端各算一遍、结果必须相同」的预测输入——前者被权威复制值覆盖，后者失配是硬失败而非分叉。要不要把它们纳入是归属边界问题，由架构仓裁。
 
-空声明集合下 `verify-split` 比的是同一个常量、**永远通过**；非空后单端漂移即以 `SHARED_PREDICTION_VALUE_MISMATCH` 退出 1。两条回归测试在 `tests/test_split_export.py::SharedPredictionTests`。
+空声明集合下 `verify-split` 比的是同一个常量、**永远通过**；非空后单端漂移即以 `SHARED_PREDICTION_VALUE_MISMATCH` 退出 1，只改某端行文件而不改清单即以 `SHARED_PREDICTION_RECORD_MISMATCH` 退出 1。回归测试在 `tests/test_split_export.py::SharedPredictionTests` 与 `VerifySplitTests`。
 
 ## 生成命令与 Reader
 

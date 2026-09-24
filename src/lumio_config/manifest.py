@@ -8,6 +8,10 @@ TARGET_DIRS = {"S": "server", "C": "client", "V": "voxel"}
 SPLIT_SPEC_VERSION = "split-export/1"
 # split-export/1: the endpoint→projection map is a constant, not a command-line option.
 END_TARGETS: dict[str, tuple[str, ...]] = {"client": ("C",), "server": ("S", "V")}
+# split-export/1 row files do not name a table's id column, so verify-split reads each
+# shared prediction pair's id under this key. validate/export hold every table that
+# declares a sharedPrediction column to it (SHARED_PREDICTION_ID_NOT_SHARED).
+SHARED_PREDICTION_ID_COLUMN = "id"
 
 
 def chunk_descriptor(path: str, package_fingerprint: str, chunk_id: int = 0) -> dict[str, Any]:

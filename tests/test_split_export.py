@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from lumio_config.export import ValidationFailure, export_repository, export_repository_split
-from lumio_config.split import SPLIT_SPEC_VERSION, verify_split
+from lumio_config.split import SPLIT_SPEC_VERSION, shared_prediction_block, verify_split
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +83,21 @@ def _write_shared_repo(root: Path, *, step: str = "1.25", visibility: str = "SC"
         encoding="utf-8",
         newline="\n",
     )
+
+
+def _replace_once(path: Path, old: str, new: str) -> None:
+    """Hand-edit one generated file the way a person would, and prove the edit landed."""
+    text = path.read_text(encoding="utf-8")
+    if text.count(old) != 1:
+        raise AssertionError(f"{path}: expected exactly one {old!r}")
+    path.write_text(text.replace(old, new), encoding="utf-8", newline="\n")
+
+
+def _rewrite_record(end: Path, block: dict) -> None:
+    manifest_path = end / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["sharedPrediction"] = block
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _tree(base: Path) -> dict[str, bytes]:
@@ -291,6 +306,31 @@ class SharedPredictionTests(unittest.TestCase):
             export_repository_split(root, Path(temp) / "client-restored", server)
             self.assertTrue(verify_split(client, server)["ok"])
 
+    def test_repository_source_row_edit_is_caught_by_the_cli(self):
+        """Machine form of the R-00745 repro, on the real source and through the CLI.
+
+        Change one declared value in ``client/movement.json`` and leave both manifests
+        alone: the two recorded fingerprints still agree, so only re-deriving from the
+        rows can notice. Before the edit the same command must pass.
+        """
+        with tempfile.TemporaryDirectory() as temp:
+            client, server = Path(temp) / "client", Path(temp) / "server"
+            export_cmd = _run_cli("export", "--client-out", str(client), "--server-out", str(server))
+            self.assertEqual(export_cmd.returncode, 0, export_cmd.stderr + export_cmd.stdout)
+            args = ("verify-split", "--client-out", str(client), "--server-out", str(server))
+            before = _run_cli(*args)
+            self.assertEqual(before.returncode, 0, before.stderr + before.stdout)
+            self.assertIn("verify-split: OK", before.stdout)
+
+            manifests = [(end / "manifest.json").read_bytes() for end in (client, server)]
+            _replace_once(client / "client" / "movement.json", '"step_meters": 1.25', '"step_meters": 9.99')
+            self.assertEqual(manifests, [(end / "manifest.json").read_bytes() for end in (client, server)])
+
+            after = _run_cli(*args)
+            self.assertEqual(after.returncode, 1, after.stderr + after.stdout)
+            self.assertIn("SHARED_PREDICTION_RECORD_MISMATCH: client:", after.stdout)
+            self.assertNotIn("verify-split: OK", after.stdout)
+
     def test_declared_column_must_be_visible_to_both_ends(self):
         with tempfile.TemporaryDirectory() as temp:
             root, client, server = (Path(temp) / name for name in ("repo", "client", "server"))
@@ -301,6 +341,29 @@ class SharedPredictionTests(unittest.TestCase):
                 any(error["code"] == "SHARED_PREDICTION_NOT_SHARED" for error in ctx.exception.errors),
                 ctx.exception.errors,
             )
+
+    def test_declaring_table_id_must_be_readable_on_both_ends(self):
+        """verify-split re-derives every (id, value) pair from each end's rows."""
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            _write_shared_repo(base / "ok")
+            export_repository_split(base / "ok", base / "ok-client", base / "ok-server")
+
+            for label, edit in (
+                ("server-only id", lambda schema: schema["columns"][0].__setitem__("visibility", "SV")),
+                ("renamed id column", lambda schema: schema.__setitem__("idColumn", "name")),
+            ):
+                with self.subTest(label):
+                    root = base / label.replace(" ", "-")
+                    _write_shared_repo(root)
+                    schema_path = root / "schemas" / "movement.json"
+                    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+                    edit(schema)
+                    schema_path.write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
+                    with self.assertRaises(ValidationFailure) as ctx:
+                        export_repository_split(root, base / f"{label}-client", base / f"{label}-server")
+                    codes = [error["code"] for error in ctx.exception.errors]
+                    self.assertIn("SHARED_PREDICTION_ID_NOT_SHARED", codes)
 
 
 class VerifySplitTests(unittest.TestCase):
@@ -343,6 +406,134 @@ class VerifySplitTests(unittest.TestCase):
             report = verify_split(client, client)
             self.assertFalse(report["ok"], report)
             self.assertEqual([error["code"] for error in report["errors"]], ["SPLIT_ENDPOINT_INVALID"])
+            # split-export.md §3/§7: a pair that is not one client and one server is a
+            # usage error (2), not an incompatibility (1).
+            self.assertEqual(report["exitCode"], 2)
+            cli = _run_cli("verify-split", "--client-out", str(client), "--server-out", str(client))
+            self.assertEqual(cli.returncode, 2, cli.stdout + cli.stderr)
+            self.assertIn("SPLIT_ENDPOINT_INVALID", cli.stdout)
+
+    def test_row_edit_without_manifest_edit_is_caught_on_either_end(self):
+        for end_name, folder in (("client", "client"), ("server", "server")):
+            with self.subTest(end_name), tempfile.TemporaryDirectory() as temp:
+                root, client, server = (Path(temp) / name for name in ("repo", "client", "server"))
+                _write_shared_repo(root)
+                export_repository_split(root, client, server)
+                clean = verify_split(client, server)
+                self.assertTrue(clean["ok"], clean)
+                self.assertEqual(clean["exitCode"], 0)
+
+                end = client if end_name == "client" else server
+                rows = end / folder / "movement.json"
+                _replace_once(rows, '"step_meters": 1.25', '"step_meters": 9.99')
+                tampered = verify_split(client, server)
+                self.assertFalse(tampered["ok"], tampered)
+                self.assertEqual(tampered["exitCode"], 1)
+                self.assertEqual(
+                    [error["code"] for error in tampered["errors"]], ["SHARED_PREDICTION_RECORD_MISMATCH"]
+                )
+                self.assertTrue(tampered["errors"][0]["message"].startswith(f"{end_name}: "), tampered)
+
+                _replace_once(rows, '"step_meters": 9.99', '"step_meters": 1.25')
+                self.assertTrue(verify_split(client, server)["ok"])
+
+    def test_row_id_edit_and_row_removal_are_caught(self):
+        def remove_rows(path: Path) -> None:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            self.assertTrue(payload["rows"])
+            payload["rows"] = []
+            path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+        for label, edit in (
+            ("row id", lambda path: _replace_once(path, '"id": 1,', '"id": 2,')),
+            ("row removal", remove_rows),
+        ):
+            with self.subTest(label), tempfile.TemporaryDirectory() as temp:
+                root, client, server = (Path(temp) / name for name in ("repo", "client", "server"))
+                _write_shared_repo(root)
+                export_repository_split(root, client, server)
+                edit(client / "client" / "movement.json")
+                report = verify_split(client, server)
+                self.assertEqual(
+                    [error["code"] for error in report["errors"]], ["SHARED_PREDICTION_RECORD_MISMATCH"]
+                )
+
+    def test_missing_row_file_is_caught(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, client, server = (Path(temp) / name for name in ("repo", "client", "server"))
+            _write_shared_repo(root)
+            export_repository_split(root, client, server)
+            (server / "server" / "movement.json").unlink()
+            report = verify_split(client, server)
+            self.assertEqual([error["code"] for error in report["errors"]], ["SHARED_PREDICTION_RECORD_MISMATCH"])
+            self.assertIn("server/movement.json is missing", report["errors"][0]["message"])
+
+    def test_record_edit_without_row_edit_is_caught(self):
+        """Rewriting both records to the same made-up value keeps them equal to each other."""
+        with tempfile.TemporaryDirectory() as temp:
+            root, client, server = (Path(temp) / name for name in ("repo", "client", "server"))
+            _write_shared_repo(root)
+            export_repository_split(root, client, server)
+            block = json.loads((client / "manifest.json").read_text(encoding="utf-8"))["sharedPrediction"]
+            forged = dict(block, fingerprint="0" * 64)
+            _rewrite_record(client, forged)
+            _rewrite_record(server, forged)
+            report = verify_split(client, server)
+            self.assertEqual(
+                [error["code"] for error in report["errors"]],
+                ["SHARED_PREDICTION_RECORD_MISMATCH", "SHARED_PREDICTION_RECORD_MISMATCH"],
+            )
+
+    def test_missing_record_on_both_ends_is_not_compatible(self):
+        """Two absent blocks used to compare equal (None == None) and pass."""
+        with tempfile.TemporaryDirectory() as temp:
+            root, client, server = (Path(temp) / name for name in ("repo", "client", "server"))
+            _write_shared_repo(root)
+            export_repository_split(root, client, server)
+            for end in (client, server):
+                manifest = json.loads((end / "manifest.json").read_text(encoding="utf-8"))
+                del manifest["sharedPrediction"]
+                (end / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+            report = verify_split(client, server)
+            self.assertFalse(report["ok"], report)
+            self.assertEqual(report["exitCode"], 1)
+            self.assertEqual(
+                [error["code"] for error in report["errors"]],
+                ["SHARED_PREDICTION_RECORD_MISMATCH", "SHARED_PREDICTION_RECORD_MISMATCH"],
+            )
+
+    def test_trust_boundary_rows_and_record_rewritten_together(self):
+        """split-export.md §7 trust boundary, pinned.
+
+        An undeclared column is not looked at. Rewrite one end's rows and its record
+        consistently: the integrity check has
+        nothing to object to, and the cross-end comparison is what refuses. Rewrite the
+        other end the same way and the pair is indistinguishable from a real compile —
+        that is authenticity, which verify-split does not claim.
+        """
+        schema = {"movement": {"idColumn": "id", "columns": [{"name": "step_meters", "sharedPrediction": True}]}}
+        with tempfile.TemporaryDirectory() as temp:
+            root, client, server = (Path(temp) / name for name in ("repo", "client", "server"))
+            _write_shared_repo(root)
+            export_repository_split(root, client, server)
+
+            def forge(end: Path, folder: str) -> None:
+                rows_path = end / folder / "movement.json"
+                _replace_once(rows_path, '"step_meters": 1.25', '"step_meters": 9.99')
+                rows = json.loads(rows_path.read_text(encoding="utf-8"))["rows"]
+                _rewrite_record(end, shared_prediction_block(schema, {"movement": rows}))
+
+            # Undeclared columns are outside the check (ADR-102 compares the declared subset).
+            _replace_once(client / "client" / "movement.json", '"name": "default"', '"name": "renamed"')
+            self.assertTrue(verify_split(client, server)["ok"])
+
+            forge(client, "client")
+            one_end = verify_split(client, server)
+            self.assertEqual([error["code"] for error in one_end["errors"]], ["SHARED_PREDICTION_VALUE_MISMATCH"])
+
+            forge(server, "server")
+            both_ends = verify_split(client, server)
+            self.assertTrue(both_ends["ok"], both_ends)
 
 
 class SplitCliTests(unittest.TestCase):

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .ids import alias_conflict_errors, persisted_ordinal_errors
+from .manifest import SHARED_PREDICTION_ID_COLUMN
 from .model import Cell, TableParseError, TableSource, ValidationError
 from .text_table import parse_table
 
@@ -266,6 +267,14 @@ def validate_repository(root: Path) -> list[dict[str, str]]:
                 errors.append(_error(table_name, column=name, code="SHARED_PREDICTION_NOT_SHARED", message=f"{name} declares sharedPrediction but is not visible to both S and C", suggestion="give the column a visibility containing S and C, or drop sharedPrediction"))
             if kind == "enum" and not isinstance(column.get("enumValues"), list):
                 errors.append(_error(table_name, column=name, code="ENUM_VALUES_MISSING", message=f"{name} enumValues must be an array", suggestion="declare the closed enum values"))
+        if any(column.get("sharedPrediction") is True for column in columns):
+            # Every shared prediction pair carries the row id, and verify-split re-derives
+            # the pairs from each end's own rows: the id has to be on both ends, under the
+            # one key those rows can be read by (split-export.md §7).
+            if id_column != SHARED_PREDICTION_ID_COLUMN:
+                errors.append(_error(table_name, column=id_column, code="SHARED_PREDICTION_ID_NOT_SHARED", message=f"table declares sharedPrediction columns, so its idColumn must be {SHARED_PREDICTION_ID_COLUMN}; split-export/1 rows do not name the id column", suggestion=f"use {SHARED_PREDICTION_ID_COLUMN} as the id column, or drop sharedPrediction"))
+            elif id_column in column_map and not {"S", "C"}.issubset(_visibility(column_map[id_column])):
+                errors.append(_error(table_name, column=id_column, code="SHARED_PREDICTION_ID_NOT_SHARED", message=f"table declares sharedPrediction columns, so id column {id_column} must be visible to both S and C", suggestion="give the id column a visibility containing S and C, or drop sharedPrediction"))
 
         table = tables.get(table_name)
         if table is None:
