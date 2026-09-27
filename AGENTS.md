@@ -13,4 +13,4 @@ Public contract changes remain owned by `LumioGameEngineArchitecture` and must n
 - [`.spec/knowledge/README.md`](.spec/knowledge/README.md) —— 知识导航
 - [`.spec/decisions/`](.spec/decisions/README.md) —— 决策唯一落点(ADR)
 
-> 通用规程与硬红线由插件在每次会话注入(Claude Code);无此机制的宿主请主动读取上述文件。项目专属技能(`cross-repo-delivery`、`td-progress-audit`)经 `.agents/skills` 链接待用。
+> 通用规程与硬红线由插件在每次会话注入(Claude Code);无此机制的宿主请主动读取上述文件。跨仓技能按 `.spec/AGENTS.md` 的链接读取 Engine 唯一源。
