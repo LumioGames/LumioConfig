@@ -21,7 +21,7 @@
 | `README.md` | 本文：总览、屏幕、交互、状态、令牌 |
 | `CLAUDE_CODE_PROMPT.md` | **给 Claude Code 的提示词**：开工提示词、每卡提示词模板、审查提示词、验收清单、迭代流程 |
 | `spec/web-editor-ux.md` | 设计稿（IA、线框、状态映射表、令牌、组件清单、快捷键、文案表、需要 Host） → 落仓 `.spec/knowledge/features/` |
-| `spec/2026-09-03-web-editor-redesign-plan.md` | 实现计划：Wave 0–3 共 16 张卡 + 2 张「需要 Host」卡，文件集互不重叠 → 落仓 `.spec/plans/` |
+| `spec/2026-09-03-web-editor-redesign-plan.md` | 实现计划：Wave 0–3 共 16 张卡 + 2 张「需要 Host」卡，文件集互不重叠 → 落仓 `.spec/archive/plans/` |
 | `spec/2026-09-03-web-editor-redesign-decisions.md` | Owner 已拍板的 14 项决定 → 落仓 `.spec/decisions/` |
 | `prototype/index.html` | 单文件可点原型（离线可开）→ 落仓 `editor/docs/prototype/index.html` |
 | `prototype-src/` | 原型源码（仅供阅读交互逻辑，如冲突解决、四态规则、状态映射） |

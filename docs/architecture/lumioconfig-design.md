@@ -3,8 +3,8 @@
 本文是架构仓设计概要在本仓的执行入口。完整设计与裁决流水以架构仓为准（架构仓已于 2026-09-01 改名 `LumioGameEngine`、文档收敛到唯一根 `.spec/`）：
 
 - 设计概要：[`LumioGameEngine/.spec/knowledge/features/config-table.md`](https://github.com/LumioGames/LumioGameEngine/blob/main/.spec/knowledge/features/config-table.md)（2026-08-30 定稿；2026-09-02 M6 网页编辑器节按落地方案更新为「首版完整编辑」）。
-- 裁决流水：[`LumioGameEngine/.spec/reviews/2026-08-30-config-table-architecture-decisions.md`](https://github.com/LumioGames/LumioGameEngine/blob/main/.spec/reviews/2026-08-30-config-table-architecture-decisions.md)。
-- M6 落地方案：[`LumioGameEngine/.spec/plans/2026-09-02-config-web-editor-landing.md`](https://github.com/LumioGames/LumioGameEngine/blob/main/.spec/plans/2026-09-02-config-web-editor-landing.md)。
+- 裁决流水：[`LumioGameEngine/.spec/archive/reviews/2026-08-30-config-table-architecture-decisions.md`](https://github.com/LumioGames/LumioGameEngine/blob/main/.spec/archive/reviews/2026-08-30-config-table-architecture-decisions.md)。
+- M6 落地方案：[`LumioGameEngine/.spec/archive/plans/2026-09-02-config-web-editor-landing.md`](https://github.com/LumioGames/LumioGameEngine/blob/main/.spec/archive/plans/2026-09-02-config-web-editor-landing.md)。
 - 历史指针：本文首版对应架构仓旧名 `LumioGameEngineArchitecture` PR `#49`（提交 `d2a7883ea447d2c34b92269c1f84ac9c3c53f5eb`，旧路径 `docs/specs/2026-08-30-lumioconfig-design-overview.md`，已随文档收敛迁移）。
 
 ## 核心不变量
@@ -27,7 +27,7 @@
 - `Ctrl+S` 只存本地草稿（`.lumio/drafts/`）；「提交补丁」生成带基线底稿指纹与 `expect` 的逐格补丁，M2 做单元格级三方合并（`STALE_BASELINE` / `DELETED_ROW_CONFLICT` 结构化冲突）。
 - 提交成功后是否自动 commit（Git / SVN / 无）、是否自动导表，是 `.lumio/editor.json` 设置项。
 - 首版导出只做 CSV / TSV 单向；XLSX、技能卡、领域插件、多人协作推迟并记有触发条件。
-- 分卡与逐模块实现指引：`.spec/plans/2026-09-02-web-editor-design-prompt.md`（v2）；派活顺序：`.spec/plans/2026-09-02-lumioconfig-dispatch-prompt.md`。
+- 分卡与逐模块实现指引：`.spec/archive/plans/2026-09-02-web-editor-design-prompt.md`（v2）；派活顺序：`.spec/archive/plans/2026-09-02-lumioconfig-dispatch-prompt.md`。
 
 ## 暂不冻结
 

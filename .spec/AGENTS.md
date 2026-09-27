@@ -42,11 +42,11 @@ git diff --check
 - 测试是否覆盖成功与失败路径，并附实际命令输出。
 - 是否把架构仓公共契约或生产激活职责错误下沉到本仓。
 
-**项目专属技能（插件不提供，留在 `skills/`）：** `cross-repo-delivery`（七仓派活与核验）、`td-progress-audit`（TD 进度盘点）。
+**跨仓技能只引用 Engine 的唯一源：** [cross-repo-delivery](../../LumioGameEngine/.spec/skills/cross-repo-delivery/SKILL.md)、[td-progress-audit](../../LumioGameEngine/.spec/skills/td-progress-audit/SKILL.md)。
 
 ## 知识与决策
 
 - 规范与功能记录：[`knowledge/README.md`](knowledge/README.md)（导航）
 - 决策唯一落点：[`decisions/`](decisions/README.md)（ADR，不改写、只新增取代）；跨仓架构 ADR 镜像在 `docs/decisions/`（来源架构仓，本仓不改写）
-- 实现计划：[`plans/`](plans/README.md)（历史记录，日期前缀、不设索引）
-- 离线任务卡：[`tasks/`](tasks/README.md)（无内置任务工具的宿主用）
+
+过程稿一律写进 `.spec/archive/`；knowledge 导航不指向 archive，默认搜索排除该目录。任务执行真值在 Workflow。
