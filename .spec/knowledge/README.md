@@ -28,6 +28,7 @@ metadata:
 | [features/integration-vertical-chains.md](features/integration-vertical-chains.md) | R-00327 混合可见性投影与 AI 五动作集成链——改 tests/integration 或导表/补丁 CLI 时查 |
 | [features/editor-ui-primitives.md](features/editor-ui-primitives.md) | editor/ 面板共享的 Button/Panel/DataTable 基础组件与 design token——改 editor/src/panels 或新增面板时查 |
 | [features/split-export.md](features/split-export.md) | 分端导出规范 split-export/1（CLI 形状、各端 manifest、指纹作用域、共享预测兼容校验）——按端导出或消费两端产物时查 |
+| [features/authoring-compiler.md](features/authoring-compiler.md) | 配表 CLI 的作者工具闭包——构建固定 Python/PyInstaller onedir、核对编译器指纹与交接 Engine 时查 |
 | [features/web-editor-ux.md](features/web-editor-ux.md) | 网页编辑器 v3 界面设计（IA、状态映射、令牌、抽屉、检查器、快捷键、文案表）——改 editor/ 布局、面板或用户文案时查 |
 
 C# typed Table Reader 的冻结接口在仓根 [`docs/reference/csharp-reader.md`](../../docs/reference/csharp-reader.md)（R-00535 / Runtime R-00544），不在 `.spec/knowledge/features/` 另立一份。Sample 消费面交接（三张玩法表、manifest 样例、消费方 AC）在 [`docs/reference/sample-config-handoff.md`](../../docs/reference/sample-config-handoff.md)。
