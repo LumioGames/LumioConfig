@@ -99,6 +99,7 @@ def build(rid: str, commit: str, out: Path, install: bool) -> Path:
         shutil.copyfile(ROOT / "tools" / "lumio_config.py", entrypoint)
         subprocess.run([
             sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--noupx",
+            "--python-option", "X utf8",
             "--name", "config-compiler", "--paths", str(ROOT / "src"),
             "--add-data", f"{identity}:lumio_config", "--distpath", str(work / "dist"),
             "--workpath", str(work / "work"), "--specpath", str(work), str(entrypoint),
