@@ -93,11 +93,15 @@ def build(rid: str, commit: str, out: Path, install: bool) -> Path:
         work = Path(directory)
         identity = work / "compiler-hash.txt"
         identity.write_text(compiler_hash + "\n", encoding="ascii", newline="\n")
+        # The existing script name shadows its package in PyInstaller's module graph.
+        # Rename only the copied entrypoint, retaining its exact source bytes.
+        entrypoint = work / "config_compiler_entry.py"
+        shutil.copyfile(ROOT / "tools" / "lumio_config.py", entrypoint)
         subprocess.run([
             sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--noupx",
             "--name", "config-compiler", "--paths", str(ROOT / "src"),
             "--add-data", f"{identity}:lumio_config", "--distpath", str(work / "dist"),
-            "--workpath", str(work / "work"), "--specpath", str(work), str(ROOT / "tools" / "lumio_config.py"),
+            "--workpath", str(work / "work"), "--specpath", str(work), str(entrypoint),
         ], check=True, cwd=ROOT)
         closure = work / "dist" / "config-compiler"
         licenses = copy_licenses(closure, installed)
