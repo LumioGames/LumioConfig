@@ -78,7 +78,8 @@ def copy_licenses(output: Path, installed: list[dict[str, str]]) -> list[str]:
 def build(rid: str, commit: str, out: Path, install: bool) -> Path:
     verify_host(rid)
     verify_source(commit)
-    target = out.resolve() / f"config-compiler-{rid}"
+    out = out.resolve()
+    target = out / f"config-compiler-{rid}"
     if target.exists():
         raise ValueError(f"output already exists: {target}")
     if install:
