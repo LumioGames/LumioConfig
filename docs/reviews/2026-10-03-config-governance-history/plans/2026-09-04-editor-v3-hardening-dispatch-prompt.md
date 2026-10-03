@@ -1,10 +1,5 @@
 ---
 status: pending
-name: 2026-09-04-editor-v3-hardening-dispatch-prompt
-description: 网页编辑器 v3 加固历史派活提示词——追溯当时分工时查
-metadata:
-  type: doc
-  status: 历史归档
 ---
 
 # 网页编辑器 v3 加固 · 开发 Agent 派活提示词（2026-09-04）

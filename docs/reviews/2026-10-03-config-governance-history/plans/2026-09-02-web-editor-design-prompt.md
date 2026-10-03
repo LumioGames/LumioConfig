@@ -1,10 +1,5 @@
 ---
 status: in_progress
-name: 2026-09-02-web-editor-design-prompt
-description: 网页编辑器 v2 历史设计指引——追溯当时界面范围时查
-metadata:
-  type: doc
-  status: 历史归档
 ---
 
 # LumioConfig 网页编辑器设计与实现指引（v2，2026-09-02）

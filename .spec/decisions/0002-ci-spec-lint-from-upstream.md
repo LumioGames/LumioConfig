@@ -1,7 +1,7 @@
 # 0002 · CI 结构校验改从 LumioAgentSpec 上游拉取
 
 - 日期:2026-09-02
-- 状态:生效
+- 状态:被 [0009](0009-workflow-governance-migration.md) 取代
 
 ## 背景
 

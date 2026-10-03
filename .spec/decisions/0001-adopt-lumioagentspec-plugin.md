@@ -1,7 +1,7 @@
 # 0001 · Agent 治理框架改用 LumioAgentSpec 插件分发
 
 - 日期:2026-09-02
-- 状态:生效
+- 状态:部分被 [0009](0009-workflow-governance-migration.md) 取代
 
 ## 背景
 

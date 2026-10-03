@@ -1,10 +1,5 @@
 ---
 status: in_progress
-name: 2026-09-02-lumioconfig-dispatch-prompt
-description: LumioConfig 剩余工作历史派活提示词——追溯当时交付约束时查
-metadata:
-  type: doc
-  status: 历史归档
 ---
 
 # LumioConfig 剩余工作派活提示词（2026-09-02）

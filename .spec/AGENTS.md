@@ -1,6 +1,6 @@
 # 项目中心文档
 
-本项目使用 [LumioAgentSpec](https://github.com/LumioGames/LumioAgentSpec) 插件提供的调度与编码规程。
+本项目使用 [Workflow](https://github.com/LumioGames/workflow-plugin) 插件提供的调度与编码规程；LumioAgentSpec 采用历史见 ADR 0001，现行升级决定见 [ADR 0009](decisions/0009-workflow-governance-migration.md)。
 **通用规程（调度核心 / 编码约定 / 交回物格式 / 宿主差异）由插件在每次会话注入，本文件不复述**——这里只写 LumioConfig 独有的东西。
 
 ## 项目是什么
@@ -22,14 +22,14 @@ git diff --check
 ```
 
 - 表源、Schema、registry 变更另附 `export` 与 `patch validate` 证据。
-- `.spec/` 结构校验走 lumio 插件的 `/lumio:lint`（等价于 `node <插件目录>/tools/spec-lint.mjs .`），提交前必须通过。
+- `.spec/` 结构校验使用官方 Workflow 1.3.6 的 `node <插件运行时根>/bin/spec-lint.mjs . --strict`，默认 fingerprint 必须启用，提交前必须通过。CI 固定官方 `v1.3.6` / `4911c828e2f2c9913443985d253ca030b33a7c7b` 的 `plugin/bin/spec-lint.mjs`；升级时校验本地与 CI 的版本及 linter 文件身份。
 
 ## 项目专属约定
 
 **红线（与插件通用规程冲突时，以本节为准）：**
 
 1. `tables/` 是权威文本源，不得以 Excel 或数据库覆盖；`schemas/` 只描述数据，不得承载 if、脚本、蓝图式逻辑或隐式运行时行为。
-2. `tables/`、`schemas/`、`registry/` 是真源；`build/`、`dist/`、`generated/` 是生成物，只能经工具命令重建并与源一起提交，不得手改。
+2. `tables/`、`schemas/`、`registry/` 是真源；`build/`（不含已忽略的临时材料 `build/agent-work/`）、`dist/`、`generated/` 是生成物，只能经工具命令重建并与源一起提交，不得手改。
 3. 密钥、生产数据、用户数据、真实未公开业务数据不得入库。
 4. AI 对生产 Revision 只有查、提案、预检、预演、提交五个动作；没有激活动作，生产激活必须过人类 Owner 门。
 5. 跨仓字段、错误码、稳定 ID、字节规则等公共契约归架构仓所有，先在架构仓走 ADR 与契约校验流程，不得在本仓发明。

@@ -1,10 +1,5 @@
 ---
 status: pending
-name: 2026-09-03-web-editor-redesign-dispatch-prompt
-description: 网页编辑器 v3 历史派活提示词——追溯当时分工与验收时查
-metadata:
-  type: doc
-  status: 历史归档
 ---
 
 # 网页编辑器重设计 v3 · 开发 Agent 派活提示词（2026-09-03）

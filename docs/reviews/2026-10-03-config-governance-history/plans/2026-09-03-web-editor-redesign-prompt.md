@@ -1,10 +1,5 @@
 ---
 status: completed
-name: 2026-09-03-web-editor-redesign-prompt
-description: 网页编辑器 v3 历史重设计提示词——追溯当时交互要求时查
-metadata:
-  type: doc
-  status: 历史归档
 ---
 
 # LumioConfig 网页编辑器重设计提示词（v3：排版 / 布局 / 交互，2026-09-03）
