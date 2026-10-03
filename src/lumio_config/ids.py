@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 from contextlib import contextmanager
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -213,7 +215,7 @@ def alias_conflict_errors(root: Path) -> list[dict[str, str]]:
 
 
 def verify_registry(root: Path) -> list[dict[str, str]]:
-    from .validate import load_sources
+    from .validate import INTEGER_TYPES, load_sources
 
     root = Path(root)
     errors = persisted_ordinal_errors(root)
@@ -229,8 +231,33 @@ def verify_registry(root: Path) -> list[dict[str, str]]:
         dead = tombstones.get(table_name, [])
         dead_ids = {int(value) for value in dead} if isinstance(dead, list) else set()
         seen: dict[int, str] = {}
-        lower, upper = ID_NAMESPACES.get(table_name, (1, 2**31 - 1))
-        id_column = str(schemas.get(table_name, {}).get("idColumn", "id"))
+        schema = schemas.get(table_name, {})
+        id_column = str(schema.get("idColumn", "id"))
+        columns = schema.get("columns", [])
+        if not isinstance(columns, list):
+            errors.append(_registry_error(table_name, "", "", "SCHEMA_COLUMNS_MISSING", "schema columns must be a non-empty array", "declare each table column"))
+            continue
+        id_schema = next((column for column in columns if isinstance(column, dict) and column.get("name") == id_column), {})
+        # Explicit source bounds belong to this domain; table names alone only
+        # select the legacy Sample ranges when no ID bounds were declared.
+        if "minimum" in id_schema or "maximum" in id_schema:
+            type_lower, type_upper = INTEGER_TYPES.get(id_schema.get("type"), (1, 2**31 - 1))
+            lower, upper = max(1, type_lower), min(2**31 - 1, type_upper)
+            for bound_name in ("minimum", "maximum"):
+                if bound_name not in id_schema:
+                    continue
+                try:
+                    bound = Decimal(str(id_schema[bound_name]))
+                    if not bound.is_finite():
+                        raise ValueError("bound must be finite")
+                    if bound_name == "minimum":
+                        lower = max(lower, math.ceil(bound))
+                    else:
+                        upper = min(upper, math.floor(bound))
+                except (InvalidOperation, TypeError, ValueError):
+                    errors.append(_registry_error(table_name, "", id_column, "SCHEMA_BOUND_INVALID", f"{bound_name} is not finite numeric", "declare a finite numeric schema bound"))
+        else:
+            lower, upper = ID_NAMESPACES.get(table_name, (1, 2**31 - 1))
         table_ids: dict[str, int] = {}
         for row in table.rows:
             name_cell = row.get("name")
