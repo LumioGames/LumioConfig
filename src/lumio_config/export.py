@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -102,6 +103,14 @@ def _clone_rows(table: TableSource) -> list[dict[str, Cell]]:
 
 def _compiler_hash() -> str:
     package = Path(__file__).resolve().parent
+    if getattr(sys, "frozen", False):
+        try:
+            digest = (package / "compiler-hash.txt").read_text(encoding="ascii").strip()
+        except (OSError, UnicodeError) as error:
+            raise RuntimeError("frozen compiler identity is unavailable") from error
+        if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+            raise RuntimeError("frozen compiler identity is invalid")
+        return digest
     return fingerprint_files(list(package.glob("*.py")), package)
 
 

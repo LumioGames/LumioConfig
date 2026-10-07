@@ -38,9 +38,11 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Validate governance structure
         run: |
-          # LumioAgentSpec lumio--v1.1.0 (b0fa9ca); keep in sync with the installed plugin version
-          git clone --quiet --depth 1 --branch lumio--v1.1.0 https://github.com/LumioGames/LumioAgentSpec.git /tmp/lumioagentspec
-          node /tmp/lumioagentspec/plugin/tools/spec-lint.mjs .
+          # Official Workflow v1.3.6; tag identity is checked before running its linter.
+          git clone --quiet --depth 1 --branch v1.3.6 https://github.com/LumioGames/workflow-plugin.git "$RUNNER_TEMP/workflow-plugin"
+          test "$(git -C "$RUNNER_TEMP/workflow-plugin" rev-parse HEAD)" = "4911c828e2f2c9913443985d253ca030b33a7c7b"
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(p.name!=="workflow" || p.version!=="1.3.6") process.exit(1);' "$RUNNER_TEMP/workflow-plugin/plugin/plugin.json"
+          node "$RUNNER_TEMP/workflow-plugin/plugin/bin/spec-lint.mjs" . --strict
       - name: Validate source tables
         env:
           PYTHONPATH: src

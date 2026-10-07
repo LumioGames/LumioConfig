@@ -1,10 +1,5 @@
 ---
 status: pending
-name: 2026-09-04-editor-v3-hardening-requirements
-description: 网页编辑器 v3 加固历史需求——追溯 M7 范围和 R-00402 时查
-metadata:
-  type: doc
-  status: 历史归档
 ---
 
 # 网页编辑器 v3 · 加固与补齐 需求文档（2026-09-04）

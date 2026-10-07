@@ -1,10 +1,5 @@
 ---
 status: completed
-name: 2026-08-30-lumioconfig-repository-bootstrap
-description: LumioConfig 仓库初始化历史计划——追溯首版范围与任务时查
-metadata:
-  type: doc
-  status: 历史归档
 ---
 
 # LumioConfig Repository Bootstrap Implementation Plan

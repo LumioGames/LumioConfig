@@ -43,7 +43,9 @@
 
     python tools/lumio_config.py registry verify
 
-核对 `registry/row-ids.json`、源表 `id` 列与 `registry/tombstones.json`：无重复、无越界、无墓碑复用、别名不与现名冲突。成功打印 `registry-verify: OK`；失败时 stdout 为结构化错误 JSON 数组，退出码 1。
+核对 `registry/row-ids.json`、源表的 Schema `idColumn` 与 `registry/tombstones.json`：无重复、无越界、无墓碑复用、别名不与现名冲突。成功打印 `registry-verify: OK`；失败时 stdout 为结构化错误 JSON 数组，退出码 1。
+
+ID 列声明了 `minimum` 或 `maximum` 时，范围取当前源的显式边界、该列整型范围及永久 ID 的 `1..2147483647` 有效范围的交集；只声明一端时另一端由整型与有效范围限定。无显式 ID 边界时沿用仓内 Sample 的表名范围（skills / effects / drops / movement / mining / attributes），其他表使用永久 ID 有效范围。注册表映射与活表使用同一范围；旧墓碑仍保留且不得复用。同名表不代表不同游戏共享 Sample 的编号范围，Schema 范围声明也不替代架构仓的命名空间授权。
 
 ## export
 

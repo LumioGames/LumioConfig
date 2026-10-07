@@ -1,10 +1,5 @@
 ---
 status: pending
-name: 2026-09-04-editor-v3-qa-test-prompt
-description: 网页编辑器 v3 历史 QA 提示词——追溯当时测试范围时查
-metadata:
-  type: doc
-  status: 历史归档
 ---
 
 # 网页编辑器 v3（含 M7 加固）· 全面 QA 测试提示词（2026-09-04）

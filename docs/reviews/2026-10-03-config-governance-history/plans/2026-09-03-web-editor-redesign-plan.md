@@ -1,10 +1,5 @@
 ---
 status: pending
-name: 2026-09-03-web-editor-redesign-plan
-description: 网页编辑器 v3 历史实现计划——追溯当时任务安排时查
-metadata:
-  type: doc
-  status: 历史归档
 ---
 
 # 网页编辑器重设计 v3 · 实现计划

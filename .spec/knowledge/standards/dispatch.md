@@ -8,7 +8,7 @@ metadata:
 
 # 任务与审查交接
 
-任务卡或计划必须说明目标、文件范围、接口、验收标准和验证命令。交回物与进度台账一律落 `docs/reviews/`（入库路径）；`.sdd/` 只是纯临时区（worker 简报、中间 diff），不落任何台账或交回物。交回物必须包含：
+任务卡或计划必须说明目标、文件范围、接口、验收标准和验证命令。交回物与进度台账一律落 `docs/reviews/`（入库路径）；worker 简报、中间 diff 等临时材料落已忽略的 `build/agent-work/`，不落任何台账或交回物。历史 `.sdd/` 原 README 与 ignore 已按字节归档，迁移依据与 M7-J/R-00402 选项 A 的历史边界见 [ADR 0009](../../decisions/0009-workflow-governance-migration.md)。交回物必须包含：
 
 1. 改动清单。
 2. 实际命令和关键输出。
