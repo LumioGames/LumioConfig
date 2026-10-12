@@ -75,6 +75,38 @@ def copy_licenses(output: Path, installed: list[dict[str, str]]) -> list[str]:
     return sorted(path.relative_to(output).as_posix() for path in destination.iterdir())
 
 
+def remap_linux_python_diagnostics(closure: Path) -> None:
+    # CPython 3.11.9 also embeds __FILE__ diagnostics outside ELF debug sections.
+    # Keep string lengths and offsets intact; only edit exact .rodata filenames.
+    original_prefix = b"/home/runner/work/_temp/SourceCode/"
+    portable_prefix = b"python-3.11.9/portable/source-tree/"
+    if len(original_prefix) != len(portable_prefix):
+        raise ValueError("Python diagnostic remapping must preserve byte lengths")
+    sources = {"_sha3": b"Modules/_sha3/sha3module.c", "_ssl": b"Modules/_ssl.c", "array": b"Modules/arraymodule.c"}
+    with tempfile.TemporaryDirectory(prefix="python-paths-", dir=closure.parent) as directory:
+        scratch = Path(directory)
+        for module, source in sources.items():
+            binary = closure / "_internal" / "lib-dynload" / f"{module}.cpython-311-x86_64-linux-gnu.so"
+            if not binary.exists():
+                continue
+            if binary.is_symlink():
+                raise ValueError(f"unexpected symlink in Python closure: {binary}")
+            section = scratch / "rodata"
+            subprocess.run(["objcopy", "--dump-section", f".rodata={section}", str(binary), str(scratch / "dump.so")], check=True)
+            before = section.read_bytes()
+            original, portable = original_prefix + source + b"\0", portable_prefix + source + b"\0"
+            after = before.replace(b"\0" + original, b"\0" + portable)
+            if after.startswith(original):
+                after = portable + after[len(original):]
+            if after == before:
+                continue
+            section.write_bytes(after)
+            updated = scratch / "updated.so"
+            subprocess.run(["objcopy", "--update-section", f".rodata={section}", str(binary), str(updated)], check=True)
+            updated.chmod(binary.stat().st_mode)
+            updated.replace(binary)
+
+
 def build(rid: str, commit: str, out: Path, install: bool) -> Path:
     verify_host(rid)
     verify_source(commit)
@@ -99,12 +131,16 @@ def build(rid: str, commit: str, out: Path, install: bool) -> Path:
         shutil.copyfile(ROOT / "tools" / "lumio_config.py", entrypoint)
         subprocess.run([
             sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--noupx",
+            # Strip bundled Linux ELF debug paths before recording closure hashes.
+            *(["--strip"] if rid == "linux-x64" else []),
             "--python-option", "X utf8",
             "--name", "config-compiler", "--paths", str(ROOT / "src"),
             "--add-data", f"{identity}:lumio_config", "--distpath", str(work / "dist"),
             "--workpath", str(work / "work"), "--specpath", str(work), str(entrypoint),
         ], check=True, cwd=ROOT)
         closure = work / "dist" / "config-compiler"
+        if rid == "linux-x64":
+            remap_linux_python_diagnostics(closure)
         licenses = copy_licenses(closure, installed)
         files = {}
         for file in sorted(closure.rglob("*")):
