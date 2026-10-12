@@ -1,4 +1,5 @@
 import importlib.util
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -87,6 +88,35 @@ class AuthoringBuilderTests(unittest.TestCase):
                 (root / "untracked.txt").write_text("changed", encoding="utf-8")
                 with self.assertRaisesRegex(ValueError, "clean"):
                     self.builder.verify_source(commit)
+
+    @unittest.skipUnless(sys.platform == "linux" and shutil.which("cc") and shutil.which("objcopy"), "requires Linux ELF tools")
+    def test_python_diagnostic_remap_preserves_executable_and_other_constants(self):
+        with tempfile.TemporaryDirectory() as directory:
+            closure = Path(directory) / "closure"
+            binary = closure / "_internal/lib-dynload/_ssl.cpython-311-x86_64-linux-gnu.so"
+            binary.parent.mkdir(parents=True)
+            source = '#include <stdio.h>\nint main(void) { puts("/home/runner/work/_temp/SourceCode/Modules/_ssl.c"); puts("unchanged runtime data"); return 0; }\n'
+            subprocess.run(["cc", "-x", "c", "-o", str(binary), "-"], input=source, text=True, check=True)
+            self.assertIn("/home/", subprocess.check_output([str(binary)], text=True))
+            self.builder.remap_linux_python_diagnostics(closure)
+            self.assertEqual("python-3.11.9/portable/source-tree/Modules/_ssl.c\nunchanged runtime data\n",
+                             subprocess.check_output([str(binary)], text=True))
+            once = binary.read_bytes()
+            self.builder.remap_linux_python_diagnostics(closure)
+            self.assertEqual(once, binary.read_bytes())
+
+    @unittest.skipUnless(sys.platform == "linux" and shutil.which("cc") and shutil.which("objcopy"), "requires Linux ELF tools")
+    def test_python_diagnostic_remap_does_not_hide_unknown_host_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            closure = Path(directory) / "closure"
+            binary = closure / "_internal/lib-dynload/_ssl.cpython-311-x86_64-linux-gnu.so"
+            binary.parent.mkdir(parents=True)
+            source = '#include <stdio.h>\nint main(void) { puts("/home/unknown/source.c"); return 0; }\n'
+            subprocess.run(["cc", "-x", "c", "-o", str(binary), "-"], input=source, text=True, check=True)
+            before = binary.read_bytes()
+            self.builder.remap_linux_python_diagnostics(closure)
+            self.assertEqual(before, binary.read_bytes())
+            self.assertEqual("/home/unknown/source.c\n", subprocess.check_output([str(binary)], text=True))
 
 
 if __name__ == "__main__":
